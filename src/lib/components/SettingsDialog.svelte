@@ -100,17 +100,17 @@
   >
     <div
       transition:fly={{ duration: 500, easing: cubicInOut, y: 20 }}
-      class="flex flex-col justify-start items-start p-6 bg-white dark:bg-neutral-900 rounded-lg w-full max-w-2xl max-h-[80vh]"
+      class="flex flex-col justify-start items-start p-6 bg-[#1a1a1a] dark:bg-[#1a1a1a] border border-[#333333] rounded-none w-full max-w-2xl max-h-[80vh]"
     >
       <!-- Header -->
       <div class="flex flex-row justify-between items-center w-full mb-4">
         <h2
           id="settings-title"
-          class="text-xl font-semibold text-neutral-900 dark:text-white"
+          class="text-xl font-semibold text-[#e8e8e8]"
         >
           Settings
         </h2>
-        <span class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+        <span class="text-xs text-[#888888] mt-1">
           Pedro Pathing Visualizer
         </span>
         <button
@@ -124,7 +124,7 @@
             viewBox="0 0 24 24"
             stroke-width={2}
             stroke="currentColor"
-            class="size-6 text-neutral-700 dark:text-neutral-400"
+            class="size-6 text-[#888888]"
           >
             <path
               stroke-linecap="round"
@@ -137,7 +137,7 @@
 
       <!-- Warning Banner -->
       <div
-        class="w-full mb-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg"
+        class="w-full mb-4 p-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#444444] rounded-none"
       >
         <div class="flex items-start gap-2">
           <svg
@@ -146,7 +146,7 @@
             viewBox="0 0 24 24"
             stroke-width={1.5}
             stroke="currentColor"
-            class="size-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+            class="size-5 text-[#888888] flex-shrink-0 mt-0.5"
           >
             <path
               stroke-linecap="round"
@@ -154,7 +154,7 @@
               d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
             />
           </svg>
-          <div class="text-sm text-amber-800 dark:text-amber-200">
+          <div class="text-sm text-[#d0d0d0]">
             <div class="font-medium mb-1">UI Settings Only</div>
             <div class="text-xs opacity-90">
               These settings only affect the visualizer/UI. Ensure your robot
@@ -171,7 +171,7 @@
           <button
             on:click={() =>
               (collapsedSections.robot = !collapsedSections.robot)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
             aria-expanded={!collapsedSections.robot}
           >
             <div class="flex items-center gap-2">
@@ -492,7 +492,7 @@
           <button
             on:click={() =>
               (collapsedSections.motion = !collapsedSections.motion)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
             aria-expanded={!collapsedSections.motion}
           >
             <div class="flex items-center gap-2">
@@ -688,7 +688,7 @@
           <button
             on:click={() =>
               (collapsedSections.theme = !collapsedSections.theme)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
             aria-expanded={!collapsedSections.theme}
           >
             <div class="flex items-center gap-2">
@@ -824,7 +824,7 @@
           <button
             on:click={() =>
               (collapsedSections.advanced = !collapsedSections.advanced)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
             aria-expanded={!collapsedSections.advanced}
           >
             <div class="flex items-center gap-2">

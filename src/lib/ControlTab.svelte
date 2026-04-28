@@ -775,7 +775,7 @@
 
 <div class="flex-1 flex flex-col justify-start items-center gap-2 h-full">
   <div
-    class="flex flex-col justify-start items-start w-full rounded-lg bg-neutral-50 dark:bg-neutral-900 shadow-md p-4 overflow-y-scroll overflow-x-hidden h-full gap-6"
+    class="flex flex-col justify-start items-start w-full bg-[#1a1a1a] border border-[#333333] p-3 overflow-y-scroll overflow-x-hidden h-full gap-4"
   >
     <ObstaclesSection bind:shapes bind:collapsedObstacles />
 
@@ -783,23 +783,23 @@
 
     <StartingPointSection bind:startPoint {addPathAtStart} {addWaitAtStart} />
 
-    <div class="w-full rounded-md border border-neutral-200 dark:border-neutral-700 p-3 bg-white dark:bg-neutral-800">
+    <div class="w-full border border-[#333333] p-3 bg-[#222222]">
       <div class="flex items-center gap-2 mb-2">
-        <p class="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-300">Path Chains</p>
+        <p class="text-xs font-semibold uppercase tracking-wide text-gray-300">Path Chains</p>
         <select
           bind:value={selectedChainId}
-          class="flex-1 px-2 py-1 text-xs rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900"
+          class="flex-1 px-2 py-1 text-xs rounded border border-[#444444] bg-[#2a2a2a] text-gray-200"
         >
           {#each pathChains as chain (chain.id)}
             <option value={chain.id}>{chain.name} ({(chain.lineIds || []).length})</option>
           {/each}
         </select>
-        <button on:click={addPathChain} class="px-2 py-1 text-xs rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-200">New</button>
-        <button on:click={duplicateSelectedPathChain} class="px-2 py-1 text-xs rounded bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200">Duplicate</button>
+        <button on:click={addPathChain} class="px-2 py-1 text-xs rounded bg-[#3a3a3a] text-gray-300 border border-[#444444]">New</button>
+        <button on:click={duplicateSelectedPathChain} class="px-2 py-1 text-xs rounded bg-[#3a3a3a] text-gray-300 border border-[#444444]">Duplicate</button>
         <button
           on:click={removeSelectedPathChain}
           disabled={pathChains.length <= 1}
-          class="px-2 py-1 text-xs rounded bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-200 disabled:opacity-40"
+          class="px-2 py-1 text-xs rounded bg-[#3a3a3a] text-gray-300 border border-[#444444] disabled:opacity-40"
         >
           Remove
         </button>
@@ -812,7 +812,7 @@
               type="text"
               bind:value={chainNameDraft}
               on:input={updateSelectedChainName}
-              class="flex-1 px-2 py-1 text-xs rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900"
+              class="flex-1 px-2 py-1 text-xs rounded border border-[#444444] bg-[#2a2a2a] text-gray-200"
               placeholder="Chain name"
             />
           </div>
@@ -822,10 +822,10 @@
               type="color"
               bind:value={chainColorDraft}
               on:input={updateSelectedChainColor}
-              class="w-10 h-8 rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-50 dark:bg-neutral-900"
+              class="w-10 h-8 rounded border border-[#444444] bg-[#2a2a2a]"
               title="Path chain color"
             />
-            <span class="text-xs text-neutral-500 dark:text-neutral-400">Path color</span>
+            <span class="text-xs text-gray-500">Path color</span>
           </div>
         </div>
       {/if}
@@ -918,7 +918,7 @@
     <div class="flex flex-row items-center gap-4">
       <button
         on:click={addLine}
-        class="font-semibold text-green-500 text-sm flex flex-row justify-start items-center gap-1"
+        class="font-semibold text-[#888888] text-sm flex flex-row justify-start items-center gap-1"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -939,7 +939,7 @@
 
       <button
         on:click={addWait}
-        class="font-semibold text-[#E1461B] text-sm flex flex-row justify-start items-center gap-1"
+        class="font-semibold text-[#888888] text-sm flex flex-row justify-start items-center gap-1"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

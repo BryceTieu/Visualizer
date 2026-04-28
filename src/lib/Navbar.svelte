@@ -121,7 +121,7 @@
     }
   }
 
-  function handleExport(format: "java" | "points" | "sequential") {
+  function handleExport(format: "java" | "kotlin" | "points" | "sequential") {
     exportMenuOpen = false;
     fileManagerOpen = false; // ensure file manager is closed before opening export dialog
     exportDialog.openWithFormat(format);
@@ -297,7 +297,7 @@
 <SettingsDialog bind:isOpen={settingsOpen} bind:settings />
 
 <div
-  class="absolute top-0 left-0 w-full bg-neutral-50 dark:bg-neutral-900 shadow-md flex flex-row justify-between items-center px-6 py-4 border-b-[0.75px] border-[#fe55a2]"
+  class="absolute top-0 left-0 w-full bg-[#1a1a1a]/95 backdrop-blur-sm text-[#d8d8d8] flex flex-row justify-between items-center px-6 py-3 border-b border-[#333333] shadow-[inset_0_-1px_0_0_rgba(255,255,255,0.02)]"
 >
   <!-- Title -->
   <div class="font-semibold flex flex-col justify-start items-start">
@@ -450,7 +450,7 @@
       <button
         title={$snapToGrid ? "Disable Snap to Grid" : "Enable Snap to Grid"}
         on:click={() => snapToGrid.update((v) => !v)}
-        class:text-green-500={$snapToGrid && $showGrid}
+        class:text-[#888888]={$snapToGrid && $showGrid}
         class:text-gray-400={!$showGrid}
         class:opacity-50={!$showGrid}
         disabled={!$showGrid}
@@ -849,6 +849,12 @@
               class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
             >
               Java Code
+            </button>
+            <button
+              on:click={() => handleExport("kotlin")}
+              class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+            >
+              Kotlin Code
             </button>
             <button
               on:click={() => handleExport("points")}

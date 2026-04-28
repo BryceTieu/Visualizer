@@ -64,7 +64,7 @@
   } from "./config";
   import { loadSettings, saveSettings } from "./utils/settingsPersistence";
   import * as browserFileStore from "./utils/browserFileStore";
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { debounce } from "lodash";
   import { createHistory, type AppState } from "./utils/history";
   // Browser-only build: file operations use the browser file store and
@@ -179,6 +179,28 @@
     color?: string; // Optional custom color for this path
   }
   let additionalPaths: AdditionalPathData[] = [];
+
+  const formatPathPoint = (value: number) =>
+    Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+
+  const SESSION_RECOVERY_KEY = "pedro_session_recovery_v1";
+
+  interface SessionSnapshot {
+    startPoint: Point;
+    lines: Line[];
+    sequence: SequenceItem[];
+    pathChains: PathChain[];
+    shapes: Shape[];
+    settings: Settings;
+    currentFilePath: string | null;
+    secondFilePath: string | null;
+    secondStartPoint: Point | null;
+    secondLines: Line[];
+    secondSequence: SequenceItem[];
+    secondShapes: Shape[];
+    activePaths: string[];
+    timestamp: string;
+  }
 
   const history = createHistory();
   const { canUndoStore, canRedoStore } = history;
@@ -320,6 +342,14 @@
     
     return getAnimationDuration(maxTime / 1000);
   })();
+
+  $: primaryPathChain = pathChains[0] || null;
+  $: pathPreviewItems = lines.slice(0, 14).map((line, idx) => ({
+    index: idx + 1,
+    name: line.name || `Path ${idx + 1}`,
+    x: formatPathPoint(line.endPoint.x),
+    y: formatPathPoint(line.endPoint.y),
+  }));
   
   // Load additional paths when activePaths changes
   $: {
@@ -368,6 +398,79 @@
     }
 
     additionalPaths = newAdditionalPaths;
+  }
+
+  function buildSessionSnapshot(): SessionSnapshot {
+    return {
+      startPoint,
+      lines,
+      sequence,
+      pathChains,
+      shapes,
+      settings,
+      currentFilePath: $currentFilePath,
+      secondFilePath: $secondFilePath,
+      secondStartPoint,
+      secondLines,
+      secondSequence,
+      secondShapes,
+      activePaths: $activePaths,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  function restoreSessionSnapshot(): boolean {
+    try {
+      const raw = localStorage.getItem(SESSION_RECOVERY_KEY);
+      if (!raw) return false;
+
+      const parsed: SessionSnapshot = JSON.parse(raw);
+      if (!parsed?.startPoint || !Array.isArray(parsed?.lines)) {
+        return false;
+      }
+
+      startPoint = parsed.startPoint;
+
+      const restoredLines = normalizeLines(parsed.lines || []);
+      lines = restoredLines;
+
+      sequence =
+        parsed.sequence && parsed.sequence.length
+          ? parsed.sequence
+          : restoredLines.map((ln) => ({
+              kind: "path",
+              lineId: ln.id!,
+            }));
+
+      pathChains = normalizePathChains(parsed.pathChains || [], restoredLines);
+      shapes = parsed.shapes || [];
+      settings = normalizeLegacyFieldMap({
+        ...DEFAULT_SETTINGS,
+        ...(parsed.settings || {}),
+      });
+
+      currentFilePath.set(parsed.currentFilePath || null);
+      secondFilePath.set(parsed.secondFilePath || null);
+
+      secondStartPoint = parsed.secondStartPoint || null;
+      secondLines = normalizeLines(parsed.secondLines || []);
+      secondSequence =
+        parsed.secondSequence && parsed.secondSequence.length
+          ? parsed.secondSequence
+          : secondLines.map((ln) => ({
+              kind: "path",
+              lineId: ln.id!,
+            }));
+      secondShapes = parsed.secondShapes || [];
+
+      activePaths.set(parsed.activePaths || []);
+      isUnsaved.set(true);
+
+      return true;
+    } catch (error) {
+      console.error("Session restore failed:", error);
+      return false;
+    }
   }
   
   let secondRobotXY: BasePoint = { x: 0, y: 0 };
@@ -1482,6 +1585,11 @@
     const savedSettings = await loadSettings();
     settings = normalizeLegacyFieldMap({ ...savedSettings });
 
+    const restored = restoreSessionSnapshot();
+    if (restored) {
+      console.info("Recovered previous unsaved session.");
+    }
+
     // Update robot dimensions from loaded settings
     robotWidth = settings.rWidth;
     robotHeight = settings.rHeight;
@@ -1492,12 +1600,31 @@
   }, 1000);
   // Save after 1 second of inactivity
 
+  const debouncedSaveSession = debounce((snapshot: SessionSnapshot) => {
+    try {
+      localStorage.setItem(SESSION_RECOVERY_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn("Session snapshot save failed:", error);
+    }
+  }, 750);
+
   // Watch for settings changes and save
   $: {
     if (settings) {
       debouncedSaveSettings(settings);
     }
   }
+
+  $: {
+    if (isLoaded) {
+      debouncedSaveSession(buildSessionSnapshot());
+    }
+  }
+
+  onDestroy(() => {
+    debouncedSaveSession.cancel();
+    debouncedSaveSettings.cancel();
+  });
 
   // Initialize animation controller
   onMount(() => {
@@ -3035,15 +3162,85 @@
 />
 
 <!--   {saveFile} -->
-<div
-  class="w-screen h-screen pt-20 p-2 flex flex-row justify-center items-center gap-2"
->
-  <div class="flex h-full justify-center items-center">
-    <div
-      bind:this={twoElement}
-      bind:clientWidth={width}
-      bind:clientHeight={height}
-      class="h-full aspect-square rounded-lg shadow-md bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
+<div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
+  <div class="desktop-grid h-full">
+    <aside class="panel-box side-rail side-rail-left">
+      <section class="module-box">
+        <div class="module-header-row">
+          <h3 class="module-title">File</h3>
+          <span class="module-chip">v1.2.1</span>
+        </div>
+        <p class="module-caption">Export name</p>
+        <div class="module-mono">
+          {$currentFilePath?.split(/[\\/]/).pop() || "untitled_path.pp"}
+        </div>
+      </section>
+
+      <section class="module-box module-fill">
+        <div class="module-header-row">
+          <h3 class="module-title">Chains</h3>
+          <button class="module-mini-btn" on:click={addNewLine}>+</button>
+        </div>
+        <div class="module-list">
+          {#each pathChains as chain, idx (chain.id)}
+            <div class="list-item-box">
+              <div class="list-item-top">
+                <div
+                  class="chain-swatch"
+                  style={`background:${chain.color || "#10b981"}`}
+                ></div>
+                <span class="list-item-name">{chain.name}</span>
+              </div>
+              <div class="list-item-sub">{chain.lineIds.length} segment{chain.lineIds.length === 1 ? "" : "s"}</div>
+            </div>
+          {/each}
+          {#if pathChains.length === 0}
+            <div class="list-empty">No chains yet</div>
+          {/if}
+        </div>
+      </section>
+
+      <section class="module-box module-fill">
+        <div class="module-header-row">
+          <h3 class="module-title">Path List</h3>
+          <span class="module-caption">{lines.length} paths</span>
+        </div>
+        <div class="module-list">
+          {#each pathPreviewItems as item (item.index)}
+            <div class="list-item-box compact">
+              <div class="list-item-top">
+                <span class="list-item-index">{item.index}.</span>
+                <span class="list-item-name">{item.name}</span>
+              </div>
+              <div class="list-item-sub">{item.x}, {item.y}</div>
+            </div>
+          {/each}
+          {#if lines.length > pathPreviewItems.length}
+            <div class="list-empty">+ {lines.length - pathPreviewItems.length} more...</div>
+          {/if}
+        </div>
+      </section>
+    </aside>
+
+    <main class="panel-box center-stage">
+      <div class="module-header-row mb-2">
+        <h3 class="module-title">Field</h3>
+        <span class="module-caption">Click a line or point to select it</span>
+      </div>
+      <div class="center-toolbar">
+        <button class="toolbar-btn" on:click={addNewLine}>+ Add Path</button>
+        <button class="toolbar-btn" on:click={addControlPoint}>+ Point</button>
+        <button class="toolbar-btn" on:click={removeControlPoint}>- Point</button>
+        <div style="flex: 1;"></div>
+        <button class="toolbar-btn" on:click={() => (playing ? pause() : play())}>{playing ? "Pause" : "Play"}</button>
+      </div>
+
+      <div class="field-stage flex h-full justify-center items-center">
+        <div
+          bind:this={twoElement}
+          bind:clientWidth={width}
+          bind:clientHeight={height}
+          class="h-full aspect-square bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
       role="application"
       style="
     user-select: none;
@@ -3063,7 +3260,7 @@
       on:dragstart={(e) => e.preventDefault()}
       on:selectstart={(e) => e.preventDefault()}
       tabindex="-1"
-    >
+        >
       <img
         src={fieldMapSrc}
         alt="Field"
@@ -3244,29 +3441,35 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
           {/if}
         {/each}
       {/if}
-    </div>
+        </div>
+      </div>
+      <div class="module-footer">Field · 141.5&quot; x 141.5&quot;</div>
+    </main>
+
+    <aside class="panel-box side-rail side-rail-right">
+      <ControlTab
+        bind:playing
+        {play}
+        {pause}
+        bind:startPoint
+        bind:lines
+        bind:sequence
+        bind:pathChains
+        bind:robotWidth
+        bind:robotHeight
+        bind:settings
+        bind:percent
+        bind:robotXY
+        bind:robotHeading
+        bind:shapes
+        {x}
+        {y}
+        {handleSeek}
+        bind:loopAnimation
+        {recordChange}
+        {optimizeLine}
+        {optimizingLineIds}
+      />
+    </aside>
   </div>
-  <ControlTab
-    bind:playing
-    {play}
-    {pause}
-    bind:startPoint
-    bind:lines
-    bind:sequence
-    bind:pathChains
-    bind:robotWidth
-    bind:robotHeight
-    bind:settings
-    bind:percent
-    bind:robotXY
-    bind:robotHeading
-    bind:shapes
-    {x}
-    {y}
-    {handleSeek}
-    bind:loopAnimation
-    {recordChange}
-    {optimizeLine}
-    {optimizingLineIds}
-  />
 </div>
