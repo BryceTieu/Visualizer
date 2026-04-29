@@ -57,6 +57,10 @@
   export let pause: () => void;
   export let exportPathAsGif: () => Promise<void>;
 
+  $: playing;
+  $: play;
+  $: pause;
+
   let fileManagerOpen = false;
   let settingsOpen = false;
   let exportMenuOpen = false;
@@ -238,36 +242,6 @@
     document.removeEventListener("keydown", handleKeyDown);
   });
 
-  type GlowButtonEl = HTMLElement & { dataset: DOMStringMap & { prevOverflow?: string } };
-
-  function handleOptimizeEnter(event: MouseEvent) {
-    const el = event.currentTarget as GlowButtonEl;
-    el.style.background =
-      "linear-gradient(120deg, #ff5f6d, #ffc371, #47e1a8, #5f8bff, #c471ed, #f64f59)";
-    el.style.backgroundSize = "400% 400%";
-    el.style.animation = "rainbow-glow 1.2s ease infinite";
-    el.style.boxShadow =
-      "0 0 18px rgba(255,255,255,0.9), 0 0 40px rgba(255,255,255,0.45)";
-    el.dataset.prevOverflow = el.style.overflow;
-    el.style.overflow = "hidden";
-  }
-
-  function handleOptimizeMove(event: MouseEvent) {
-    const el = event.currentTarget as GlowButtonEl;
-    const rect = el.getBoundingClientRect();
-    const xPct = ((event.clientX - rect.left) / rect.width) * 100;
-    const yPct = ((event.clientY - rect.top) / rect.height) * 100;
-    el.style.backgroundPosition = `${xPct}% ${yPct}%`;
-  }
-
-  function handleOptimizeLeave(event: MouseEvent) {
-    const el = event.currentTarget as GlowButtonEl;
-    el.style.background = "";
-    el.style.backgroundPosition = "";
-    el.style.animation = "";
-    el.style.boxShadow = "0 0 8px rgba(255,255,255,0.2)";
-    el.style.overflow = el.dataset.prevOverflow || "hidden";
-  }
 </script>
 
 {#if fileManagerOpen}
@@ -309,6 +283,7 @@
           exportDialogOpen = false;
           fileManagerOpen = true;
         }}
+        class="console-icon-button"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -378,14 +353,10 @@
       </div>
 
       <button
-        class="relative px-3 py-1.5 text-sm font-semibold text-neutral-700 dark:text-neutral-200 bg-neutral-200/80 dark:bg-neutral-800/80 border border-neutral-300 dark:border-neutral-700 rounded-full shadow-sm hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+        class="console-trigger console-trigger--accent relative text-sm disabled:opacity-50 disabled:cursor-not-allowed"
         title="Optimize all paths"
         on:click={optimizeAllLines}
         disabled={optimizingAll}
-        style="box-shadow: 0 0 8px rgba(255,255,255,0.2)"
-        on:mouseenter={handleOptimizeEnter}
-        on:mousemove={handleOptimizeMove}
-        on:mouseleave={handleOptimizeLeave}
       >
         {optimizingAll ? "Optimizing All…" : "Optimize All"}
       </button>
@@ -397,7 +368,7 @@
           on:click={undoAction}
           disabled={!canUndo}
           class:opacity-50={!canUndo}
-          class="disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
+          class="console-icon-button disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -419,7 +390,7 @@
           on:click={redoAction}
           disabled={!canRedo}
           class:opacity-50={!canRedo}
-          class="disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
+          class="console-icon-button disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -453,6 +424,7 @@
         class:text-[#888888]={$snapToGrid && $showGrid}
         class:text-gray-400={!$showGrid}
         class:opacity-50={!$showGrid}
+        class="console-icon-button"
         disabled={!$showGrid}
       >
         <svg
@@ -487,7 +459,7 @@
       title={$showGrid ? `Grid: ${selectedGridSize}" (click to cycle)` : "Toggle Grid"}
       on:click={cycleGridSize}
       class:text-blue-500={$showGrid}
-      class="relative"
+      class="console-icon-button relative"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -518,6 +490,7 @@
       title="Toggle Ruler"
       on:click={() => showRuler.update((v) => !v)}
       class:text-blue-500={$showRuler}
+      class="console-icon-button"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -548,6 +521,7 @@
           : "Lock Protractor to Robot"}
         on:click={() => protractorLockToRobot.update((v) => !v)}
         class:text-amber-500={$protractorLockToRobot}
+        class="console-icon-button"
       >
         {#if $protractorLockToRobot}
           <svg
@@ -589,6 +563,7 @@
       title="Toggle Protractor"
       on:click={() => showProtractor.update((v) => !v)}
       class:text-blue-500={$showProtractor}
+      class="console-icon-button"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
@@ -616,16 +591,9 @@
     <button
       title="Manage Multiple Paths Visualization"
       on:click={() => (multiplePathsDialogOpen = true)}
-      class="relative px-3 py-1.5 rounded-lg font-medium text-sm transition-all duration-200 shadow-sm hover:shadow-md"
-      class:bg-purple-500={$activePaths.length > 0}
-      class:text-white={$activePaths.length > 0}
-      class:hover:bg-purple-600={$activePaths.length > 0}
-      class:bg-neutral-200={$activePaths.length === 0}
-      class:dark:bg-neutral-700={$activePaths.length === 0}
-      class:text-neutral-700={$activePaths.length === 0}
-      class:dark:text-neutral-200={$activePaths.length === 0}
-      class:hover:bg-neutral-300={$activePaths.length === 0}
-      class:dark:hover:bg-neutral-600={$activePaths.length === 0}
+        class="console-trigger relative text-sm"
+        class:console-trigger--active={$activePaths.length > 0}
+        class:console-trigger--muted={$activePaths.length === 0}
     >
       <div class="flex items-center gap-1.5">
         <svg
@@ -644,7 +612,7 @@
         </svg>
         <span>Multiple Paths</span>
         {#if $activePaths.length > 0}
-          <span class="ml-1 px-1.5 py-0.5 bg-white/20 text-xs font-bold rounded">{$activePaths.length}</span>
+          <span class="console-badge ml-1 px-1.5 py-0.5 text-xs font-bold">{$activePaths.length}</span>
         {/if}
       </div>
     </button>
@@ -667,7 +635,7 @@
       <label
         for="file-input"
         title="Load trajectory from a .pp file"
-        class="cursor-pointer"
+        class="console-icon-button cursor-pointer"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -691,7 +659,7 @@
           bind:this={saveButtonRef}
           title="Save options"
           on:click={() => (saveDropdownOpen = !saveDropdownOpen)}
-          class="flex items-center gap-1 px-2 py-1 rounded transition-colors duration-250"
+          class="console-icon-button"
           aria-expanded={saveDropdownOpen}
           aria-label="Save options"
         >
@@ -730,7 +698,7 @@
         {#if saveDropdownOpen}
           <div
             bind:this={saveDropdownRef}
-            class="absolute right-0 mt-2 w-48 bg-white dark:bg-neutral-800 rounded-md shadow-lg py-1 z-50 border border-neutral-200 dark:border-neutral-700 animate-in fade-in slide-in-from-top-2 duration-300"
+            class="console-panel console-menu absolute right-0 mt-2 w-48 z-50 animate-in fade-in slide-in-from-top-2 duration-300"
             role="menu"
           >
             <!-- Save option -->
@@ -739,7 +707,7 @@
                 saveProject();
                 saveDropdownOpen = false;
               }}
-              class="flex items-center gap-3 w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+              class="console-menu-item"
               role="menuitem"
               title="Save to current file"
             >
@@ -758,8 +726,8 @@
                 />
               </svg>
               <div class="flex flex-col">
-                <span class="font-medium">Save</span>
-                <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                <span class="console-menu-item-title">Save</span>
+                <span class="console-menu-item-subtitle">
                   {#if $currentFilePath}
                     Overwrite the current project file in app storage ({$currentFilePath.split(/[\/]/).pop()})
                   {:else}
@@ -775,7 +743,7 @@
                 saveFileAs();
                 saveDropdownOpen = false;
               }}
-              class="flex items-center gap-3 w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+              class="console-menu-item"
               role="menuitem"
               title="Save as new file"
             >
@@ -794,8 +762,8 @@
                 />
               </svg>
               <div class="flex flex-col">
-                <span class="font-medium">Save As</span>
-                <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                <span class="console-menu-item-title">Save As</span>
+                <span class="console-menu-item-subtitle">
                   Create a new project file (choose a filename) or download a new .pp to your computer
                 </span>
               </div>
@@ -808,7 +776,7 @@
         <button
           title="Export path"
           on:click={() => (exportMenuOpen = !exportMenuOpen)}
-          class="flex items-center gap-1"
+          class="console-icon-button"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -842,37 +810,37 @@
 
         {#if exportMenuOpen}
           <div
-            class="absolute right-0 mt-2 w-48 bg-white dark:bg-neutral-800 rounded-md shadow-lg py-1 z-50 border border-neutral-200 dark:border-neutral-700"
+            class="console-panel console-menu absolute right-0 mt-2 w-48 z-50"
           >
             <button
               on:click={() => handleExport("java")}
-              class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+              class="console-menu-item"
             >
               Java Code
             </button>
             <button
               on:click={() => handleExport("kotlin")}
-              class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+              class="console-menu-item"
             >
               Kotlin Code
             </button>
             <button
               on:click={() => handleExport("points")}
-              class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+              class="console-menu-item"
             >
               Points Array
             </button>
             {#if showSequentialExport}
               <button
                 on:click={() => handleExport("sequential")}
-                class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 transition-colors duration-250"
+                class="console-menu-item"
               >
                 Sequential Command
               </button>
             {/if}
             <button
               on:click={exportFieldAsImage}
-              class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors duration-250"
+              class="console-menu-item"
             >
               Field as Image
             </button>
@@ -881,7 +849,7 @@
                 exportMenuOpen = false;
                 await exportPathAsGif();
               }}
-              class="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors duration-250"
+              class="console-menu-item"
             >
               Path Animation as GIF
             </button>
@@ -900,7 +868,7 @@
       <button
         title="Delete/Reset path"
         on:click={handleResetPathWithConfirmation}
-        class="relative group"
+        class="console-icon-button relative group"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -919,14 +887,14 @@
 
         <!-- Tooltip for better UX -->
         <div
-          class="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-xs rounded text-center whitespace-normal max-w-[12rem] shadow-md"
+          class="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-xs text-center whitespace-normal max-w-[12rem] shadow-md"
         >
           Reset path to default (with confirmation)
         </div>
       </button>
 
       <!-- Settings button -->
-      <button title="Open Settings" on:click={() => (settingsOpen = true)}>
+      <button title="Open Settings" on:click={() => (settingsOpen = true)} class="console-icon-button">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"

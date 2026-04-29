@@ -219,9 +219,20 @@
           currentFilePath.set(newFilePath);
         }
 
+        if (selectedFile2 && selectedFile2.path === renamingFile.path) {
+          selectedFile2 = {
+            ...selectedFile2,
+            name: newFileName,
+            path: newFilePath,
+          };
+          secondFilePath.set(newFilePath);
+        }
+
         showToast(`Renamed to: ${newFileName}`, "success");
         await refreshDirectory();
         cancelRename();
+      } else {
+        showToast(`Failed to rename "${renamingFile.name}"`, "error");
       }
     } catch (error) {
       showToast(`Failed to rename: ${getErrorMessage(error)}`, "error");
@@ -847,7 +858,7 @@
 
   <!-- Sidebar -->
   <div
-    class="w-80 md:w-96 h-full bg-white dark:bg-neutral-900 shadow-xl transform transition-transform duration-300 ease-in-out flex flex-col"
+    class="console-panel console-file-manager-shell w-80 md:w-96 h-full bg-[#1a1a1a] dark:bg-[#1a1a1a] transform transition-transform duration-300 ease-in-out flex flex-col"
     class:translate-x-0={isOpen}
     class:-translate-x-full={!isOpen}
   >
@@ -856,12 +867,12 @@
       class="flex-shrink-0 p-3 border-b border-neutral-200 dark:border-neutral-700"
     >
       <div class="flex items-center justify-between">
-        <h2 class="text-base font-semibold text-neutral-900 dark:text-white">
+        <h2 class="text-base font-semibold text-neutral-100">
           Files
         </h2>
         <button
           on:click={() => (isOpen = false)}
-          class="p-1 rounded transition-colors duration-250"
+          class="console-icon-button"
           title="Close"
         >
           <svg
@@ -884,7 +895,7 @@
       <!-- Error Message -->
       {#if errorMessage}
         <div
-          class="mb-3 p-2 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700 rounded text-sm text-red-700 dark:text-red-300"
+          class="console-section mb-3 p-2 text-sm text-red-300"
         >
           ⚠ {errorMessage}
         </div>
@@ -1316,4 +1327,20 @@
   .file-item:hover {
     transform: translateX(2px);
   }
+  .console-file-manager-shell :global(.rounded),
+  .console-file-manager-shell :global(.rounded-md),
+  .console-file-manager-shell :global(.rounded-lg),
+  .console-file-manager-shell :global(.rounded-full) {
+    border-radius: 0 !important;
+  }
+
+  .console-file-manager-shell :global(.shadow-sm),
+  .console-file-manager-shell :global(.shadow-md),
+  .console-file-manager-shell :global(.shadow-lg),
+  .console-file-manager-shell :global(.shadow-xl),
+  .console-file-manager-shell :global(.shadow-2xl) {
+    box-shadow: none !important;
+  }
+
 </style>
+

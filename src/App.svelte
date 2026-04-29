@@ -158,6 +158,135 @@
     lineIds: sourceLines.map((ln) => ln.id!).filter(Boolean),
   });
   let pathChains: PathChain[] = [createDefaultPathChain(lines)];
+  let selectedChainId = pathChains[0]?.id || "";
+  let chainNameDraft = pathChains[0]?.name || defaultPathChainName;
+  let chainColorDraft = pathChains[0]?.color || "#22c55e";
+  let previousSelectedChainId = "";
+  let selectedLineIndex = 0;
+  let fieldMapLoaded = false;
+  let robotImageLoaded = false;
+  let lastFieldMapSrc = "";
+  let lastRobotImageSrc = "";
+  $: selectedChain =
+    pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
+
+  $: if (fieldMapSrc !== lastFieldMapSrc) {
+    fieldMapLoaded = false;
+    lastFieldMapSrc = fieldMapSrc;
+  }
+
+  $: if ((settings.robotImage || "/robot.png") !== lastRobotImageSrc) {
+    robotImageLoaded = false;
+    lastRobotImageSrc = settings.robotImage || "/robot.png";
+  }
+
+  $: initialAssetsReady = fieldMapLoaded && robotImageLoaded;
+  $: if (lines.length > 0 && selectedLineIndex >= lines.length) {
+    selectedLineIndex = lines.length - 1;
+  }
+
+  function getLinePrimaryChainId(lineId: string): string {
+    for (const chain of pathChains) {
+      if ((chain.lineIds || []).includes(lineId)) return chain.id;
+    }
+    return pathChains[0]?.id || "";
+  }
+
+  function syncLineColorsToChains() {
+    const chainColorById = new Map(
+      pathChains.map((chain) => [chain.id, chain.color || "#22c55e"]),
+    );
+    let changed = false;
+
+    const nextLines = lines.map((line) => {
+      const ownerId = getLinePrimaryChainId(line.id || "");
+      const targetColor = chainColorById.get(ownerId) || line.color;
+      if (line.color !== targetColor) {
+        changed = true;
+        return { ...line, color: targetColor };
+      }
+      return line;
+    });
+
+    if (changed) {
+      lines = nextLines;
+    }
+  }
+
+  function assignLineToChain(lineId: string, chainId: string) {
+    if (!lineId || !chainId) return;
+    pathChains = pathChains.map((chain) => ({
+      ...chain,
+      lineIds: chain.lineIds.filter((id) => id !== lineId),
+    }));
+
+    pathChains = pathChains.map((chain) => {
+      if (chain.id !== chainId) return chain;
+      return {
+        ...chain,
+        lineIds: Array.from(new Set([...(chain.lineIds || []), lineId])),
+      };
+    });
+
+    syncLineColorsToChains();
+  }
+
+  function addPathChain() {
+    const newChain: PathChain = {
+      id: makeChainId(),
+      name: `Chain ${pathChains.length + 1}`,
+      color: getRandomColor(),
+      lineIds: [],
+    };
+    pathChains = [...pathChains, newChain];
+    selectedChainId = newChain.id;
+    recordChange();
+  }
+
+  function removeSelectedPathChain() {
+    if (!selectedChain || pathChains.length <= 1) return;
+    const fallbackChainId = pathChains.find((chain) => chain.id !== selectedChain.id)?.id;
+    const orphanedLines = [...(selectedChain.lineIds || [])];
+    pathChains = pathChains.filter((chain) => chain.id !== selectedChain.id);
+
+    if (fallbackChainId) {
+      orphanedLines.forEach((lineId) => assignLineToChain(lineId, fallbackChainId));
+    }
+
+    selectedChainId = fallbackChainId || pathChains[0]?.id || "";
+    recordChange();
+  }
+
+  function updateSelectedChainName() {
+    if (!selectedChain) return;
+    const nextName = chainNameDraft.trim();
+    if (!nextName) return;
+    pathChains = pathChains.map((chain) =>
+      chain.id === selectedChain.id ? { ...chain, name: nextName } : chain,
+    );
+    recordChange();
+  }
+
+  function updateSelectedChainColor() {
+    if (!selectedChain) return;
+    pathChains = pathChains.map((chain) =>
+      chain.id === selectedChain.id ? { ...chain, color: chainColorDraft } : chain,
+    );
+    syncLineColorsToChains();
+    recordChange();
+  }
+
+  $: if (!selectedChainId || !pathChains.some((chain) => chain.id === selectedChainId)) {
+    selectedChainId = pathChains[0]?.id || "";
+  }
+
+  $: if (selectedChainId !== previousSelectedChainId) {
+    chainNameDraft = selectedChain?.name || defaultPathChainName;
+    chainColorDraft = selectedChain?.color || "#22c55e";
+    previousSelectedChainId = selectedChainId;
+  }
+
+  $: syncLineColorsToChains();
   let shapes: Shape[] = getDefaultShapes();
   let optimizingLineIds: Record<string, boolean> = {};
   let optimizingAll = false;
@@ -346,6 +475,7 @@
   $: primaryPathChain = pathChains[0] || null;
   $: pathPreviewItems = lines.slice(0, 14).map((line, idx) => ({
     index: idx + 1,
+    lineIndex: idx,
     name: line.name || `Path ${idx + 1}`,
     x: formatPathPoint(line.endPoint.x),
     y: formatPathPoint(line.endPoint.y),
@@ -2862,10 +2992,11 @@
   }
 
   function addNewLine() {
+    const newLineId = `line-${Math.random().toString(36).slice(2)}`;
     lines = [
       ...lines,
       {
-        id: `line-${Math.random().toString(36).slice(2)}`,
+        id: newLineId,
         endPoint: {
           x: _.random(36, 108),
           y: _.random(36, 108),
@@ -2883,8 +3014,11 @@
     ];
     sequence = [
       ...sequence,
-      { kind: "path", lineId: lines[lines.length - 1].id! },
+      { kind: "path", lineId: newLineId },
     ];
+    if (selectedChainId && pathChains.some((chain) => chain.id === selectedChainId)) {
+      assignLineToChain(newLineId, selectedChainId);
+    }
     recordChange();
   }
 
@@ -3177,25 +3311,61 @@
       </section>
 
       <section class="module-box module-fill">
-        <div class="module-header-row">
-          <h3 class="module-title">Chains</h3>
-          <button class="module-mini-btn" on:click={addNewLine}>+</button>
-        </div>
-        <div class="module-list">
-          {#each pathChains as chain, idx (chain.id)}
-            <div class="list-item-box">
-              <div class="list-item-top">
-                <div
-                  class="chain-swatch"
-                  style={`background:${chain.color || "#10b981"}`}
-                ></div>
-                <span class="list-item-name">{chain.name}</span>
-              </div>
-              <div class="list-item-sub">{chain.lineIds.length} segment{chain.lineIds.length === 1 ? "" : "s"}</div>
+        <div class="chain-panel">
+          <div class="module-header-row">
+            <div>
+              <h3 class="module-title">Path Chains</h3>
+              <p class="module-caption">Create and rename chain groups.</p>
             </div>
-          {/each}
-          {#if pathChains.length === 0}
-            <div class="list-empty">No chains yet</div>
+            <div class="flex items-center gap-2">
+              <button class="console-action px-2 py-1 text-xs" on:click={addPathChain}>New</button>
+              <button class="console-action px-2 py-1 text-xs" on:click={removeSelectedPathChain} disabled={pathChains.length <= 1}>Remove</button>
+            </div>
+          </div>
+
+          <div class="chain-list">
+            {#each pathChains as chain (chain.id)}
+              <button
+                class="chain-card"
+                on:click={() => (selectedChainId = chain.id)}
+              >
+                <span class="chain-swatch" style={`background:${chain.color || "#10b981"}`}></span>
+                <span class="chain-card-copy">
+                  <span class="chain-card-title">{chain.name}</span>
+                  <span class="chain-card-meta">{(chain.lineIds || []).length} segment{(chain.lineIds || []).length === 1 ? "" : "s"}</span>
+                </span>
+              </button>
+            {/each}
+
+            {#if pathChains.length === 0}
+              <div class="list-empty">No chains yet</div>
+            {/if}
+          </div>
+
+          {#if selectedChain}
+            <div class="chain-editor">
+              <label class="chain-field">
+                <span class="chain-field-label">Name</span>
+                <input
+                  type="text"
+                  bind:value={chainNameDraft}
+                  on:input={updateSelectedChainName}
+                  class="console-input px-2 py-1 text-xs"
+                  placeholder="Chain name"
+                />
+              </label>
+
+              <label class="chain-field chain-field--swatch">
+                <span class="chain-field-label">Color</span>
+                <input
+                  type="color"
+                  bind:value={chainColorDraft}
+                  on:input={updateSelectedChainColor}
+                  class="chain-color-input"
+                  title="Path chain color"
+                />
+              </label>
+            </div>
           {/if}
         </div>
       </section>
@@ -3207,13 +3377,17 @@
         </div>
         <div class="module-list">
           {#each pathPreviewItems as item (item.index)}
-            <div class="list-item-box compact">
+            <button
+              class="list-item-box compact text-left"
+              class:chain-card--selected={selectedLineIndex === item.lineIndex}
+              on:click={() => (selectedLineIndex = item.lineIndex)}
+            >
               <div class="list-item-top">
                 <span class="list-item-index">{item.index}.</span>
                 <span class="list-item-name">{item.name}</span>
               </div>
               <div class="list-item-sub">{item.x}, {item.y}</div>
-            </div>
+            </button>
           {/each}
           {#if lines.length > pathPreviewItems.length}
             <div class="list-empty">+ {lines.length - pathPreviewItems.length} more...</div>
@@ -3281,8 +3455,10 @@
     -o-user-drag: none;
   "
         draggable="false"
+        on:load={() => (fieldMapLoaded = true)}
         on:error={(e) => {
           console.error("Failed to load field map:", settings.fieldMap);
+          fieldMapLoaded = true;
           e.target.src = "/fields/decode.webp"; // Fallback
         }}
         on:dragstart={(e) => e.preventDefault()}
@@ -3298,8 +3474,10 @@
 left: ${robotXY.x}px; transform: translate(-50%, -50%) rotate(${robotHeading}deg); z-index: 20; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none;`}
           draggable="false"
+          on:load={() => (robotImageLoaded = true)}
           on:error={(e) => {
             console.error("Failed to load robot image:", settings.robotImage);
+            robotImageLoaded = true;
             e.target.src = "/robot.png"; // Fallback to default
           }}
           on:dragstart={(e) => e.preventDefault()}
@@ -3348,8 +3526,10 @@ pointer-events: none;`}
 left: ${secondRobotXY.x}px; transform: translate(-50%, -50%) rotate(${secondRobotHeading}deg); z-index: 19; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none; opacity: 0.8;`}
           draggable="false"
+          on:load={() => (robotImageLoaded = true)}
           on:error={(e) => {
             console.error("Failed to load robot image:", settings.robotImage);
+            robotImageLoaded = true;
             e.target.src = "/robot.png";
           }}
           on:dragstart={(e) => e.preventDefault()}
@@ -3399,8 +3579,10 @@ pointer-events: none; opacity: 0.8;`}
 left: ${robotState.xy.x}px; transform: translate(-50%, -50%) rotate(${robotState.heading}deg); z-index: ${20 - idx}; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
             draggable="false"
+            on:load={() => (robotImageLoaded = true)}
             on:error={(e) => {
               console.error("Failed to load robot image:", settings.robotImage);
+              robotImageLoaded = true;
               e.target.src = "/robot.png";
             }}
             on:dragstart={(e) => e.preventDefault()}
@@ -3441,6 +3623,17 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
           {/if}
         {/each}
       {/if}
+      {#if !initialAssetsReady}
+        <div class="absolute inset-0 z-[60] flex items-center justify-center rounded-lg bg-neutral-950/80 backdrop-blur-sm">
+          <div class="flex flex-col items-center gap-3 rounded-2xl border border-neutral-700 bg-neutral-900/95 px-6 py-5 shadow-2xl">
+            <img src="/loading.svg" alt="Loading" class="size-20" draggable="false" />
+            <div class="text-center">
+              <div class="text-sm font-semibold text-neutral-100">Loading Visualizer</div>
+              <div class="text-xs text-neutral-400">Waiting for field assets to finish loading</div>
+            </div>
+          </div>
+        </div>
+      {/if}
         </div>
       </div>
       <div class="module-footer">Field · 141.5&quot; x 141.5&quot;</div>
@@ -3455,6 +3648,8 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         bind:lines
         bind:sequence
         bind:pathChains
+        bind:selectedChainId
+        {selectedLineIndex}
         bind:robotWidth
         bind:robotHeight
         bind:settings

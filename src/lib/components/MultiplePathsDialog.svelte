@@ -69,7 +69,7 @@
   <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
   <div
     transition:fade={{ duration: 200, easing: cubicInOut }}
-    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[2000]"
+    class="console-backdrop fixed inset-0 flex items-center justify-center z-[2000]"
     on:click={handleClose}
     role="dialog"
     aria-modal="true"
@@ -80,7 +80,7 @@
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
     <div
       transition:fly={{ duration: 300, easing: cubicInOut, y: -20 }}
-      class="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
+      class="console-panel console-multipaths-shell p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
       on:click|stopPropagation
       role="document"
     >
@@ -98,7 +98,7 @@
       <!-- Performance Warning -->
       {#if showPerformanceWarning}
         <div
-          class="mb-4 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded-lg flex items-start gap-2"
+          class="console-section mb-4 p-3 flex items-start gap-2"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -128,7 +128,7 @@
 
       <!-- Selected Count -->
       <div
-        class="flex items-center justify-between mb-4 p-3 bg-neutral-100 dark:bg-neutral-700/50 rounded-lg"
+        class="console-section flex items-center justify-between mb-4 p-3"
       >
         <div class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
           Selected: <span class="text-lg font-bold text-purple-600 dark:text-purple-400"
@@ -147,7 +147,7 @@
       </div>
 
       <!-- Files List -->
-      <div class="flex-1 overflow-y-auto mb-4 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+      <div class="console-section flex-1 overflow-y-auto mb-4">
         {#if loading}
           <div class="p-8 text-center text-neutral-500 dark:text-neutral-400">
             Loading files...
@@ -175,13 +175,13 @@
                 <div class="flex-shrink-0">
                   {#if isSelected}
                     <div
-                      class="size-6 rounded bg-purple-600 flex items-center justify-center text-white font-bold text-sm"
+                      class="size-6 console-badge bg-purple-600 flex items-center justify-center text-white font-bold text-sm"
                     >
                       {selectionIndex + 1}
                     </div>
                   {:else}
                     <div
-                      class="size-6 rounded border-2 border-neutral-300 dark:border-neutral-600"
+                      class="size-6 border-2 border-neutral-300 dark:border-neutral-600"
                     />
                   {/if}
                 </div>
@@ -203,7 +203,7 @@
                 <!-- Selection Badge -->
                 {#if isSelected}
                   <div
-                    class="flex-shrink-0 px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded"
+                    class="console-badge flex-shrink-0 px-2 py-1 bg-purple-600 text-white text-xs font-semibold"
                   >
                     Path {selectionIndex + 1}
                   </div>
@@ -218,13 +218,13 @@
       <div class="flex justify-end gap-3">
         <button
           on:click={handleClose}
-          class="px-4 py-2 rounded-lg text-neutral-700 dark:text-neutral-300 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors font-medium"
+          class="console-action px-4 py-2 text-neutral-700 dark:text-neutral-300 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors font-medium"
         >
           Cancel
         </button>
         <button
           on:click={handleApply}
-          class="px-4 py-2 rounded-lg text-white bg-purple-600 hover:bg-purple-700 transition-colors font-medium"
+          class="console-action px-4 py-2 text-white bg-purple-600 hover:bg-purple-700 transition-colors font-medium"
         >
           Apply ({selectedPaths.length} path{selectedPaths.length !== 1 ? "s" : ""})
         </button>
@@ -234,6 +234,21 @@
 {/if}
 
 <style>
+  .console-multipaths-shell :global(.rounded),
+  .console-multipaths-shell :global(.rounded-md),
+  .console-multipaths-shell :global(.rounded-lg),
+  .console-multipaths-shell :global(.rounded-full) {
+    border-radius: 0 !important;
+  }
+
+  .console-multipaths-shell :global(.shadow-sm),
+  .console-multipaths-shell :global(.shadow-md),
+  .console-multipaths-shell :global(.shadow-lg),
+  .console-multipaths-shell :global(.shadow-xl),
+  .console-multipaths-shell :global(.shadow-2xl) {
+    box-shadow: none !important;
+  }
+
   :global(.dark) .dark-selected {
     background-color: rgb(88 28 135 / 0.2); /* purple-900/20 */
   }

@@ -13,9 +13,7 @@
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
   import RobotPositionDisplay from "./components/RobotPositionDisplay.svelte";
   import StartingPointSection from "./components/StartingPointSection.svelte";
-  import PathLineSection from "./components/PathLineSection.svelte";
   import PlaybackControls from "./components/PlaybackControls.svelte";
-  import WaitRow from "./components/WaitRow.svelte";
   import { calculatePathTime } from "../utils";
 
   export let percent: number;
@@ -26,6 +24,8 @@
   export let lines: Line[];
   export let sequence: SequenceItem[];
   export let pathChains: PathChain[] = [];
+  export let selectedChainId: string = "";
+  export let selectedLineIndex: number = 0;
   export let robotWidth: number = 16;
   export let robotHeight: number = 16;
   export let robotXY: BasePoint;
@@ -45,12 +45,15 @@
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const defaultChainName = "Main Chain";
 
-  let selectedChainId = "";
   let chainNameDraft = "";
   let chainColorDraft = "#22c55e";
   let selectedChain: PathChain | null = null;
   let previousSelectedChainId = "";
   let chainOptions: Array<{ id: string; name: string; color: string }> = [];
+  let compactObstacles = true;
+
+  $: optimizeLine;
+  $: optimizingLineIds;
 
   const getChainById = (chainId: string): PathChain | null =>
     pathChains.find((chain) => chain.id === chainId) || null;
@@ -114,15 +117,25 @@
   $: selectedChain =
     pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
 
+  $: if (selectedLine) {
+    const selectedLineChainId = getLinePrimaryChainId(selectedLine.id || "");
+    if (selectedLineChainId && selectedLineChainId !== selectedChainId) {
+      selectedChainId = selectedLineChainId;
+    }
+  }
+
   $: if (selectedChainId !== previousSelectedChainId) {
     chainNameDraft = selectedChain?.name || "";
     chainColorDraft = selectedChain?.color || "#22c55e";
     previousSelectedChainId = selectedChainId;
   }
 
-  function ensureLineInDefaultChain(lineId: string) {
+  function ensureLineInActiveChain(lineId: string) {
     if (!lineId || !pathChains.length) return;
-    assignLineToChain(lineId, pathChains[0].id);
+    const targetChainId = selectedChainId && pathChains.some((chain) => chain.id === selectedChainId)
+      ? selectedChainId
+      : pathChains[0].id;
+    assignLineToChain(lineId, targetChainId);
   }
 
   function removeLineFromChains(lineId: string) {
@@ -290,6 +303,9 @@
     color: chain.color || "#22c55e",
   }));
 
+  $: selectedLine = lines[selectedLineIndex] || lines[0] || null;
+  $: selectedLinePathIndex = selectedLine ? lines.findIndex((line) => line.id === selectedLine.id) : -1;
+
   $: syncLineColorsToChains();
 
   // Reference exported but unused props to silence Svelte unused-export warnings
@@ -439,7 +455,7 @@
     const newSeq = [...sequence];
     newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
     sequence = newSeq;
-    ensureLineInDefaultChain(newLine.id!);
+    ensureLineInActiveChain(newLine.id!);
 
     collapsedSections.lines.splice(lineIndex + 1, 0, false);
     collapsedSections.controlPoints.splice(lineIndex + 1, 0, true);
@@ -504,7 +520,7 @@
     const newSeq = [...sequence];
     newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
     sequence = newSeq;
-    ensureLineInDefaultChain(newLine.id!);
+    ensureLineInActiveChain(newLine.id!);
 
     collapsedSections.lines.splice(lineIndex + 1, 0, false);
     collapsedSections.controlPoints.splice(lineIndex + 1, 0, true);
@@ -548,7 +564,7 @@
     };
     lines = [...lines, newLine];
     sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
-    ensureLineInDefaultChain(newLine.id!);
+    ensureLineInActiveChain(newLine.id!);
     collapsedSections.lines.push(false);
     collapsedSections.controlPoints.push(true);
     recordChange();
@@ -649,7 +665,7 @@
     };
     lines = [newLine, ...lines];
     sequence = [{ kind: "path", lineId: newLine.id! }, ...sequence];
-    ensureLineInDefaultChain(newLine.id!);
+    ensureLineInActiveChain(newLine.id!);
     collapsedSections.lines = [false, ...collapsedSections.lines];
     collapsedSections.controlPoints = [
       true,
@@ -696,7 +712,7 @@
     const newSeq = [...sequence];
     newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
     sequence = newSeq;
-    ensureLineInDefaultChain(newLine.id!);
+    ensureLineInActiveChain(newLine.id!);
 
     // Add UI state for the new line
     collapsedSections.lines.push(false);
@@ -775,189 +791,80 @@
 
 <div class="flex-1 flex flex-col justify-start items-center gap-2 h-full">
   <div
-    class="flex flex-col justify-start items-start w-full bg-[#1a1a1a] border border-[#333333] p-3 overflow-y-scroll overflow-x-hidden h-full gap-4"
+    class="flex flex-col justify-start items-start w-full bg-[#1a1a1a] border border-[#333333] p-3 overflow-y-scroll overflow-x-hidden h-full gap-3"
   >
-    <ObstaclesSection bind:shapes bind:collapsedObstacles />
-
-    <RobotPositionDisplay {robotXY} {robotHeading} {x} {y} />
-
-    <StartingPointSection bind:startPoint {addPathAtStart} {addWaitAtStart} />
-
-    <div class="w-full border border-[#333333] p-3 bg-[#222222]">
-      <div class="flex items-center gap-2 mb-2">
-        <p class="text-xs font-semibold uppercase tracking-wide text-gray-300">Path Chains</p>
-        <select
-          bind:value={selectedChainId}
-          class="flex-1 px-2 py-1 text-xs rounded border border-[#444444] bg-[#2a2a2a] text-gray-200"
-        >
-          {#each pathChains as chain (chain.id)}
-            <option value={chain.id}>{chain.name} ({(chain.lineIds || []).length})</option>
-          {/each}
-        </select>
-        <button on:click={addPathChain} class="px-2 py-1 text-xs rounded bg-[#3a3a3a] text-gray-300 border border-[#444444]">New</button>
-        <button on:click={duplicateSelectedPathChain} class="px-2 py-1 text-xs rounded bg-[#3a3a3a] text-gray-300 border border-[#444444]">Duplicate</button>
+    <div class="w-full flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2 w-full border border-[#333333] bg-[#222222] px-3 py-2 text-xs text-gray-400">
+        <div class="font-semibold uppercase tracking-wide text-gray-200">Objects</div>
         <button
-          on:click={removeSelectedPathChain}
-          disabled={pathChains.length <= 1}
-          class="px-2 py-1 text-xs rounded bg-[#3a3a3a] text-gray-300 border border-[#444444] disabled:opacity-40"
+          class="px-2 py-1 border border-[#444444] bg-[#1c1c1c] text-gray-200 text-[11px]"
+          on:click={() => (compactObstacles = !compactObstacles)}
+          title={compactObstacles ? "Show full obstacle editor" : "Condense obstacle editor"}
         >
-          Remove
+          {compactObstacles ? "Compact" : "Full"}
         </button>
       </div>
-
-      {#if selectedChain}
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
-          <div class="flex items-center gap-2">
-            <input
-              type="text"
-              bind:value={chainNameDraft}
-              on:input={updateSelectedChainName}
-              class="flex-1 px-2 py-1 text-xs rounded border border-[#444444] bg-[#2a2a2a] text-gray-200"
-              placeholder="Chain name"
-            />
-          </div>
-
-          <div class="flex items-center gap-2">
-            <input
-              type="color"
-              bind:value={chainColorDraft}
-              on:input={updateSelectedChainColor}
-              class="w-10 h-8 rounded border border-[#444444] bg-[#2a2a2a]"
-              title="Path chain color"
-            />
-            <span class="text-xs text-gray-500">Path color</span>
-          </div>
-        </div>
-      {/if}
+      <ObstaclesSection bind:shapes bind:collapsedObstacles compact={compactObstacles} />
     </div>
 
-    <!-- Unified sequence render: paths and waits -->
-    {#each sequence as item, sIdx}
-      <div class="w-full">
-        {#if item.kind === "path"}
-          {#each lines.filter((l) => l.id === item.lineId) as ln (ln.id)}
-            <PathLineSection
-              bind:line={ln}
-              idx={lines.findIndex((l) => l.id === ln.id)}
-              bind:lines
-              bind:collapsed={
-                collapsedSections.lines[lines.findIndex((l) => l.id === ln.id)]
-              }
-              bind:collapsedControlPoints={
-                collapsedSections.controlPoints[
-                  lines.findIndex((l) => l.id === ln.id)
-                ]
-              }
-              onRemove={() =>
-                removeLine(lines.findIndex((l) => l.id === ln.id))}
-              onInsertAfter={() => addControlPointToLine(sIdx)}
-              onInsertMidpoint={() => insertMidpointAfter(sIdx)}
-              onAddWaitAfter={() => insertWaitAfter(sIdx)}
-              onMoveUp={() => moveSequenceItem(sIdx, -1)}
-              onMoveDown={() => moveSequenceItem(sIdx, 1)}
-              canMoveUp={sIdx !== 0}
-              canMoveDown={sIdx !== sequence.length - 1}
-              optimizeLine={optimizeLine}
-              optimizing={optimizingLineIds?.[ln.id ?? ""] ?? false}
-              chainOptions={chainOptions}
-              selectedChainId={getLinePrimaryChainId(ln.id || "")}
-              onChainChange={(chainId) => assignLineToChain(ln.id || "", chainId)}
-              {recordChange}
-            />
-          {/each}
-        {:else}
-          <WaitRow
-            name={getWait(item).name}
-            durationMs={getWait(item).durationMs}
-            locked={getWait(item).locked ?? false}
-            onToggleLock={() => {
-              const newSeq = [...sequence];
-              newSeq[sIdx] = {
-                ...getWait(item),
-                locked: !(getWait(item).locked ?? false),
-              };
-              sequence = newSeq;
-              recordChange?.();
-            }}
-            onChange={(newName, newDuration) => {
-              const newSeq = [...sequence];
-              newSeq[sIdx] = {
-                ...getWait(item),
-                name: newName,
-                durationMs: Math.max(0, Number(newDuration) || 0),
-              };
-              sequence = newSeq;
-            }}
-            onRemove={() => {
-              const newSeq = [...sequence];
-              newSeq.splice(sIdx, 1);
-              sequence = newSeq;
-            }}
-            onInsertAfter={() => {
-              const newSeq = [...sequence];
-              newSeq.splice(sIdx + 1, 0, {
-                kind: "wait",
-                id: makeId(),
-                name: "Wait",
-                durationMs: 0,
-                locked: false,
-              });
-              sequence = newSeq;
-            }}
-            onAddPathAfter={() => insertPathAfter(sIdx)}
-            onMoveUp={() => moveSequenceItem(sIdx, -1)}
-            onMoveDown={() => moveSequenceItem(sIdx, 1)}
-            canMoveUp={sIdx !== 0}
-            canMoveDown={sIdx !== sequence.length - 1}
-          />
-        {/if}
+    <div class="grid w-full grid-cols-1 gap-2 lg:grid-cols-2">
+      <div class="w-full border border-[#333333] bg-[#222222] p-3">
+        <StartingPointSection bind:startPoint {addPathAtStart} {addWaitAtStart} />
       </div>
-    {/each}
+      <div class="w-full border border-[#333333] bg-[#222222] p-3">
+        <RobotPositionDisplay {robotXY} {robotHeading} {x} {y} />
+      </div>
+    </div>
 
-    <!-- Add Line Button -->
-    <div class="flex flex-row items-center gap-4">
-      <button
-        on:click={addLine}
-        class="font-semibold text-[#888888] text-sm flex flex-row justify-start items-center gap-1"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke-width={2}
-          stroke="currentColor"
-          class="size-5"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M12 4.5v15m7.5-7.5h-15"
-          />
-        </svg>
-        <p>Add Path</p>
-      </button>
+    <div class="w-full border border-[#333333] bg-[#222222] p-3 text-xs text-gray-400 space-y-3">
+      <div class="flex items-center justify-between gap-2">
+        <div class="font-semibold text-gray-100">Selected Point</div>
+        <div>{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
+      </div>
 
-      <button
-        on:click={addWait}
-        class="font-semibold text-[#888888] text-sm flex flex-row justify-start items-center gap-1"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          class="size-5"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            d="M12 7v5l3 2"
-          />
-        </svg>
-        <p>Add Wait</p>
-      </button>
+      {#if selectedLine}
+        <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
+          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
+            <div class="text-gray-500">Name</div>
+            <div class="font-medium text-gray-100 truncate">{selectedLine.name || `Path ${selectedLinePathIndex + 1}`}</div>
+          </div>
+          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
+            <div class="text-gray-500">Endpoint</div>
+            <div class="font-medium text-gray-100">{selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}</div>
+          </div>
+          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
+            <div class="text-gray-500">Points</div>
+            <div class="font-medium text-gray-100">{selectedLine.controlPoints.length}</div>
+          </div>
+          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
+            <div class="text-gray-500">Locked</div>
+            <div class="font-medium text-gray-100">{selectedLine.locked ? "Yes" : "No"}</div>
+          </div>
+        </div>
+
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label class="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-gray-500">
+            Chain
+            <select
+              bind:value={selectedChainId}
+              class="border border-[#444444] bg-[#111111] px-2 py-1.5 text-sm text-gray-100"
+            >
+              {#each chainOptions as chain}
+                <option value={chain.id}>{chain.name}</option>
+              {/each}
+            </select>
+          </label>
+
+          <button
+            class="border border-[#444444] bg-[#111111] px-3 py-2 text-sm font-semibold text-gray-100"
+            on:click={addLine}
+          >
+            Add Path to Chain
+          </button>
+        </div>
+      {:else}
+        <div class="text-[11px] text-gray-500">Select a path from the left list to inspect it here.</div>
+      {/if}
     </div>
   </div>
 
