@@ -162,7 +162,11 @@
   let chainNameDraft = pathChains[0]?.name || defaultPathChainName;
   let chainColorDraft = pathChains[0]?.color || "#22c55e";
   let previousSelectedChainId = "";
+  let previousSelectedLineId = "";
   let selectedLineIndex = 0;
+  let selectedPointIndex = 0;
+  let selectedLine: Line | null = null;
+  let selectedLineChainId = "";
   let fieldMapLoaded = false;
   let robotImageLoaded = false;
   let lastFieldMapSrc = "";
@@ -184,6 +188,9 @@
   $: if (lines.length > 0 && selectedLineIndex >= lines.length) {
     selectedLineIndex = lines.length - 1;
   }
+
+  $: selectedLine = lines[selectedLineIndex] || null;
+  $: selectedLineChainId = selectedLine?.id ? getLinePrimaryChainId(selectedLine.id) : "";
 
   function getLinePrimaryChainId(lineId: string): string {
     for (const chain of pathChains) {
@@ -278,6 +285,13 @@
 
   $: if (!selectedChainId || !pathChains.some((chain) => chain.id === selectedChainId)) {
     selectedChainId = pathChains[0]?.id || "";
+  }
+
+  $: if (selectedLine?.id && selectedLine.id !== previousSelectedLineId) {
+    if (selectedLineChainId && selectedLineChainId !== selectedChainId) {
+      selectedChainId = selectedLineChainId;
+    }
+    previousSelectedLineId = selectedLine.id;
   }
 
   $: if (selectedChainId !== previousSelectedChainId) {
@@ -477,6 +491,8 @@
     index: idx + 1,
     lineIndex: idx,
     name: line.name || `Path ${idx + 1}`,
+    chainName: pathChains.find((chain) => chain.id === getLinePrimaryChainId(line.id || ""))?.name || "Unassigned",
+    chainColor: pathChains.find((chain) => chain.id === getLinePrimaryChainId(line.id || ""))?.color || line.color || "#10b981",
     x: formatPathPoint(line.endPoint.x),
     y: formatPathPoint(line.endPoint.y),
   }));
@@ -702,6 +718,28 @@
           }
         });
       });
+
+      const selectedLine = lines[selectedLineIndex];
+      const selectedPoint =
+        selectedLine && selectedPointIndex >= 0
+          ? selectedPointIndex === 0
+            ? selectedLine.endPoint
+            : selectedLine.controlPoints[selectedPointIndex - 1]
+          : null;
+
+      if (selectedLine && selectedPoint) {
+        const selectedPointRing = new Two.Circle(
+          x(selectedPoint.x),
+          y(selectedPoint.y),
+          x(POINT_RADIUS) * 1.7,
+        );
+        selectedPointRing.id = `selected-point-${selectedLineIndex}-${selectedPointIndex}`;
+        selectedPointRing.fill = "transparent";
+        selectedPointRing.stroke = "#facc15";
+        selectedPointRing.linewidth = x(0.35);
+        selectedPointRing.opacity = 0.95;
+        _points.push(selectedPointRing);
+      }
     }
     
     // Add obstacle vertices as draggable points
@@ -1815,6 +1853,14 @@
     }
   }
 
+  async function saveAllAdditionalPaths() {
+    if ($activePaths.length === 0) return;
+
+    for (let pathIdx = 0; pathIdx < additionalPaths.length; pathIdx += 1) {
+      await saveAdditionalPath(pathIdx);
+    }
+  }
+
   // Keyboard shortcut for save
   hotkeys("cmd+s, ctrl+s", function (event, handler) {
     event.preventDefault();
@@ -2205,6 +2251,7 @@
   })();
   async function saveFileAs() {
     const win: any = window as any;
+    await saveAllAdditionalPaths();
     const content = JSON.stringify(
       {
         startPoint,
@@ -2212,6 +2259,7 @@
         shapes,
         sequence,
         pathChains,
+        activePaths: $activePaths,
         settings,
         version: "1.2.1",
         timestamp: new Date().toISOString(),
@@ -2303,7 +2351,7 @@
       console.error("Failed to save into app storage:", err);
       // As a last resort, download the file
       try {
-        downloadTrajectory(startPoint, lines, shapes, sequence, pathChains);
+        downloadTrajectory(startPoint, lines, shapes, sequence, pathChains, $activePaths);
       } catch (err2) {
         console.error("Save As fallback failed:", err2);
         alert(
@@ -2368,13 +2416,24 @@
     let isDown = false;
     let dragOffset = { x: 0, y: 0 }; // Store offset to prevent snapping to center
 
+    const getPathPointLockedState = (lineIdx: number, pointIdx: number): boolean => {
+      const line = lines[lineIdx];
+      if (!line) return false;
+      if (pointIdx === 0) {
+        return !!line.endPoint?.locked;
+      }
+      return !!line.controlPoints[pointIdx - 1]?.locked;
+    };
+
     const isLockedPathElem = (id: string | null): boolean => {
       if (!id || !id.startsWith("point")) return false;
       const parts = id.split("-");
       const lineIdx = Number(parts[1]) - 1;
+      const pointIdx = Number(parts[2]);
       if (Number.isNaN(lineIdx)) return false;
       if (lineIdx < 0) return false; // startPoint currently not lockable
-      return !!lines[lineIdx]?.locked;
+      if (Number.isNaN(pointIdx)) return !!lines[lineIdx]?.locked;
+      return !!lines[lineIdx]?.locked || getPathPointLockedState(lineIdx, pointIdx);
     };
 
     two.renderer.domElement.addEventListener("mousemove", (evt: MouseEvent) => {
@@ -2507,6 +2566,7 @@
       } else {
         if (
           (elem?.id.startsWith("point") && !isLockedPathElem(elem.id)) ||
+          elem?.id.startsWith("line-") ||
           elem?.id.startsWith("second-point") ||
           elem?.id.startsWith("additional-path-") ||
           elem?.id.startsWith("obstacle")
@@ -2524,6 +2584,22 @@
       if (currentElem && isLockedPathElem(currentElem)) {
         isDown = false;
         return;
+      }
+
+      if (currentElem?.startsWith("line-")) {
+        const match = currentElem.match(/^line-(\d+)/);
+        if (match) {
+          selectLinePoint(Number(match[1]) - 1, 0);
+        }
+        isDown = false;
+        return;
+      }
+
+      if (currentElem?.startsWith("point-")) {
+        const match = currentElem.match(/^point-(\d+)-(\d+)/);
+        if (match) {
+          selectLinePoint(Number(match[1]) - 1, Number(match[2]));
+        }
       }
 
       isDown = true;
@@ -2671,6 +2747,14 @@
 
       lines = [...lines, newLine];
       sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
+      selectedLineIndex = lines.length - 1;
+      const targetChainId = pathChains.some((chain) => chain.id === selectedChainId)
+        ? selectedChainId
+        : pathChains[0]?.id || "";
+      if (targetChainId) {
+        selectedChainId = targetChainId;
+        assignLineToChain(newLine.id!, targetChainId);
+      }
       recordChange();
       two.update();
     });
@@ -2686,6 +2770,7 @@
   });
   async function saveFile() {
     try {
+      await saveAllAdditionalPaths();
       const content = JSON.stringify(
         {
           startPoint,
@@ -2693,6 +2778,7 @@
           shapes,
           sequence,
           pathChains,
+          activePaths: $activePaths,
           settings,
           version: "1.2.1",
           timestamp: new Date().toISOString(),
@@ -2768,6 +2854,8 @@
         robotWidth = settings.rWidth;
         robotHeight = settings.rHeight;
       }
+
+      activePaths.set(Array.isArray(data.activePaths) ? data.activePaths : []);
 
       isUnsaved.set(false);
       recordChange();
@@ -3016,31 +3104,65 @@
       ...sequence,
       { kind: "path", lineId: newLineId },
     ];
-    if (selectedChainId && pathChains.some((chain) => chain.id === selectedChainId)) {
-      assignLineToChain(newLineId, selectedChainId);
+    const targetChainId = pathChains.some((chain) => chain.id === selectedChainId)
+      ? selectedChainId
+      : pathChains[0]?.id || "";
+    if (targetChainId) {
+      selectedChainId = targetChainId;
+      assignLineToChain(newLineId, targetChainId);
     }
+    selectedLineIndex = lines.length - 1;
+    selectedPointIndex = 0;
+    recordChange();
+  }
+
+  function moveSelectedLineToChain(chainId: string) {
+    const selectedLine = lines[selectedLineIndex];
+    if (!selectedLine?.id || !chainId) return;
+
+    if (getLinePrimaryChainId(selectedLine.id) === chainId) {
+      selectedChainId = chainId;
+      return;
+    }
+
+    assignLineToChain(selectedLine.id, chainId);
+    selectedChainId = chainId;
     recordChange();
   }
 
   function addControlPoint() {
     if (lines.length > 0) {
-      const lastLine = lines[lines.length - 1];
-      lastLine.controlPoints.push({
+      const targetLine = lines[selectedLineIndex] || lines[lines.length - 1];
+      targetLine.controlPoints.push({
         x: _.random(36, 108),
         y: _.random(36, 108),
       });
+      lines = [...lines];
+      selectedPointIndex = targetLine.controlPoints.length;
       recordChange();
+      two?.update();
     }
   }
 
   function removeControlPoint() {
     if (lines.length > 0) {
-      const lastLine = lines[lines.length - 1];
-      if (lastLine.controlPoints.length > 0) {
-        lastLine.controlPoints.pop();
+      const targetLine = lines[selectedLineIndex] || lines[lines.length - 1];
+      if (targetLine.controlPoints.length > 0) {
+        targetLine.controlPoints.pop();
+        lines = [...lines];
+        selectedPointIndex = Math.min(selectedPointIndex, targetLine.controlPoints.length);
         recordChange();
+        two?.update();
       }
     }
+  }
+
+  function selectLinePoint(lineIndex: number, pointIndex = 0) {
+    if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+    selectedLineIndex = lineIndex;
+    const maxPointIndex = Math.max(0, lines[lineIndex]?.controlPoints.length ?? 0);
+    selectedPointIndex = Math.max(0, Math.min(pointIndex, maxPointIndex));
   }
 
   // Keyboard shortcuts for quick path editing
@@ -3143,6 +3265,7 @@
           shapes,
           sequence,
           pathChains,
+          activePaths: $activePaths,
           settings,
         });
         
@@ -3167,6 +3290,7 @@
       const { target } = event.detail;
       isSaving = true;
       try {
+        await saveAllAdditionalPaths();
         if (target === "first" && $currentFilePath) {
           const fileData = JSON.stringify({
             startPoint,
@@ -3174,6 +3298,7 @@
             shapes,
             sequence,
             pathChains,
+            activePaths: $activePaths,
             settings,
             version: "1.2.1",
             timestamp: new Date().toISOString(),
@@ -3200,6 +3325,7 @@
               shapes,
               sequence,
               pathChains,
+              activePaths: $activePaths,
               settings,
               version: "1.2.1",
               timestamp: new Date().toISOString(),
@@ -3325,16 +3451,38 @@
 
           <div class="chain-list">
             {#each pathChains as chain (chain.id)}
-              <button
-                class="chain-card"
-                on:click={() => (selectedChainId = chain.id)}
-              >
-                <span class="chain-swatch" style={`background:${chain.color || "#10b981"}`}></span>
-                <span class="chain-card-copy">
-                  <span class="chain-card-title">{chain.name}</span>
-                  <span class="chain-card-meta">{(chain.lineIds || []).length} segment{(chain.lineIds || []).length === 1 ? "" : "s"}</span>
-                </span>
-              </button>
+              <div class="flex items-stretch gap-2">
+                <button
+                  class="chain-card flex-1"
+                  class:chain-card--selected={selectedChainId === chain.id}
+                  aria-pressed={selectedChainId === chain.id}
+                  on:click={() => (selectedChainId = chain.id)}
+                >
+                  <span class="chain-swatch" style={`background:${chain.color || "#10b981"}`}></span>
+                  <span class="chain-card-copy">
+                    <span class="chain-card-title">{chain.name}</span>
+                    <span class="chain-card-meta">{(chain.lineIds || []).length} segment{(chain.lineIds || []).length === 1 ? "" : "s"}</span>
+                  </span>
+                  {#if selectedChainId === chain.id}
+                    <span class="chain-selected-tag ml-auto">Active</span>
+                  {/if}
+                </button>
+
+                <button
+                  class="console-action px-3 py-1.5 text-xs whitespace-nowrap shrink-0"
+                  on:click={() => moveSelectedLineToChain(chain.id)}
+                  disabled={!selectedLine?.id || selectedLineChainId === chain.id}
+                  title={
+                    !selectedLine?.id
+                      ? "Select a path first"
+                      : selectedLineChainId === chain.id
+                        ? "This path is already in this chain"
+                        : `Move ${selectedLine.name || `Path ${selectedLineIndex + 1}`} here`
+                  }
+                >
+                  Move Here
+                </button>
+              </div>
             {/each}
 
             {#if pathChains.length === 0}
@@ -3380,11 +3528,17 @@
             <button
               class="list-item-box compact text-left"
               class:chain-card--selected={selectedLineIndex === item.lineIndex}
-              on:click={() => (selectedLineIndex = item.lineIndex)}
+              on:click={() => selectLinePoint(item.lineIndex, 0)}
             >
               <div class="list-item-top">
                 <span class="list-item-index">{item.index}.</span>
                 <span class="list-item-name">{item.name}</span>
+                  <span
+                    class="ml-auto rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+                    style={`border-color:${item.chainColor}; background:${item.chainColor}1f; color:${item.chainColor};`}
+                  >
+                    {item.chainName}
+                  </span>
               </div>
               <div class="list-item-sub">{item.x}, {item.y}</div>
             </button>
@@ -3650,6 +3804,7 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         bind:pathChains
         bind:selectedChainId
         {selectedLineIndex}
+        bind:selectedPointIndex
         bind:robotWidth
         bind:robotHeight
         bind:settings

@@ -178,6 +178,16 @@
       lineId: ln.id || `line-${Math.random().toString(36).slice(2)}`,
     }));
     shapes = getDefaultShapes();
+    pathChains = [
+      {
+        id: `chain-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+        name: "Main Chain",
+        color: getRandomColor(),
+        lineIds: lines.map((ln) => ln.id!).filter(Boolean),
+      },
+    ];
+    activePaths.set([]);
+    dualPathMode.set(false);
   }
 
   function handleResetPathWithConfirmation() {
@@ -677,21 +687,6 @@
               d="M16.5 3.75V16.5L12 14.25 7.5 16.5V3.75m9 0H18A2.25 2.25 0 0 1 20.25 6v12A2.25 2.25 0 0 1 18 20.25H6A2.25 2.25 0 0 1 3.75 18V6A2.25 2.25 0 0 1 6 3.75h1.5m9 0h-9"
             />
           </svg>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="2"
-            stroke="currentColor"
-            class="size-4 transition-transform duration-200"
-            class:rotate-180={saveDropdownOpen}
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="m19.5 8.25-7.5 7.5-7.5-7.5"
-            />
-          </svg>
         </button>
 
         <!-- Dropdown menu -->
@@ -790,20 +785,6 @@
               stroke-linecap="round"
               stroke-linejoin="round"
               d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5"
-            />
-          </svg>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke-width="2"
-            stroke="currentColor"
-            class="size-4"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              d="m19.5 8.25-7.5 7.5-7.5-7.5"
             />
           </svg>
         </button>

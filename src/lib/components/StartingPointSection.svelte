@@ -1,20 +1,20 @@
 <script lang="ts">
+  import type { Point } from "../../types";
+
   export let startPoint: Point;
   export let addPathAtStart: () => void;
   export let addWaitAtStart: () => void;
 </script>
 
-<div class="flex flex-col w-full justify-start items-start gap-0.5">
-  <div class="flex items-center justify-between w-full">
+<div class="flex flex-col w-full justify-start items-start gap-2">
+  <div class="flex items-start justify-between w-full gap-2">
     <div class="font-semibold flex items-center gap-2">
       Starting Point
       <button
-        title={startPoint.locked
-          ? "Unlock Starting Point"
-          : "Lock Starting Point"}
+        title={startPoint.locked ? "Unlock Starting Point" : "Lock Starting Point"}
         on:click|stopPropagation={() => {
           startPoint.locked = !startPoint.locked;
-          startPoint = { ...startPoint }; // Force reactivity
+          startPoint = { ...startPoint };
         }}
         class="p-1 rounded transition-colors duration-250"
       >
@@ -52,27 +52,34 @@
       </button>
     </div>
   </div>
-  <div class="flex flex-row justify-start items-center gap-2">
-    <span class="font-extralight">X:</span>
-    <input
-      bind:value={startPoint.x}
-      min="0"
-      max="141.5"
-      type="number"
-      class="pl-1.5 rounded-md bg-neutral-100 border-[0.5px] focus:outline-none w-28 dark:bg-neutral-950 dark:border-neutral-700"
-      step="0.1"
-      disabled={startPoint.locked}
-    />
-    <span class="font-extralight">Y:</span>
-    <input
-      bind:value={startPoint.y}
-      min="0"
-      max="141.5"
-      type="number"
-      class="pl-1.5 rounded-md bg-neutral-100 border-[0.5px] focus:outline-none w-28 dark:bg-neutral-950 dark:border-neutral-700"
-      step="0.1"
-      disabled={startPoint.locked}
-    />
+
+  <div class="grid w-full grid-cols-1 gap-2">
+    <label class="flex flex-col gap-1 text-xs">
+      <span class="font-extralight">X</span>
+      <input
+        bind:value={startPoint.x}
+        min="0"
+        max="141.5"
+        type="number"
+        class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+        step="0.1"
+        disabled={startPoint.locked}
+      />
+    </label>
+
+    <label class="flex flex-col gap-1 text-xs">
+      <span class="font-extralight">Y</span>
+      <input
+        bind:value={startPoint.y}
+        min="0"
+        max="141.5"
+        type="number"
+        class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+        step="0.1"
+        disabled={startPoint.locked}
+      />
+    </label>
+
     <!-- Removed Add Path and Add Wait buttons from starting point section per user request -->
   </div>
 </div>

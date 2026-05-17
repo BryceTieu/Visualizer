@@ -10,6 +10,7 @@
   } from "../types";
   import _ from "lodash";
   import { getRandomColor } from "../utils";
+  import { snapToGrid, showGrid, gridSize } from "../stores";
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
   import RobotPositionDisplay from "./components/RobotPositionDisplay.svelte";
   import StartingPointSection from "./components/StartingPointSection.svelte";
@@ -26,6 +27,7 @@
   export let pathChains: PathChain[] = [];
   export let selectedChainId: string = "";
   export let selectedLineIndex: number = 0;
+  export let selectedPointIndex: number = 0;
   export let robotWidth: number = 16;
   export let robotHeight: number = 16;
   export let robotXY: BasePoint;
@@ -49,6 +51,12 @@
   let chainColorDraft = "#22c55e";
   let selectedChain: PathChain | null = null;
   let previousSelectedChainId = "";
+  let previousSelectedLineId = "";
+  let selectedLine: Line | null = null;
+  let selectedLinePathIndex = -1;
+  let selectedLineChain: PathChain | null = null;
+  let selectedPoint: BasePoint | null = null;
+  let selectedPointLabel = "Endpoint";
   let chainOptions: Array<{ id: string; name: string; color: string }> = [];
   let compactObstacles = true;
 
@@ -116,13 +124,6 @@
 
   $: selectedChain =
     pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
-
-  $: if (selectedLine) {
-    const selectedLineChainId = getLinePrimaryChainId(selectedLine.id || "");
-    if (selectedLineChainId && selectedLineChainId !== selectedChainId) {
-      selectedChainId = selectedLineChainId;
-    }
-  }
 
   $: if (selectedChainId !== previousSelectedChainId) {
     chainNameDraft = selectedChain?.name || "";
@@ -305,6 +306,45 @@
 
   $: selectedLine = lines[selectedLineIndex] || lines[0] || null;
   $: selectedLinePathIndex = selectedLine ? lines.findIndex((line) => line.id === selectedLine.id) : -1;
+  $: selectedLineChain = selectedLine ? getChainById(getLinePrimaryChainId(selectedLine.id || "")) : null;
+  $: selectedPoint =
+    selectedLine
+      ? selectedPointIndex === 0
+        ? selectedLine.endPoint
+        : selectedLine.controlPoints[selectedPointIndex - 1] || null
+      : null;
+  $: if (selectedLine && selectedPointIndex > selectedLine.controlPoints.length) {
+    selectedPointIndex = selectedLine.controlPoints.length;
+  }
+  $: if (selectedPointIndex < 0) {
+    selectedPointIndex = 0;
+  }
+  $: selectedPointLabel =
+    selectedLine && selectedPoint
+      ? selectedPointIndex === 0
+        ? "Endpoint"
+        : `Control Point ${selectedPointIndex}`
+      : "Selected Point";
+
+  function commitSelectedPointChange() {
+    lines = [...lines];
+    recordChange?.();
+  }
+
+  function toggleSelectedPointLock() {
+    if (!selectedPoint) return;
+    selectedPoint.locked = !selectedPoint.locked;
+    lines = [...lines];
+    recordChange?.();
+  }
+
+  $: if (selectedLine?.id && selectedLine.id !== previousSelectedLineId) {
+    const chainId = selectedLineChain?.id || getLinePrimaryChainId(selectedLine.id || "");
+    if (chainId && chainId !== selectedChainId) {
+      selectedChainId = chainId;
+    }
+    previousSelectedLineId = selectedLine.id;
+  }
 
   $: syncLineColorsToChains();
 
@@ -817,9 +857,12 @@
     </div>
 
     <div class="w-full border border-[#333333] bg-[#222222] p-3 text-xs text-gray-400 space-y-3">
-      <div class="flex items-center justify-between gap-2">
-        <div class="font-semibold text-gray-100">Selected Point</div>
-        <div>{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
+      <div class="flex items-start justify-between gap-3 border-b border-[#333333] pb-2">
+        <div>
+          <div class="font-semibold text-gray-100">Selected Path</div>
+          <div class="text-[11px] text-gray-500">Pick a path in the list to inspect its chain and details.</div>
+        </div>
+        <div class="text-[11px] text-gray-400">{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
       </div>
 
       {#if selectedLine}
@@ -842,25 +885,91 @@
           </div>
         </div>
 
-        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <label class="flex flex-col gap-1 text-[11px] uppercase tracking-wide text-gray-500">
-            Chain
-            <select
-              bind:value={selectedChainId}
-              class="border border-[#444444] bg-[#111111] px-2 py-1.5 text-sm text-gray-100"
-            >
-              {#each chainOptions as chain}
-                <option value={chain.id}>{chain.name}</option>
+        <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <div class="text-gray-500">Selected Point</div>
+              <div class="font-medium text-gray-100">{selectedPointLabel}</div>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <button
+                class={`rounded border border-[#444444] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#2a2a2a] ${selectedPointIndex === 0 ? "bg-[#2f2f2f]" : ""}`}
+                on:click={() => (selectedPointIndex = 0)}
+              >
+                Endpoint
+              </button>
+              {#each selectedLine.controlPoints as _, pointIdx}
+                <button
+                  class={`rounded border border-[#444444] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#2a2a2a] ${selectedPointIndex === pointIdx + 1 ? "bg-[#2f2f2f]" : ""}`}
+                  on:click={() => (selectedPointIndex = pointIdx + 1)}
+                >
+                  P{pointIdx + 1}
+                </button>
               {/each}
-            </select>
-          </label>
+            </div>
+          </div>
 
-          <button
-            class="border border-[#444444] bg-[#111111] px-3 py-2 text-sm font-semibold text-gray-100"
-            on:click={addLine}
-          >
-            Add Path to Chain
-          </button>
+          {#if selectedPoint}
+            <div class="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+              <label class="flex flex-col gap-1">
+                <span class="text-gray-500">X</span>
+                <input
+                  bind:value={selectedPoint.x}
+                  type="number"
+                  min="0"
+                  max="141.5"
+                  step={$snapToGrid && $showGrid ? $gridSize : 0.1}
+                  class="w-full rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  on:change={commitSelectedPointChange}
+                  disabled={selectedLine.locked || !!selectedPoint.locked}
+                />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-gray-500">Y</span>
+                <input
+                  bind:value={selectedPoint.y}
+                  type="number"
+                  min="0"
+                  max="141.5"
+                  step={$snapToGrid && $showGrid ? $gridSize : 0.1}
+                  class="w-full rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  on:change={commitSelectedPointChange}
+                  disabled={selectedLine.locked || !!selectedPoint.locked}
+                />
+              </label>
+            </div>
+
+            <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-300">
+              <div>
+                Locked: <span class="font-medium text-gray-100">{selectedPoint.locked ? "Yes" : "No"}</span>
+              </div>
+              <button
+                class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                on:click={toggleSelectedPointLock}
+                disabled={selectedLine.locked}
+              >
+                {selectedPoint.locked ? "Unlock Point" : "Lock Point"}
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <div class="grid gap-2 text-[11px] sm:grid-cols-2">
+          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
+            <div class="text-gray-500">Belongs To</div>
+            <div class="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug">
+              <span class="size-2.5 rounded-full" style={`background:${selectedLineChain?.color || "#666666"}`}></span>
+              <span>{selectedLineChain?.name || "Unassigned"}</span>
+            </div>
+          </div>
+
+          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
+            <div class="text-gray-500">Active Chain</div>
+            <div class="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug">
+              <span class="size-2.5 rounded-full" style={`background:${selectedChain?.color || "#666666"}`}></span>
+              <span>{selectedChain?.name || "None"}</span>
+            </div>
+          </div>
         </div>
       {:else}
         <div class="text-[11px] text-gray-500">Select a path from the left list to inspect it here.</div>
