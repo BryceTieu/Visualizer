@@ -12,6 +12,7 @@
   import { getRandomColor } from "../utils";
   import { snapToGrid, showGrid, gridSize } from "../stores";
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
+  import HeadingControls from "./components/HeadingControls.svelte";
   import RobotPositionDisplay from "./components/RobotPositionDisplay.svelte";
   import StartingPointSection from "./components/StartingPointSection.svelte";
   import PlaybackControls from "./components/PlaybackControls.svelte";
@@ -938,6 +939,23 @@
                 />
               </label>
             </div>
+
+            {#if selectedPointIndex === 0}
+              <div class="mt-3 flex items-center gap-2 text-[11px] text-gray-300 flex-wrap">
+                <div class="text-gray-500">Heading</div>
+                <HeadingControls
+                  endPoint={selectedLine.endPoint}
+                  locked={selectedLine.locked || !!selectedPoint.locked}
+                  on:change={() => {
+                    lines = [...lines];
+                  }}
+                  on:commit={() => {
+                    lines = [...lines];
+                    recordChange?.();
+                  }}
+                />
+              </div>
+            {/if}
 
             <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-300">
               <div>
