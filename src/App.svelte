@@ -95,6 +95,18 @@
   let twoElement: HTMLDivElement;
   let width = 0;
   let height = 0;
+  const SIDE_PANEL_MIN_WIDTH = 240;
+  const SIDE_PANEL_MAX_WIDTH = 430;
+  const CENTER_MIN_WIDTH = 420;
+  const PANEL_DIVIDER_WIDTH = 18;
+  let leftPanelWidth = 330;
+  let rightPanelWidth = 360;
+  let leftPanelHidden = false;
+  let rightPanelHidden = false;
+  let panelResizeState:
+    | { side: "left"; startX: number; startWidth: number }
+    | { side: "right"; startX: number; startWidth: number }
+    | null = null;
   // Robot state
   $: robotWidth = settings?.rWidth || DEFAULT_ROBOT_WIDTH;
   $: robotHeight = settings?.rHeight || DEFAULT_ROBOT_HEIGHT;
@@ -166,6 +178,7 @@
   let selectedLineIndex = 0;
   let selectedPointIndex = 0;
   let selectedLine: Line | null = null;
+  let selectedPoint: Point | null = null;
   let selectedLineChainId = "";
   let fieldMapLoaded = false;
   let robotImageLoaded = false;
@@ -190,6 +203,12 @@
   }
 
   $: selectedLine = lines[selectedLineIndex] || null;
+  $: selectedPoint =
+    selectedLine && selectedPointIndex >= 0
+      ? selectedPointIndex === 0
+        ? selectedLine.endPoint
+        : selectedLine.controlPoints[selectedPointIndex - 1] || null
+      : null;
   $: selectedLineChainId = selectedLine?.id ? getLinePrimaryChainId(selectedLine.id) : "";
 
   function getLinePrimaryChainId(lineId: string): string {
@@ -349,6 +368,107 @@
   const { canUndoStore, canRedoStore } = history;
   const OPTIMIZER_BASE_URL = "https://fpa.pedropathing.com";
 
+  function clampFieldCoordinate(value: number): number {
+    return clamp(value, 0, FIELD_SIZE);
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function clampPanelWidth(
+    side: "left" | "right",
+    desiredWidth: number,
+    availableWidth: number,
+    otherPanelWidth: number,
+  ) {
+    const rightPanelMinWidth = Math.max(
+      0,
+      Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
+    );
+    const minWidth = side === "right" ? rightPanelMinWidth : SIDE_PANEL_MIN_WIDTH;
+    const maxWidth = Math.max(
+      minWidth,
+      availableWidth - otherPanelWidth - CENTER_MIN_WIDTH - PANEL_DIVIDER_WIDTH * 2,
+    );
+    return clamp(desiredWidth, minWidth, Math.max(minWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxWidth)));
+  }
+
+  function beginPanelResize(side: "left" | "right", event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    panelResizeState = {
+      side,
+      startX: event.clientX,
+      startWidth: side === "left" ? leftPanelWidth : rightPanelWidth,
+    };
+
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+    }
+  }
+
+  function endPanelResize() {
+    panelResizeState = null;
+
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  }
+
+  function handlePanelResize(event: MouseEvent) {
+    if (!panelResizeState) return;
+
+    const availableWidth = Math.max(0, window.innerWidth - 24);
+    if (panelResizeState.side === "left") {
+      const rightPanelMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const otherWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
+      const desiredWidth = panelResizeState.startWidth + (event.clientX - panelResizeState.startX);
+      leftPanelHidden = false;
+      leftPanelWidth = clampPanelWidth("left", desiredWidth, availableWidth, otherWidth);
+    } else {
+      const otherWidth = leftPanelHidden ? 0 : leftPanelWidth;
+      const desiredWidth = panelResizeState.startWidth - (event.clientX - panelResizeState.startX);
+      rightPanelHidden = false;
+      rightPanelWidth = clampPanelWidth("right", desiredWidth, availableWidth, otherWidth);
+    }
+  }
+
+  function toggleLeftPanelVisibility() {
+    leftPanelHidden = !leftPanelHidden;
+  }
+
+  function toggleRightPanelVisibility() {
+    rightPanelHidden = !rightPanelHidden;
+  }
+
+  function getMouseFieldPoint(evt: MouseEvent): BasePoint | null {
+    if (!two?.renderer?.domElement) return null;
+    const rect = two.renderer.domElement.getBoundingClientRect();
+    return {
+      x: clampFieldCoordinate(x.invert(evt.clientX - rect.left)),
+      y: clampFieldCoordinate(y.invert(evt.clientY - rect.top)),
+    };
+  }
+
+  function buildProjectData(overrides: Record<string, unknown> = {}) {
+    return {
+      startPoint,
+      lines,
+      shapes,
+      sequence,
+      pathChains,
+      activePaths: $activePaths,
+      settings,
+      version: "1.3.0",
+      timestamp: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
   function getAppState(): AppState {
     return {
       startPoint,
@@ -447,12 +567,12 @@
   // Animation controller
   let loopAnimation = true;
   let animationController: ReturnType<typeof createAnimationController>;
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
+  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
   $: animationDuration = getAnimationDuration(timePrediction.totalTime / 1000);
   
   // Second path timeline (for dual path mode)
   $: secondTimePrediction = $dualPathMode && secondStartPoint && secondLines.length > 0 
-    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
+    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence, [])
     : null;
   
   // Calculate max duration across all paths for playbar scaling
@@ -466,7 +586,8 @@
             pathData.startPoint,
             pathData.lines,
             pathData.settings,
-            pathData.sequence
+            pathData.sequence,
+            []
           );
           if (pathTime) {
             maxTime = Math.max(maxTime, pathTime.totalTime);
@@ -686,7 +807,8 @@
             );
             pointElem.id = `point-${idx + 1}-${idx1}-background`;
             pointElem.fill = line.color;
-            pointElem.noStroke();
+            pointElem.stroke = selectedLineIndex === idx ? "#facc15" : line.color;
+            pointElem.linewidth = x(selectedLineIndex === idx ? 0.7 : 0.25);
 
             let pointText = new Two.Text(
               `${idx1}`,
@@ -703,6 +825,19 @@
             pointText.fill = "white";
             pointText.noStroke();
 
+            if (selectedLineIndex === idx) {
+              const highlightRing = new Two.Circle(
+                x(point.x),
+                y(point.y),
+                x(POINT_RADIUS) * 1.45,
+              );
+              highlightRing.id = `point-${idx + 1}-${idx1}-highlight`;
+              highlightRing.fill = "transparent";
+              highlightRing.stroke = selectedPointIndex === idx1 ? "#f59e0b" : "#facc15";
+              highlightRing.linewidth = x(selectedPointIndex === idx1 ? 0.45 : 0.25);
+              pointGroup.add(highlightRing);
+            }
+
             pointGroup.add(pointElem, pointText);
             _points.push(pointGroup);
           } else {
@@ -713,7 +848,20 @@
             );
             pointElem.id = `point-${idx + 1}-${idx1}`;
             pointElem.fill = line.color;
-            pointElem.noStroke();
+            pointElem.stroke = selectedLineIndex === idx ? "#facc15" : line.color;
+            pointElem.linewidth = x(selectedLineIndex === idx ? 0.7 : 0.25);
+            if (selectedLineIndex === idx) {
+              const highlightRing = new Two.Circle(
+                x(point.x),
+                y(point.y),
+                x(POINT_RADIUS) * 1.45,
+              );
+              highlightRing.id = `point-${idx + 1}-${idx1}-highlight`;
+              highlightRing.fill = "transparent";
+              highlightRing.stroke = selectedPointIndex === idx1 ? "#f59e0b" : "#facc15";
+              highlightRing.linewidth = x(selectedPointIndex === idx1 ? 0.45 : 0.25);
+              _points.push(highlightRing);
+            }
             _points.push(pointElem);
           }
         });
@@ -743,6 +891,7 @@
     }
     
     // Add obstacle vertices as draggable points
+    if (settings?.experimentalFeatures?.obstacles) {
     shapes.forEach((shape, shapeIdx) => {
       shape.vertices.forEach((vertex, vertexIdx) => {
         let pointGroup = new Two.Group();
@@ -775,6 +924,7 @@
         _points.push(pointGroup);
       });
     });
+    }
 
     // Add second path points (for dual path mode) - not in multi-path mode
     if ($activePaths.length === 0 && $dualPathMode && secondStartPoint && secondLines.length > 0) {
@@ -1232,7 +1382,10 @@
   });
 
   $: shapeElements = (() => {
-    // Obstacles removed: return empty array for shape elements
+    if (!(settings?.experimentalFeatures?.obstacles ?? false)) {
+      return [];
+    }
+
     let _shapes: Path[] = [];
 
     shapes.forEach((shape, idx) => {
@@ -1761,12 +1914,48 @@
     // Update robot dimensions from loaded settings
     robotWidth = settings.rWidth;
     robotHeight = settings.rHeight;
+    // Ensure panel widths obey min/max after loading settings and maximize sidebars
+    maximizePanelsToAllowed();
+    clampAllPanels();
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", clampAllPanels);
+    }
+  });
+
+  onDestroy(() => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("resize", clampAllPanels);
+    }
   });
   // Debounced save function
   const debouncedSaveSettings = debounce(async (settingsToSave: Settings) => {
     await saveSettings(settingsToSave);
   }, 1000);
   // Save after 1 second of inactivity
+
+  function clampAllPanels() {
+    if (typeof window === "undefined") return;
+    const availableWidth = Math.max(0, window.innerWidth - 24);
+    const rightPanelMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+    const otherForLeft = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
+    leftPanelWidth = clampPanelWidth("left", leftPanelWidth, availableWidth, otherForLeft);
+    const otherForRight = leftPanelHidden ? 0 : leftPanelWidth;
+    rightPanelWidth = clampPanelWidth("right", rightPanelWidth, availableWidth, otherForRight);
+  }
+
+  function maximizePanelsToAllowed() {
+    if (typeof window === "undefined") return;
+    const availableWidth = Math.max(0, window.innerWidth - 24);
+    const rightPanelMinWidth = Math.max(
+      0,
+      Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
+    );
+    const maxEach = Math.floor((availableWidth - CENTER_MIN_WIDTH - PANEL_DIVIDER_WIDTH * 2) / 2);
+    const leftTarget = Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
+    const rightTarget = Math.max(rightPanelMinWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
+    leftPanelWidth = leftTarget;
+    rightPanelWidth = rightTarget;
+  }
 
   const debouncedSaveSession = debounce((snapshot: SessionSnapshot) => {
     try {
@@ -1792,6 +1981,7 @@
   onDestroy(() => {
     debouncedSaveSession.cancel();
     debouncedSaveSettings.cancel();
+    endPanelResize();
   });
 
   // Initialize animation controller
@@ -1835,15 +2025,13 @@
     if (!pathData || !pathData.filePath) return;
     
     try {
-      const fileData = JSON.stringify({
+      const fileData = JSON.stringify(buildProjectData({
         startPoint: pathData.startPoint,
         lines: pathData.lines,
         shapes: pathData.shapes,
         sequence: pathData.sequence,
         settings: pathData.settings,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
-      });
+      }));
       
       await browserFileStore.writeFile(pathData.filePath, fileData);
       console.log(`Auto-saved additional path: ${pathData.filePath}`);
@@ -1959,6 +2147,7 @@
       if (hasActivePaths) {
         // Multiple paths mode - use the longest path duration
         for (const pathData of additionalPaths) {
+          if (!pathData.startPoint) continue;
           const pathTime = calculatePathTime(
             pathData.startPoint,
             pathData.lines,
@@ -1969,14 +2158,14 @@
         }
       } else if (hasDualPath) {
         // Dual path mode - use the longer path
-        const path1Time = calculatePathTime(startPoint, lines, settings, sequence);
+        const path1Time = calculatePathTime(startPoint, lines, settings, sequence, []);
         const path2Time = secondStartPoint 
-          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
+          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence, [])
           : { totalTime: 0 };
         totalDuration = Math.max(path1Time?.totalTime || 0, path2Time?.totalTime || 0);
       } else {
         // Single path mode
-        const pathTime = calculatePathTime(startPoint, lines, settings, sequence);
+        const pathTime = calculatePathTime(startPoint, lines, settings, sequence, []);
         totalDuration = pathTime?.totalTime || 0;
       }
 
@@ -2252,21 +2441,7 @@
   async function saveFileAs() {
     const win: any = window as any;
     await saveAllAdditionalPaths();
-    const content = JSON.stringify(
-      {
-        startPoint,
-        lines,
-        shapes,
-        sequence,
-        pathChains,
-        activePaths: $activePaths,
-        settings,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
-      },
-      null,
-      2,
-    );
+    const content = JSON.stringify(buildProjectData(), null, 2);
 
     // Prefer File System Access API if available: opens native Save dialog
     if (win.showSaveFilePicker) {
@@ -2351,7 +2526,7 @@
       console.error("Failed to save into app storage:", err);
       // As a last resort, download the file
       try {
-        downloadTrajectory(startPoint, lines, shapes, sequence, pathChains, $activePaths);
+        downloadTrajectory(startPoint, lines, shapes, sequence, pathChains, $activePaths, []);
       } catch (err2) {
         console.error("Save As fallback failed:", err2);
         alert(
@@ -2415,7 +2590,6 @@
     let currentElem: string | null = null;
     let isDown = false;
     let dragOffset = { x: 0, y: 0 }; // Store offset to prevent snapping to center
-
     const getPathPointLockedState = (lineIdx: number, pointIdx: number): boolean => {
       const line = lines[lineIdx];
       if (!line) return false;
@@ -2436,8 +2610,22 @@
       return !!lines[lineIdx]?.locked || getPathPointLockedState(lineIdx, pointIdx);
     };
 
+    const getPreferredPointElemId = (clientX: number, clientY: number): string | null => {
+      const elements = Array.from(document.elementsFromPoint(clientX, clientY));
+      const pointIds = elements
+        .map((element) => (element as HTMLElement).id || "")
+        .filter((id) => /^point-\d+-\d+$/.test(id));
+
+      if (pointIds.length === 0) return null;
+
+      const selectedPrefix = `point-${selectedLineIndex + 1}-`;
+      const preferred = pointIds.find((id) => id.startsWith(selectedPrefix));
+      return preferred || pointIds[0];
+    };
+
     two.renderer.domElement.addEventListener("mousemove", (evt: MouseEvent) => {
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
+      const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
 
       if (isDown && currentElem) {
         const parts = currentElem.split("-");
@@ -2479,7 +2667,7 @@
         }
 
         // Handle path point dragging
-        if (currentElem.startsWith("obstacle-")) {
+        if (settings?.experimentalFeatures?.obstacles && currentElem.startsWith("obstacle-")) {
           // Handle obstacle vertex dragging
           const parts = currentElem.split("-");
           const shapeIdx = Number(parts[1]);
@@ -2565,14 +2753,14 @@
         }
       } else {
         if (
-          (elem?.id.startsWith("point") && !isLockedPathElem(elem.id)) ||
+          ((preferredPointElemId || elem?.id)?.startsWith("point") && !isLockedPathElem(preferredPointElemId || elem?.id || null)) ||
           elem?.id.startsWith("line-") ||
           elem?.id.startsWith("second-point") ||
           elem?.id.startsWith("additional-path-") ||
-          elem?.id.startsWith("obstacle")
+          (settings?.experimentalFeatures?.obstacles && elem?.id.startsWith("obstacle"))
         ) {
           two.renderer.domElement.style.cursor = "pointer";
-          currentElem = elem.id;
+          currentElem = preferredPointElemId || elem.id;
         } else {
           two.renderer.domElement.style.cursor = "auto";
           currentElem = null;
@@ -2581,9 +2769,26 @@
     });
 
     two.renderer.domElement.addEventListener("mousedown", (evt: MouseEvent) => {
+      const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
+      if (preferredPointElemId) {
+        currentElem = preferredPointElemId;
+      }
+
       if (currentElem && isLockedPathElem(currentElem)) {
         isDown = false;
         return;
+      }
+
+      const mousePoint = getMouseFieldPoint(evt);
+      if (mousePoint && selectedLine && selectedPoint) {
+        const selectedPointX = x(selectedPoint.x);
+        const selectedPointY = y(selectedPoint.y);
+        const selectedPointRadius = x(POINT_RADIUS) * 1.45;
+        const dx = evt.clientX - (two.renderer.domElement.getBoundingClientRect().left + selectedPointX);
+        const dy = evt.clientY - (two.renderer.domElement.getBoundingClientRect().top + selectedPointY);
+        if (Math.hypot(dx, dy) <= selectedPointRadius) {
+          currentElem = `point-${selectedLineIndex + 1}-${selectedPointIndex}`;
+        }
       }
 
       if (currentElem?.startsWith("line-")) {
@@ -2612,7 +2817,7 @@
         let objectX = 0;
         let objectY = 0;
 
-        if (currentElem.startsWith("obstacle-")) {
+        if (settings?.experimentalFeatures?.obstacles && currentElem.startsWith("obstacle-")) {
           const parts = currentElem.split("-");
           const shapeIdx = Number(parts[1]);
           const vertexIdx = Number(parts[2]);
@@ -2700,7 +2905,7 @@
       if (
         elem?.id &&
         (elem.id.startsWith("point") ||
-          elem.id.startsWith("obstacle") ||
+          (settings?.experimentalFeatures?.obstacles && elem.id.startsWith("obstacle")) ||
           elem.id.startsWith("line"))
       ) {
         return;
@@ -2771,21 +2976,7 @@
   async function saveFile() {
     try {
       await saveAllAdditionalPaths();
-      const content = JSON.stringify(
-        {
-          startPoint,
-          lines,
-          shapes,
-          sequence,
-          pathChains,
-          activePaths: $activePaths,
-          settings,
-          version: "1.2.1",
-          timestamp: new Date().toISOString(),
-        },
-        null,
-        2,
-      );
+      const content = JSON.stringify(buildProjectData(), null, 2);
 
       if ($currentFilePath) {
         await browserFileStore.writeFile($currentFilePath, content);
@@ -2847,7 +3038,6 @@
 
       // Load shapes with defaults
       shapes = data.shapes || [];
-
       // Load settings (including robot size) if present
       if (data.settings) {
         settings = { ...settings, ...data.settings };
@@ -3157,6 +3347,75 @@
     }
   }
 
+  function createPathBetweenSelectedPoints() {
+    const selected = lines[selectedLineIndex];
+    if (!selected?.id || sequence.length === 0) return;
+
+    const selectedSeqIndex = sequence.findIndex(
+      (item) => item.kind === "path" && item.lineId === selected.id,
+    );
+    if (selectedSeqIndex === -1) return;
+
+    let nextPathSeqIndex = -1;
+    for (let index = selectedSeqIndex + 1; index < sequence.length; index++) {
+      if (sequence[index].kind === "path") {
+        nextPathSeqIndex = index;
+        break;
+      }
+    }
+
+    const nextLine =
+      nextPathSeqIndex >= 0
+        ? lines.find((line) => line.id === (sequence[nextPathSeqIndex] as any).lineId)
+        : null;
+
+    const startPoint = selected.endPoint;
+    const endPoint = nextLine?.endPoint || {
+      x: startPoint.x,
+      y: startPoint.y,
+      heading: "tangential",
+      reverse: false,
+    };
+    const midpointX = (Number(startPoint.x) + Number(endPoint.x)) / 2;
+    const midpointY = (Number(startPoint.y) + Number(endPoint.y)) / 2;
+    const newLineId = `line-${Math.random().toString(36).slice(2)}`;
+
+    const newLine: Line = {
+      id: newLineId,
+      endPoint: {
+        x: midpointX,
+        y: midpointY,
+        heading: "tangential",
+        reverse: false,
+      },
+      controlPoints: [],
+      color: getRandomColor(),
+      locked: false,
+      waitBeforeMs: 0,
+      waitAfterMs: 0,
+      waitBeforeName: "",
+      waitAfterName: "",
+    };
+
+    const nextLines = [...lines];
+    nextLines.splice(selectedLineIndex + 1, 0, newLine);
+    lines = nextLines;
+
+    const nextSequence = [...sequence];
+    nextSequence.splice(selectedSeqIndex + 1, 0, { kind: "path", lineId: newLineId });
+    sequence = nextSequence;
+
+    const chainId = getLinePrimaryChainId(selected.id) || selectedChainId || pathChains[0]?.id || "";
+    if (chainId) {
+      assignLineToChain(newLineId, chainId);
+      selectedChainId = chainId;
+    }
+
+    selectedLineIndex = selectedLineIndex + 1;
+    selectedPointIndex = 0;
+    recordChange();
+  }
+
   function selectLinePoint(lineIndex: number, pointIndex = 0) {
     if (lineIndex < 0 || lineIndex >= lines.length) return;
 
@@ -3259,15 +3518,7 @@
         const fullFileName = fileName.endsWith(".pp") ? fileName : fileName + ".pp";
         
         // Call the file manager's save function through the browser file store
-        const fileData = JSON.stringify({
-          startPoint,
-          lines,
-          shapes,
-          sequence,
-          pathChains,
-          activePaths: $activePaths,
-          settings,
-        });
+        const fileData = JSON.stringify(buildProjectData());
         
         await browserFileStore.writeFile(fullFileName, fileData);
         currentFilePath.set(fullFileName);
@@ -3292,57 +3543,31 @@
       try {
         await saveAllAdditionalPaths();
         if (target === "first" && $currentFilePath) {
-          const fileData = JSON.stringify({
-            startPoint,
-            lines,
-            shapes,
-            sequence,
-            pathChains,
-            activePaths: $activePaths,
-            settings,
-            version: "1.2.1",
-            timestamp: new Date().toISOString(),
-          });
+          const fileData = JSON.stringify(buildProjectData());
           await browserFileStore.writeFile($currentFilePath, fileData);
           isUnsaved.set(false);
         } else if (target === "second" && $secondFilePath) {
-          const fileData = JSON.stringify({
+          const fileData = JSON.stringify(buildProjectData({
             startPoint: secondStartPoint,
             lines: secondLines,
             shapes: secondShapes,
             sequence: secondSequence,
-            settings,
-            version: "1.2.1",
-            timestamp: new Date().toISOString(),
-          });
+          }));
           await browserFileStore.writeFile($secondFilePath, fileData);
         } else if (target === "both") {
           // Save first path
           if ($currentFilePath) {
-            const fileData1 = JSON.stringify({
-              startPoint,
-              lines,
-              shapes,
-              sequence,
-              pathChains,
-              activePaths: $activePaths,
-              settings,
-              version: "1.2.1",
-              timestamp: new Date().toISOString(),
-            });
+            const fileData1 = JSON.stringify(buildProjectData());
             await browserFileStore.writeFile($currentFilePath, fileData1);
           }
           // Save second path
           if ($secondFilePath) {
-            const fileData2 = JSON.stringify({
+            const fileData2 = JSON.stringify(buildProjectData({
               startPoint: secondStartPoint,
               lines: secondLines,
               shapes: secondShapes,
               sequence: secondSequence,
-              settings,
-              version: "1.2.1",
-              timestamp: new Date().toISOString(),
-            });
+            }));
             await browserFileStore.writeFile($secondFilePath, fileData2);
           }
           isUnsaved.set(false);
@@ -3366,10 +3591,9 @@
 </script>
 
 <svelte:window
-  on:mousemove={(e) => {
-    // (debug window dragging removed)
-  }}
-  on:mouseup={() => {}}
+  on:mousemove={handlePanelResize}
+  on:mouseup={endPanelResize}
+  on:blur={endPanelResize}
 />
 
 <Navbar
@@ -3423,12 +3647,26 @@
 
 <!--   {saveFile} -->
 <div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
-  <div class="desktop-grid h-full">
-    <aside class="panel-box side-rail side-rail-left">
+  <div
+    class="desktop-grid h-full"
+    style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`};`}
+  >
+    <aside class="panel-box side-rail side-rail-left" class:side-rail--collapsed={leftPanelHidden}>
       <section class="module-box">
         <div class="module-header-row">
           <h3 class="module-title">File</h3>
-          <span class="module-chip">v1.2.1</span>
+          <div class="flex items-center gap-2">
+            <span class="module-chip">v1.2.1</span>
+            <button
+              class="panel-toggle-btn"
+              type="button"
+              on:click={toggleLeftPanelVisibility}
+              aria-label={leftPanelHidden ? "Show left panel" : "Hide left panel"}
+              title={leftPanelHidden ? "Show left panel" : "Hide left panel"}
+            >
+              {leftPanelHidden ? "›" : "‹"}
+            </button>
+          </div>
         </div>
         <p class="module-caption">Export name</p>
         <div class="module-mono">
@@ -3550,6 +3788,27 @@
       </section>
     </aside>
 
+    <div class="panel-divider panel-divider--left">
+      <button
+        class="panel-divider-grip"
+        type="button"
+        aria-label="Resize left panel"
+        title={leftPanelHidden ? "Click to restore the left panel" : "Drag to resize the left panel"}
+        on:mousedown={(event) => beginPanelResize("left", event)}
+        on:click={() => {
+          if (leftPanelHidden) {
+            leftPanelHidden = false;
+          }
+        }}
+      >
+        {#if leftPanelHidden}
+          ›
+        {:else}
+          <span class="panel-divider-line"></span>
+        {/if}
+      </button>
+    </div>
+
     <main class="panel-box center-stage">
       <div class="module-header-row mb-2">
         <h3 class="module-title">Field</h3>
@@ -3559,6 +3818,9 @@
         <button class="toolbar-btn" on:click={addNewLine}>+ Add Path</button>
         <button class="toolbar-btn" on:click={addControlPoint}>+ Point</button>
         <button class="toolbar-btn" on:click={removeControlPoint}>- Point</button>
+        <button class="toolbar-btn toolbar-btn--blue" on:click={createPathBetweenSelectedPoints}>
+          Create Path Between Two Points
+        </button>
         <div style="flex: 1;"></div>
         <button class="toolbar-btn" on:click={() => (playing ? pause() : play())}>{playing ? "Pause" : "Play"}</button>
       </div>
@@ -3793,7 +4055,45 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
       <div class="module-footer">Field · 141.5&quot; x 141.5&quot;</div>
     </main>
 
-    <aside class="panel-box side-rail side-rail-right">
+    <div class="panel-divider panel-divider--right">
+      <button
+        class="panel-divider-grip"
+        type="button"
+        aria-label="Resize right panel"
+        title={rightPanelHidden ? "Click to restore the right panel" : "Drag to resize the right panel"}
+        on:mousedown={(event) => beginPanelResize("right", event)}
+        on:click={() => {
+          if (rightPanelHidden) {
+            rightPanelHidden = false;
+          }
+        }}
+      >
+        {#if rightPanelHidden}
+          ‹
+        {:else}
+          <span class="panel-divider-line"></span>
+        {/if}
+      </button>
+    </div>
+
+    <aside class="panel-box side-rail side-rail-right" class:side-rail--collapsed={rightPanelHidden}>
+      <div class="module-box control-panel-header">
+        <div class="module-header-row">
+          <div>
+            <h3 class="module-title">Controls</h3>
+            <p class="module-caption">Edit playback, paths, and robot settings.</p>
+          </div>
+          <button
+            class="panel-toggle-btn"
+            type="button"
+            on:click={toggleRightPanelVisibility}
+            aria-label={rightPanelHidden ? "Show right panel" : "Hide right panel"}
+            title={rightPanelHidden ? "Show right panel" : "Hide right panel"}
+          >
+            {rightPanelHidden ? "‹" : "›"}
+          </button>
+        </div>
+      </div>
       <ControlTab
         bind:playing
         {play}
@@ -3803,7 +4103,7 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         bind:sequence
         bind:pathChains
         bind:selectedChainId
-        {selectedLineIndex}
+        bind:selectedLineIndex
         bind:selectedPointIndex
         bind:robotWidth
         bind:robotHeight

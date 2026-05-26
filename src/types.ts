@@ -102,6 +102,12 @@ export interface Settings {
   headingArrowColor?: string; // Color of the heading arrow
   headingArrowThickness?: number; // Thickness/stroke width of the heading arrow
   pathOpacity?: number; // Opacity of path lines (0-1)
+  rightPanelMinWidth?: number; // Minimum width of the right sidebar in pixels
+  experimentalFeatures?: {
+    optimize?: boolean;
+    curveThrough?: boolean;
+    obstacles?: boolean;
+  };
 }
 
 export interface Shape {

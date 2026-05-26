@@ -185,6 +185,16 @@ export function calculatePathTime(
     );
     segmentLengths.push(length);
     let segmentTime = 0;
+    const sampledPoints: Array<{ x: number; y: number }> = [];
+    const curvePoints = [prevPoint, ...line.controlPoints, line.endPoint];
+    const sampleCount = Math.max(12, Math.ceil(length / 6));
+    for (let sampleIndex = 0; sampleIndex <= sampleCount; sampleIndex += 1) {
+      const t = sampleIndex / sampleCount;
+      const point = getCurvePoint(t, curvePoints as any);
+      sampledPoints.push({ x: point.x, y: point.y });
+    }
+    const segmentScale = 1.0;
+
     if (useMotionProfile) {
       segmentTime = calculateMotionProfileTime(
         length,
@@ -196,6 +206,7 @@ export function calculatePathTime(
       const avgVelocity = (settings.xVelocity + settings.yVelocity) / 2;
       segmentTime = length / avgVelocity;
     }
+    segmentTime /= segmentScale;
     segmentTimes.push(segmentTime);
     const lineIndex = lines.findIndex((l) => l.id === line.id);
     timeline.push({

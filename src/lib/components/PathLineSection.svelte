@@ -223,7 +223,7 @@
       <button
         title="Insert point between this path and the next"
         on:click={() => onInsertMidpoint && onInsertMidpoint()}
-        class="text-blue-700 hover:text-blue-500"
+        class="text-blue-950 hover:text-blue-800"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -231,7 +231,7 @@
           viewBox="0 0 24 24"
           stroke-width={2}
           stroke="currentColor"
-          class="size-5"
+          class="size-5 stroke-blue-950"
         >
           <path
             stroke-linecap="round"

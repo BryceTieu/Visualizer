@@ -51,6 +51,12 @@ export const DEFAULT_SETTINGS: Settings = {
   headingArrowColor: "#ffffff",
   headingArrowThickness: 2,
   pathOpacity: 1,
+  rightPanelMinWidth: 0,
+  experimentalFeatures: {
+    optimize: false,
+    curveThrough: false,
+    obstacles: false,
+  },
 };
 
 /**
@@ -98,9 +104,9 @@ export function getDefaultShapes(): Shape[] {
       vertices: [
         { x: 141.5, y: 70 },
         { x: 141.5, y: 141.5 },
-        { x: 120, y: 141.5 },
-        { x: 138, y: 119 },
-        { x: 138, y: 70 },
+        { x: 118.3, y: 141.5 },
+        { x: 135.5, y: 118 },
+        { x: 136.3, y: 70.2 },
       ],
       color: "#dc2626",
       fillColor: "#ff6b6b",
@@ -109,7 +115,7 @@ export function getDefaultShapes(): Shape[] {
       id: "triangle-2",
       name: "Blue Goal",
       vertices: [
-        { x: 6, y: 119 },
+        { x: 6.2, y: 116.9 },
         { x: 25, y: 141.5 },
         { x: 0, y: 141.5 },
         { x: 0, y: 70 },

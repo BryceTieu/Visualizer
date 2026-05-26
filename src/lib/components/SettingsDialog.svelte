@@ -55,6 +55,12 @@
     settings[property] = num;
   }
 
+  function handleRightPanelMinWidthInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    handleNumberInput(target.value, "rightPanelMinWidth", 0, 600);
+  }
+
   // Helper function to convert file to base64
   function imageToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -1066,6 +1072,74 @@
                 </div>
                 <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                   Controls visibility of path lines
+                </div>
+              </div>
+
+              <!-- Sidebar Width Limits -->
+              <div
+                class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
+              >
+                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Right Panel Minimum Width
+                </label>
+                <div class="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    max="600"
+                    step="5"
+                    value={settings.rightPanelMinWidth ?? 280}
+                    on:input={handleRightPanelMinWidthInput}
+                    class="w-28 px-2 py-1 rounded border bg-white dark:bg-neutral-800"
+                  />
+                  <span class="text-sm text-neutral-600 dark:text-neutral-400">px</span>
+                </div>
+                <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Prevents the right sidebar from being squished smaller than this. Set to 0 for no limit.
+                </div>
+              </div>
+
+              <!-- Experimental Features -->
+              <div
+                class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 mt-3"
+              >
+                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Experimental Features
+                </label>
+                <div class="flex flex-col gap-2">
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.experimentalFeatures?.optimize ?? false}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), optimize: e.target.checked })}
+                      class="h-4 w-4"
+                    />
+                    <span class="text-sm">Enable Optimize button</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.experimentalFeatures?.curveThrough ?? false}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), curveThrough: e.target.checked })}
+                      class="h-4 w-4"
+                    />
+                    <span class="text-sm">Enable Curve Through features</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.experimentalFeatures?.obstacles ?? false}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), obstacles: e.target.checked })}
+                      class="h-4 w-4"
+                    />
+                    <span class="text-sm">Enable Obstacles</span>
+                  </label>
+                </div>
+                <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Toggle experimental UI features. Disabled by default.
+                </div>
+                <div class="text-xs text-red-600 dark:text-red-400 mt-2">
+                  Disclaimer: Most features labeled "Experimental" are currently non-functional and are not recommended for use.
                 </div>
               </div>
 

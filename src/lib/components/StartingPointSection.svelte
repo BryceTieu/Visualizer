@@ -2,8 +2,6 @@
   import type { Point } from "../../types";
 
   export let startPoint: Point;
-  export let addPathAtStart: () => void;
-  export let addWaitAtStart: () => void;
 </script>
 
 <div class="flex flex-col w-full justify-start items-start gap-2">
@@ -79,7 +77,5 @@
         disabled={startPoint.locked}
       />
     </label>
-
-    <!-- Removed Add Path and Add Wait buttons from starting point section per user request -->
   </div>
 </div>

@@ -10,6 +10,23 @@
   } from "../types";
   import _ from "lodash";
   import { getRandomColor } from "../utils";
+  // Local normalizeLines helper (keeps behavior consistent with FileManager/App)
+  function normalizeLines(input: Line[] = []): Line[] {
+    return (input || []).map((line) => ({
+      ...line,
+      id: line.id || `line-${Math.random().toString(36).slice(2)}`,
+      waitBeforeMs: Math.max(
+        0,
+        Number(line.waitBeforeMs ?? (line as any).waitBefore?.durationMs ?? 0),
+      ),
+      waitAfterMs: Math.max(
+        0,
+        Number(line.waitAfterMs ?? (line as any).waitAfter?.durationMs ?? 0),
+      ),
+      waitBeforeName: line.waitBeforeName ?? (line as any).waitBefore?.name ?? "",
+      waitAfterName: line.waitAfterName ?? (line as any).waitAfter?.name ?? "",
+    }));
+  }
   import { snapToGrid, showGrid, gridSize } from "../stores";
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
   import HeadingControls from "./components/HeadingControls.svelte";
@@ -17,6 +34,7 @@
   import StartingPointSection from "./components/StartingPointSection.svelte";
   import PlaybackControls from "./components/PlaybackControls.svelte";
   import { calculatePathTime } from "../utils";
+  import { curveThroughPoints } from "../utils/math";
 
   export let percent: number;
   export let playing: boolean;
@@ -59,7 +77,8 @@
   let selectedPoint: BasePoint | null = null;
   let selectedPointLabel = "Endpoint";
   let chainOptions: Array<{ id: string; name: string; color: string }> = [];
-  let compactObstacles = true;
+  let curveTension = 1.0;
+  let obstaclesOpen = true;
 
   $: optimizeLine;
   $: optimizingLineIds;
@@ -355,7 +374,7 @@
   $: robotHeight;
 
   // Compute timeline markers for the UI (start of each travel segment)
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
+  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
   $: markers = (() => {
     const _markers: { percent: number; color: string; name: string }[] = [];
     if (
@@ -570,6 +589,105 @@
     recordChange();
   }
 
+  function createPathBetweenSelectedPoints() {
+    if (!selectedLine?.id) return;
+    const seqIndex = sequence.findIndex(
+      (item) => item.kind === "path" && item.lineId === selectedLine.id,
+    );
+    if (seqIndex === -1) return;
+    insertMidpointAfter(seqIndex);
+  }
+
+  // Convert all lines in the selected chain to cubic Bezier curves using a
+  // Catmull-Rom through-points approach. This will replace the controlPoints
+  // of each line in the chain with two control points (cubic) computed from
+  // the chain's endpoints.
+  function curveThroughSelectedChain(tension = 1.0) {
+    if (!selectedChain || !selectedChain.lineIds || selectedChain.lineIds.length === 0) return;
+
+    // Respect timeline/sequence ordering: gather path sequence items that belong to this chain
+    const chainIdSet = new Set(selectedChain.lineIds || []);
+    const orderedLineIds: string[] = sequence
+      .filter((it) => it.kind === "path" && chainIdSet.has((it as any).lineId))
+      .map((it) => (it as any).lineId as string);
+
+    const lineIndexMap = new Map(lines.map((ln, idx) => [ln.id, idx]));
+    const indices: number[] = orderedLineIds.map((id) => lineIndexMap.get(id)).filter((v) => typeof v === 'number') as number[];
+    if (indices.length === 0) return;
+
+    // Build poses list starting with the point before the first segment
+    const firstIdx = indices[0];
+    const prevPoint = firstIdx > 0 ? lines[firstIdx - 1].endPoint : startPoint;
+    const startPt = lines[firstIdx].endPoint;
+    const poses = [prevPoint, startPt, ...indices.slice(1).map((i) => lines[i].endPoint)];
+
+    const segments = curveThroughPoints(tension, poses);
+    if (!segments || segments.length === 0) {
+      alert("Curve generation produced no segments — need at least two path points.");
+      return;
+    }
+
+    const nextLines = [...lines];
+    for (let s = 0; s < segments.length && s < indices.length; s++) {
+      const idx = indices[s];
+      const seg = segments[s];
+      const existing = nextLines[idx];
+      nextLines[idx] = {
+        ...existing,
+        controlPoints: [ { x: seg.cp1.x, y: seg.cp1.y }, { x: seg.cp2.x, y: seg.cp2.y } ],
+        endPoint: { x: seg.end.x, y: seg.end.y, heading: existing.endPoint.heading as any },
+      };
+    }
+
+    lines = normalizeLines(nextLines);
+    recordChange();
+    alert(`Curved ${Math.min(segments.length, indices.length)} segment(s) with tension ${tension}`);
+  }
+
+  function curveFromSelected(tension = 1.0) {
+    if (selectedLineIndex == null || !selectedChain) return;
+    // Slice ordered sequence from selected line to end of chain
+    const chainIdSet = new Set(selectedChain.lineIds || []);
+    const orderedItems = sequence.filter((it) => it.kind === "path" && chainIdSet.has((it as any).lineId));
+    const startPos = orderedItems.findIndex((it) => (it as any).lineId === lines[selectedLineIndex]?.id);
+    if (startPos === -1) {
+      alert("Selected path is not in the active chain.");
+      return;
+    }
+    const orderedLineIds = orderedItems.slice(startPos).map((it) => (it as any).lineId as string);
+    const lineIndexMap = new Map(lines.map((ln, idx) => [ln.id, idx]));
+    const indices: number[] = orderedLineIds.map((id) => lineIndexMap.get(id)).filter((v) => typeof v === 'number') as number[];
+    if (indices.length === 0) return;
+
+    // Build poses starting from point before first
+    const firstIdx = indices[0];
+    const prevPoint = firstIdx > 0 ? lines[firstIdx - 1].endPoint : startPoint;
+    const startPt = lines[firstIdx].endPoint;
+    const poses = [prevPoint, startPt, ...indices.slice(1).map((i) => lines[i].endPoint)];
+
+    const segments = curveThroughPoints(tension, poses);
+    if (!segments || segments.length === 0) {
+      alert("Curve generation produced no segments — need at least two path points.");
+      return;
+    }
+
+    const nextLines = [...lines];
+    for (let s = 0; s < segments.length && s < indices.length; s++) {
+      const idx = indices[s];
+      const seg = segments[s];
+      const existing = nextLines[idx];
+      nextLines[idx] = {
+        ...existing,
+        controlPoints: [ { x: seg.cp1.x, y: seg.cp1.y }, { x: seg.cp2.x, y: seg.cp2.y } ],
+        endPoint: { x: seg.end.x, y: seg.end.y, heading: existing.endPoint.heading as any },
+      };
+    }
+
+    lines = normalizeLines(nextLines);
+    recordChange();
+    alert(`Curved ${Math.min(segments.length, indices.length)} segment(s) from selected with tension ${tension}`);
+  }
+
   function removeLine(idx: number) {
     const removedId = lines[idx]?.id;
     let _lns = lines;
@@ -583,6 +701,28 @@
     }
     collapsedSections.lines.splice(idx, 1);
     collapsedSections.controlPoints.splice(idx, 1);
+    recordChange();
+  }
+
+  function deleteSelectedLine() {
+    if (!selectedLine) return;
+    if (lines.length <= 1) return;
+
+    removeLine(selectedLineIndex);
+    selectedLineIndex = Math.max(0, Math.min(selectedLineIndex, lines.length - 1));
+    selectedPointIndex = 0;
+    recordChange();
+  }
+
+  function deleteSelectedControlPoint() {
+    if (!selectedLine || selectedPointIndex <= 0) return;
+
+    const controlPointIndex = selectedPointIndex - 1;
+    if (!selectedLine.controlPoints[controlPointIndex]) return;
+
+    selectedLine.controlPoints.splice(controlPointIndex, 1);
+    lines = [...lines];
+    selectedPointIndex = Math.min(selectedPointIndex, selectedLine.controlPoints.length);
     recordChange();
   }
 
@@ -835,22 +975,24 @@
     class="flex flex-col justify-start items-start w-full bg-[#1a1a1a] border border-[#333333] p-3 overflow-y-scroll overflow-x-hidden h-full gap-3"
   >
     <div class="w-full flex flex-col gap-2">
-      <div class="flex items-center justify-between gap-2 w-full border border-[#333333] bg-[#222222] px-3 py-2 text-xs text-gray-400">
-        <div class="font-semibold uppercase tracking-wide text-gray-200">Objects</div>
+      {#if settings.experimentalFeatures?.obstacles}
         <button
-          class="px-2 py-1 border border-[#444444] bg-[#1c1c1c] text-gray-200 text-[11px]"
-          on:click={() => (compactObstacles = !compactObstacles)}
-          title={compactObstacles ? "Show full obstacle editor" : "Condense obstacle editor"}
+          class="flex items-center justify-between gap-2 w-full border border-[#333333] bg-[#222222] px-3 py-2 text-xs text-gray-200"
+          on:click={() => (obstaclesOpen = !obstaclesOpen)}
+          title={obstaclesOpen ? "Hide obstacle editor" : "Show obstacle editor"}
         >
-          {compactObstacles ? "Compact" : "Full"}
+          <span class="font-semibold uppercase tracking-wide">Obstacles</span>
+          <span class="text-[11px] text-gray-400">{obstaclesOpen ? "Hide" : "Show"}</span>
         </button>
-      </div>
-      <ObstaclesSection bind:shapes bind:collapsedObstacles compact={compactObstacles} />
+        {#if obstaclesOpen}
+          <ObstaclesSection bind:shapes bind:collapsedObstacles />
+        {/if}
+      {/if}
     </div>
 
     <div class="grid w-full grid-cols-1 gap-2 lg:grid-cols-2">
       <div class="w-full border border-[#333333] bg-[#222222] p-3">
-        <StartingPointSection bind:startPoint {addPathAtStart} {addWaitAtStart} />
+        <StartingPointSection bind:startPoint />
       </div>
       <div class="w-full border border-[#333333] bg-[#222222] p-3">
         <RobotPositionDisplay {robotXY} {robotHeading} {x} {y} />
@@ -863,7 +1005,45 @@
           <div class="font-semibold text-gray-100">Selected Path</div>
           <div class="text-[11px] text-gray-500">Pick a path in the list to inspect its chain and details.</div>
         </div>
-        <div class="text-[11px] text-gray-400">{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
+        <div class="flex items-center gap-2">
+          <div class="text-[11px] text-gray-400">{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
+          {#if settings.experimentalFeatures?.curveThrough}
+            <input
+              type="number"
+              min="0.1"
+              max="3"
+              step="0.1"
+              bind:value={curveTension}
+              class="w-20 px-2 py-1 rounded border bg-[#111111] text-sm text-gray-200"
+              title="Curve tension (smaller = looser)"
+            />
+            <button
+              class="rounded border border-[#444444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+              on:click={() => curveThroughSelectedChain(curveTension)}
+              disabled={!selectedChain || (selectedChain.lineIds || []).length <= 1}
+              title="Convert entire chain to smooth cubic Beziers"
+            >
+              Curve Chain
+            </button>
+            <button
+              class="rounded border border-[#444444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
+              on:click={() => curveFromSelected(curveTension)}
+              disabled={!selectedChain || (selectedChain.lineIds || []).length <= 1}
+              title="Convert from the selected path to the end of the chain"
+            >
+              Curve From Selected
+            </button>
+          {/if}
+          <button
+            class="rounded border border-red-700 bg-red-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
+            on:click={deleteSelectedLine}
+            disabled={!selectedLine || lines.length <= 1}
+            title={lines.length <= 1 ? "At least one path must remain" : "Delete the selected path"}
+          >
+            <span class="font-bold">✕</span>
+            <span>Delete Path</span>
+          </button>
+        </div>
       </div>
 
       {#if selectedLine}
@@ -961,13 +1141,23 @@
               <div>
                 Locked: <span class="font-medium text-gray-100">{selectedPoint.locked ? "Yes" : "No"}</span>
               </div>
-              <button
-                class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-                on:click={toggleSelectedPointLock}
-                disabled={selectedLine.locked}
-              >
-                {selectedPoint.locked ? "Unlock Point" : "Lock Point"}
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                  on:click={deleteSelectedControlPoint}
+                  disabled={selectedLine.locked || selectedPointIndex === 0 || selectedLine.controlPoints.length === 0}
+                  title={selectedPointIndex === 0 ? "Endpoint cannot be deleted" : "Delete the selected control point"}
+                >
+                  Delete Point
+                </button>
+                <button
+                  class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"
+                  on:click={toggleSelectedPointLock}
+                  disabled={selectedLine.locked}
+                >
+                  {selectedPoint.locked ? "Unlock Point" : "Lock Point"}
+                </button>
+              </div>
             </div>
           {/if}
         </div>
