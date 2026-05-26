@@ -103,6 +103,7 @@ export interface Settings {
   headingArrowThickness?: number; // Thickness/stroke width of the heading arrow
   pathOpacity?: number; // Opacity of path lines (0-1)
   rightPanelMinWidth?: number; // Minimum width of the right sidebar in pixels
+  penToolAccuracy?: number; // Maximum number of control points used by the pen tool
   experimentalFeatures?: {
     optimize?: boolean;
     curveThrough?: boolean;

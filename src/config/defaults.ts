@@ -52,10 +52,10 @@ export const DEFAULT_SETTINGS: Settings = {
   headingArrowThickness: 2,
   pathOpacity: 1,
   rightPanelMinWidth: 0,
+  penToolAccuracy: 8,
   experimentalFeatures: {
     optimize: false,
     curveThrough: false,
-    obstacles: false,
   },
 };
 

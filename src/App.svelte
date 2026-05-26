@@ -162,6 +162,8 @@
   }));
   const makeChainId = () =>
     `chain-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const makeId = () =>
+    `line-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const defaultPathChainName = "Main Chain";
   const createDefaultPathChain = (sourceLines: Line[]): PathChain => ({
     id: makeChainId(),
@@ -178,7 +180,11 @@
   let selectedLineIndex = 0;
   let selectedPointIndex = 0;
   let selectedLine: Line | null = null;
-  let selectedPoint: Point | null = null;
+  let selectedPoint: BasePoint | null = null;
+  let penToolEnabled = false;
+  let penStroke: BasePoint[] = [];
+  let penIsDrawing = false;
+  let penGhostPath: (Path | PathLine)[] = [];
   let selectedLineChainId = "";
   let fieldMapLoaded = false;
   let robotImageLoaded = false;
@@ -374,6 +380,236 @@
 
   function clamp(value: number, min: number, max: number): number {
     return Math.min(max, Math.max(min, value));
+  }
+  function distanceBetweenPoints(a: BasePoint, b: BasePoint): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  
+  function perpendicularDistance(
+    point: BasePoint,
+    lineStart: BasePoint,
+    lineEnd: BasePoint,
+  ): number {
+    const denominator = Math.hypot(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y);
+    if (denominator === 0) {
+      return distanceBetweenPoints(point, lineStart);
+    }
+  
+    const numerator = Math.abs(
+      (lineEnd.y - lineStart.y) * point.x -
+        (lineEnd.x - lineStart.x) * point.y +
+        lineEnd.x * lineStart.y -
+        lineEnd.y * lineStart.x,
+    );
+  
+    return numerator / denominator;
+  }
+  
+  function simplifyStrokePoints(points: BasePoint[], tolerance: number): BasePoint[] {
+    if (points.length <= 2) return points.map((point) => ({ ...point }));
+  
+    const simplifyRange = (startIndex: number, endIndex: number): BasePoint[] => {
+      let maxDistance = 0;
+      let farthestIndex = -1;
+  
+      for (let index = startIndex + 1; index < endIndex; index += 1) {
+        const distance = perpendicularDistance(points[index], points[startIndex], points[endIndex]);
+        if (distance > maxDistance) {
+          maxDistance = distance;
+          farthestIndex = index;
+        }
+      }
+  
+      if (maxDistance <= tolerance || farthestIndex === -1) {
+        return [{ ...points[startIndex] }, { ...points[endIndex] }];
+      }
+  
+      const left = simplifyRange(startIndex, farthestIndex);
+      const right = simplifyRange(farthestIndex, endIndex);
+      return [...left.slice(0, -1), ...right];
+    };
+  
+    return simplifyRange(0, points.length - 1);
+  }
+  
+  function dedupeStrokePoints(points: BasePoint[], minDistance: number): BasePoint[] {
+    const deduped: BasePoint[] = [];
+  
+    for (const point of points) {
+      const lastPoint = deduped[deduped.length - 1];
+      if (!lastPoint || distanceBetweenPoints(lastPoint, point) >= minDistance) {
+        deduped.push({ ...point });
+      }
+    }
+  
+    return deduped;
+  }
+
+  function getPointOnStroke(points: BasePoint[], targetDistance: number): BasePoint {
+    if (points.length === 0) return { x: 0, y: 0 };
+    if (points.length === 1) return { ...points[0] };
+
+    let remaining = targetDistance;
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const current = points[index];
+      const next = points[index + 1];
+      const segmentLength = distanceBetweenPoints(current, next);
+
+      if (segmentLength === 0) continue;
+      if (remaining <= segmentLength) {
+        const ratio = remaining / segmentLength;
+        return {
+          x: current.x + (next.x - current.x) * ratio,
+          y: current.y + (next.y - current.y) * ratio,
+        };
+      }
+
+      remaining -= segmentLength;
+    }
+
+    return { ...points[points.length - 1] };
+  }
+
+  function sampleStrokeControlPoints(points: BasePoint[], controlPointCount: number): BasePoint[] {
+    if (points.length < 2 || controlPointCount <= 0) return [];
+
+    const totalLength = points.reduce((sum, point, index) => {
+      if (index === 0) return 0;
+      return sum + distanceBetweenPoints(points[index - 1], point);
+    }, 0);
+
+    if (totalLength === 0) return [];
+
+    const sampled: BasePoint[] = [];
+    for (let index = 1; index <= controlPointCount; index += 1) {
+      const targetDistance = (totalLength * index) / (controlPointCount + 1);
+      sampled.push(getPointOnStroke(points, targetDistance));
+    }
+
+    return sampled;
+  }
+  
+  function fitStrokeToLines(
+    stroke: BasePoint[],
+    startAnchor?: BasePoint,
+  ): { startPoint: Point; lines: Line[] } | null {
+    const cleanedStroke = dedupeStrokePoints(
+      stroke.map((point) => ({
+        x: clampFieldCoordinate(point.x),
+        y: clampFieldCoordinate(point.y),
+      })),
+      0.25,
+    );
+  
+    if (cleanedStroke.length < 2) return null;
+  
+    const simplifiedStroke = simplifyStrokePoints(cleanedStroke, 0.45);
+    const strokePoints = dedupeStrokePoints(simplifiedStroke, 0.05);
+  
+    if (strokePoints.length < 2) return null;
+  
+      const maxControlPoints = Math.max(0, Math.round(Number(settings?.penToolAccuracy ?? DEFAULT_SETTINGS.penToolAccuracy)));
+      const controlPointsSource = startAnchor
+        ? [
+            { x: clampFieldCoordinate(startAnchor.x), y: clampFieldCoordinate(startAnchor.y) },
+            ...strokePoints,
+          ]
+        : strokePoints;
+      const controlPoints = sampleStrokeControlPoints(controlPointsSource, maxControlPoints);
+
+    const fittedColor = selectedChain?.color || getRandomColor();
+      const fittedLines: Line[] = [
+        {
+          id: makeId(),
+          name: "Path 1",
+          endPoint: {
+            x: strokePoints[strokePoints.length - 1].x,
+            y: strokePoints[strokePoints.length - 1].y,
+            heading: "tangential",
+            reverse: false,
+          },
+          controlPoints,
+          color: fittedColor,
+          waitBeforeMs: 0,
+          waitAfterMs: 0,
+          waitBeforeName: "",
+          waitAfterName: "",
+        },
+      ];
+  
+    return {
+      startPoint: {
+          x: (startAnchor?.x ?? strokePoints[0].x),
+          y: (startAnchor?.y ?? strokePoints[0].y),
+        heading: "tangential",
+        reverse: false,
+      },
+      lines: fittedLines,
+    };
+  }
+  
+  function commitPenStroke() {
+      const selectedLine = lines[selectedLineIndex];
+      const startAnchor = selectedLine?.endPoint || undefined;
+      const fitted = fitStrokeToLines(penStroke, startAnchor);
+    penStroke = [];
+    penIsDrawing = false;
+  
+    if (!fitted) return;
+  
+      const newLine = fitted.lines[0];
+      if (!newLine) return;
+
+      if (selectedLine?.id) {
+        const insertAt = lines.findIndex((line) => line.id === selectedLine.id);
+        const nextLines = [...lines];
+        nextLines.splice(insertAt >= 0 ? insertAt + 1 : nextLines.length, 0, newLine);
+        lines = normalizeLines(nextLines);
+
+        const nextSequence = [...sequence];
+        const seqIndex = sequence.findIndex((item) => item.kind === "path" && item.lineId === selectedLine.id);
+        nextSequence.splice(seqIndex >= 0 ? seqIndex + 1 : nextSequence.length, 0, { kind: "path", lineId: newLine.id! });
+        sequence = nextSequence;
+
+        const chainId = selectedChainId || getLinePrimaryChainId(selectedLine.id) || pathChains[0]?.id || "";
+        if (chainId) {
+          assignLineToChain(newLine.id!, chainId);
+          selectedChainId = chainId;
+        }
+
+        selectedLineIndex = insertAt >= 0 ? insertAt + 1 : lines.length - 1;
+        selectedPointIndex = 0;
+      } else {
+        startPoint = fitted.startPoint;
+        lines = normalizeLines(fitted.lines);
+        sequence = lines.map((line) => ({ kind: "path", lineId: line.id! }));
+
+        const chainId = makeChainId();
+        pathChains = [
+          {
+            id: chainId,
+            name: selectedChain?.name || defaultPathChainName,
+            color: fitted.lines[0]?.color || selectedChain?.color || getRandomColor(),
+            lineIds: lines.map((line) => line.id!).filter(Boolean),
+          },
+        ];
+        selectedChainId = chainId;
+        selectedLineIndex = 0;
+        selectedPointIndex = 0;
+      }
+
+    selectedPointIndex = 0;
+    recordChange();
+    two?.update();
+  }
+  
+  function togglePenTool() {
+    penToolEnabled = !penToolEnabled;
+    if (!penToolEnabled) {
+      penStroke = [];
+      penIsDrawing = false;
+    }
   }
 
   function clampPanelWidth(
@@ -1380,6 +1616,37 @@
 
     return _path;
   });
+
+  $: penGhostPath = (() => {
+    if (!penToolEnabled || !penIsDrawing || penStroke.length < 2 || $activePaths.length > 0) {
+      return [];
+    }
+
+    const anchors = penStroke.map(
+      (point, index) =>
+        new Two.Anchor(
+          x(point.x),
+          y(point.y),
+          0,
+          0,
+          0,
+          0,
+          index === 0 ? Two.Commands.move : Two.Commands.line,
+        ),
+    );
+    anchors.forEach((anchor) => (anchor.relative = false));
+
+    const ghost = new Two.Path(anchors);
+    ghost.automatic = false;
+    ghost.stroke = selectedChain?.color || "#facc15";
+    ghost.fill = "transparent";
+    ghost.linewidth = x(LINE_WIDTH * 0.9);
+    ghost.opacity = 0.35;
+    ghost.dashes = [x(0.6), x(0.6)];
+    ghost.id = "pen-ghost-path";
+
+    return [ghost];
+  })();
 
   $: shapeElements = (() => {
     if (!(settings?.experimentalFeatures?.obstacles ?? false)) {
@@ -2422,6 +2689,9 @@
     if (secondOnionLayerElements.length > 0) {
       two.add(...secondOnionLayerElements);
     }
+    if (penGhostPath.length > 0) {
+      two.add(...penGhostPath);
+    }
     two.add(...path);
     if ($dualPathMode && secondPath.length > 0) {
       two.add(...secondPath);
@@ -2627,6 +2897,22 @@
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
       const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
 
+      if (penToolEnabled) {
+        two.renderer.domElement.style.cursor = "crosshair";
+
+        if (penIsDrawing) {
+          const mousePoint = getMouseFieldPoint(evt);
+          if (!mousePoint) return;
+
+          const lastPoint = penStroke[penStroke.length - 1];
+          if (!lastPoint || distanceBetweenPoints(lastPoint, mousePoint) >= 0.35) {
+            penStroke = [...penStroke, mousePoint];
+          }
+        }
+
+        return;
+      }
+
       if (isDown && currentElem) {
         const parts = currentElem.split("-");
         const isPathPoint = parts[0] === "point";
@@ -2769,6 +3055,17 @@
     });
 
     two.renderer.domElement.addEventListener("mousedown", (evt: MouseEvent) => {
+      if (penToolEnabled) {
+        const mousePoint = getMouseFieldPoint(evt);
+        if (!mousePoint) return;
+
+        penStroke = [mousePoint];
+        penIsDrawing = true;
+        currentElem = null;
+        isDown = false;
+        return;
+      }
+
       const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
       if (preferredPointElemId) {
         currentElem = preferredPointElemId;
@@ -2893,6 +3190,16 @@
     });
 
     two.renderer.domElement.addEventListener("mouseup", () => {
+      if (penToolEnabled) {
+        if (penIsDrawing) {
+          commitPenStroke();
+        }
+        two.renderer.domElement.style.cursor = "crosshair";
+        isDown = false;
+        dragOffset = { x: 0, y: 0 };
+        return;
+      }
+
       isDown = false;
       dragOffset = { x: 0, y: 0 };
       recordChange();
@@ -2900,6 +3207,10 @@
 
     // Double-click on the field to create a new path at that position
     two.renderer.domElement.addEventListener("dblclick", (evt: MouseEvent) => {
+      if (penToolEnabled) {
+        return;
+      }
+
       // Ignore dblclicks on existing points/lines
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
       if (
@@ -3816,6 +4127,9 @@
       </div>
       <div class="center-toolbar">
         <button class="toolbar-btn" on:click={addNewLine}>+ Add Path</button>
+        <button class="toolbar-btn" class:toolbar-btn--blue={penToolEnabled} on:click={togglePenTool}>
+          {penToolEnabled ? "Pen Tool On" : "Pen Tool"}
+        </button>
         <button class="toolbar-btn" on:click={addControlPoint}>+ Point</button>
         <button class="toolbar-btn" on:click={removeControlPoint}>- Point</button>
         <button class="toolbar-btn toolbar-btn--blue" on:click={createPathBetweenSelectedPoints}>

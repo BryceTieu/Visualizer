@@ -871,6 +871,29 @@
             <div
               class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
             >
+              <div
+                class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
+              >
+                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Pen Tool Accuracy
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  bind:value={settings.penToolAccuracy}
+                  class="w-full px-3 py-2 rounded border bg-white dark:bg-neutral-800"
+                />
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Maximum control points used when fitting freehand strokes
+                  </span>
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right">
+                    {settings.penToolAccuracy ?? 8}
+                  </span>
+                </div>
+              </div>
+
               <!-- Ghost Paths Toggle -->
               <!-- <div
                 class="flex items-center justify-between p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"

@@ -120,6 +120,7 @@ interface Settings {
   headingArrowColor?: string; // Color of the heading arrow
   headingArrowThickness?: number; // Thickness/stroke width of the heading arrow
   pathOpacity?: number; // Opacity of path lines (0-1)
+  penToolAccuracy?: number; // Maximum number of control points used by the pen tool
 }
 
 function getDefaultSettings(): Settings {

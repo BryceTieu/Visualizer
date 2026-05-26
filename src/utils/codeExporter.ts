@@ -335,14 +335,7 @@ export async function generateKotlinCode(
     }))
     .filter((chain) => chain.lineIds.length > 0);
 
-  const fieldDeclarations = normalizedChains
-    .map((chain, idx) => {
-      const variableName = sanitizeIdentifier(chain.name, `pathChain${idx + 1}`);
-      return `        lateinit var ${variableName}: PathChain\n            private set`;
-    })
-    .join("\n");
-
-  const pathAssignments = normalizedChains
+  const pathProperties = normalizedChains
     .map((chain, chainIdx) => {
       const variableName = sanitizeIdentifier(
         chain.name,
@@ -368,27 +361,22 @@ export async function generateKotlinCode(
         })
         .filter((segment): segment is string => Boolean(segment));
 
-      return `            ${variableName} = follower.pathBuilder()
+      return `    val ${variableName} = follower.pathBuilder()
             ${segmentSnippets.join("\n            ")}
             .build()`;
     })
     .join("\n\n");
 
   if (exportMode === "coordinates") {
-    return pathAssignments;
+    return pathProperties;
   }
 
-  const companionObject = `object Paths {
-${fieldDeclarations}
-
-      fun init(follower: Follower) {
-
-${pathAssignments}
-        }
-    }`;
+  const pathsClass = `class Paths(follower: Follower) {
+${pathProperties}
+}`;
 
   if (exportMode === "class") {
-    return companionObject;
+    return pathsClass;
   }
 
   const file = `package org.firstinspires.ftc.teamcode
@@ -399,9 +387,7 @@ import com.pedropathing.geometry.BezierLine
 import com.pedropathing.geometry.Pose
 import com.pedropathing.paths.PathChain
 
-object AutoPaths {
-    ${companionObject}
-}`;
+${pathsClass}`;
 
   try {
     const kotlinPlugin = await loadKotlinPlugin();
