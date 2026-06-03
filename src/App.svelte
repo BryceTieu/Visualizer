@@ -153,6 +153,24 @@
     return next;
   }
 
+  function detectMobileDevice() {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return false;
+    }
+
+    const userAgent = navigator.userAgent || "";
+    const mobileHint = "userAgentData" in navigator
+      ? (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ?? false
+      : false;
+    const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+
+    return (
+      mobileHint ||
+      /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(userAgent) ||
+      (coarsePointer && navigator.maxTouchPoints > 1)
+    );
+  }
+
   $: fieldMapSrc =
     settings.fieldMap === "custom"
       ? settings.customFieldImage || "/fields/decode.webp"
@@ -193,6 +211,11 @@
   let robotImageLoaded = false;
   let lastFieldMapSrc = "";
   let lastRobotImageSrc = "";
+  let isMobileBlocked = false;
+
+  if (typeof window !== "undefined") {
+    isMobileBlocked = detectMobileDevice();
+  }
   $: selectedChain =
     pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
 
@@ -2170,12 +2193,16 @@
 
   // Allow the app to stabilize before tracking changes
   onMount(() => {
+    if (isMobileBlocked) return;
+
     setTimeout(() => {
       isLoaded = true;
       recordChange();
     }, 500);
   });
   onMount(async () => {
+    if (isMobileBlocked) return;
+
     // Load saved settings
     const savedSettings = await loadSettings();
     settings = normalizeLegacyFieldMap({ ...savedSettings });
@@ -2260,6 +2287,8 @@
 
   // Initialize animation controller
   onMount(() => {
+    if (isMobileBlocked) return;
+
     animationController = createAnimationController(
       animationDuration,
       (newPercent) => {
@@ -3802,6 +3831,8 @@
   // Watch for system theme changes if auto mode is enabled
   let mediaQuery: MediaQueryList;
   onMount(() => {
+    if (isMobileBlocked) return;
+
     if (settings?.theme === "auto") {
       mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
       const handleSystemThemeChange = () => {
@@ -3819,6 +3850,8 @@
 
   // Auto-export for CI/testing: if the app is loaded with URL hash #export-gif-test, automatically run GIF export once mounted
   onMount(() => {
+    if (isMobileBlocked) return;
+
     if (
       typeof window !== "undefined" &&
       window.location &&
@@ -3921,6 +3954,19 @@
   on:mouseup={endPanelResize}
   on:blur={endPanelResize}
 />
+
+{#if isMobileBlocked}
+  <div class="flex min-h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-100">
+    <div class="max-w-lg rounded-3xl border border-white/10 bg-neutral-900/95 px-8 py-10 shadow-2xl shadow-black/40">
+      <div class="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Desktop Required</div>
+      <h1 class="mt-4 text-3xl font-semibold text-white">You need to be on a desktop for the website to function.</h1>
+      <p class="mt-4 text-sm leading-6 text-neutral-300">
+        This visualizer depends on mouse, keyboard, and a large workspace, so mobile devices are blocked from using it.
+      </p>
+      <p class="mt-3 text-xs text-neutral-500">Please reopen the site on a desktop browser.</p>
+    </div>
+  </div>
+{:else}
 
 <Navbar
   bind:lines
@@ -4458,3 +4504,4 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
     </aside>
   </div>
 </div>
+{/if}
