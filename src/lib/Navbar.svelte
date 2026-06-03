@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Point, Line, Shape, Settings, SequenceItem, PathChain } from "../types";
+  import type { FieldPoint, Point, Line, Shape, Settings, SequenceItem, PathChain } from "../types";
   import { onMount, onDestroy } from "svelte";
   import {
     showRuler,
@@ -33,6 +33,7 @@
   export let shapes: Shape[];
   export let sequence: SequenceItem[];
   export let pathChains: PathChain[] = [];
+  export let fieldPoints: FieldPoint[] = [];
   export let secondStartPoint: Point | null = null;
   export let secondLines: Line[] = [];
   export let secondShapes: Shape[] = [];
@@ -266,6 +267,7 @@
     bind:secondLines
     bind:secondShapes
     bind:secondSequence
+    bind:fieldPoints
   />
 {/if}
 

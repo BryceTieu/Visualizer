@@ -1,4 +1,4 @@
-import type { Point, Line, Shape, SequenceItem, PathChain } from "../types";
+import type { FieldPoint, Point, Line, Shape, SequenceItem, PathChain } from "../types";
 
 /**
  * File save/load utilities for the visualizer
@@ -12,6 +12,7 @@ export interface SaveData {
   sequence?: SequenceItem[];
   pathChains?: PathChain[];
   activePaths?: string[];
+  fieldPoints?: FieldPoint[];
 }
 
 /**
@@ -53,8 +54,9 @@ export function loadTrajectoryFromFile(
   if (!file) return;
 
   // Check file extension
-  if (!file.name.toLowerCase().endsWith(".pp")) {
-    const error = new Error("Please select a .pp file");
+  const lowerName = file.name.toLowerCase();
+  if (!lowerName.endsWith(".pp") && !lowerName.endsWith(".json")) {
+    const error = new Error("Please select a .pp or .json file");
     if (onError) onError(error);
     alert(error.message);
     return;

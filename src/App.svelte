@@ -39,6 +39,7 @@
     generateGhostPathPoints,
     generateOnionLayers,
   } from "./utils";
+  import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
   import {
     easeInOutQuad,
     getCurvePoint,
@@ -93,6 +94,7 @@
   // Canvas state
   let two: Two;
   let twoElement: HTMLDivElement;
+  let fieldPointsCanvas: HTMLCanvasElement;
   let width = 0;
   let height = 0;
   const SIDE_PANEL_MIN_WIDTH = 240;
@@ -131,6 +133,7 @@
   let settings: Settings = { ...DEFAULT_SETTINGS };
   let startPoint: Point = getDefaultStartPoint();
   let lines: Line[] = normalizeLines(getDefaultLines());
+  let fieldPoints: FieldPoint[] = [];
 
   function normalizeLegacyFieldMap(input: Settings): Settings {
     const next = { ...input };
@@ -697,6 +700,7 @@
       shapes,
       sequence,
       pathChains,
+      fieldPoints,
       activePaths: $activePaths,
       settings,
       version: "1.3.0",
@@ -713,6 +717,7 @@
       sequence,
       settings,
       pathChains,
+      fieldPoints,
     };
   }
 
@@ -733,6 +738,7 @@
       sequence = prev.sequence;
       settings = prev.settings;
       pathChains = prev.pathChains;
+      fieldPoints = prev.fieldPoints;
       isUnsaved.set(true);
       two && two.update();
     }
@@ -749,6 +755,7 @@
       sequence = next.sequence;
       settings = next.settings;
       pathChains = next.pathChains;
+      fieldPoints = next.fieldPoints;
       isUnsaved.set(true);
       two && two.update();
     }
@@ -2708,6 +2715,11 @@
 
     two.update();
   })();
+
+  $: if (fieldPointsCanvas && width > 0 && height > 0) {
+    renderFieldPoints(fieldPointsCanvas, fieldPoints, x, y, width, height);
+  }
+
   async function saveFileAs() {
     const win: any = window as any;
     await saveAllAdditionalPaths();
@@ -3314,9 +3326,10 @@
 
     if (!file) return;
 
-    // Check if file is a .pp file
-    if (!file.name.endsWith(".pp")) {
-      alert("Please select a .pp file");
+    const lowerName = file.name.toLowerCase();
+    // Check if file is a .pp or .json file
+    if (!lowerName.endsWith(".pp") && !lowerName.endsWith(".json")) {
+      alert("Please select a .pp or .json file");
       // Reset the file input
       elem.value = "";
       return;
@@ -3349,6 +3362,7 @@
 
       // Load shapes with defaults
       shapes = data.shapes || [];
+      fieldPoints = normalizeFieldPoints(data);
       // Load settings (including robot size) if present
       if (data.settings) {
         settings = { ...settings, ...data.settings };
@@ -3404,6 +3418,7 @@
 
     // Load shapes with defaults
     shapes = data.shapes || [];
+    fieldPoints = normalizeFieldPoints(data);
 
     // Load settings (including robot size) if present
     if (data.settings) {
@@ -3917,6 +3932,7 @@
   bind:secondLines
   bind:secondShapes
   bind:secondSequence
+  bind:fieldPoints
   bind:settings
   bind:robotWidth
   bind:robotHeight
@@ -4194,6 +4210,11 @@
         on:dragstart={(e) => e.preventDefault()}
         on:selectstart={(e) => e.preventDefault()}
       />
+      <canvas
+        bind:this={fieldPointsCanvas}
+        class="absolute top-0 left-0 w-full h-full z-[15] pointer-events-none"
+        aria-hidden="true"
+      ></canvas>
       <MathTools {x} {y} {twoElement} {robotXY} />
       <!-- Main robot: only show in normal mode -->
       {#if $activePaths.length === 0}

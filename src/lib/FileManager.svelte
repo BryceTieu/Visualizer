@@ -7,10 +7,11 @@
 
   import { cubicInOut } from "svelte/easing";
   import { fade, fly } from "svelte/transition";
-  import type { FileInfo, Point, Line, Shape, SequenceItem, PathChain } from "../types";
+  import type { FileInfo, FieldPoint, Point, Line, Shape, SequenceItem, PathChain } from "../types";
   import * as browserFileStore from "../utils/browserFileStore";
   import { currentFilePath, isUnsaved, dualPathMode, secondFilePath } from "../stores";
   import { getRandomColor } from "../utils";
+  import { normalizeFieldPoints } from "../utils/fieldPoints";
   import {
     saveAutoPathsDirectory,
     getSavedAutoPathsDirectory,
@@ -27,6 +28,7 @@
   export let secondLines: Line[] = [];
   export let secondShapes: Shape[] = [];
   export let secondSequence: SequenceItem[] = [];
+  export let fieldPoints: FieldPoint[] = [];
 
   let files: FileInfo[] = [];
   let selectedFile2: FileInfo | null = null;
@@ -46,7 +48,7 @@
   let renameInputValue = "";
 
   // Add file type filtering
-  const supportedFileTypes = [".pp"];
+  const supportedFileTypes = [".pp", ".json"];
 
   // Name dialog state
   let nameDialogOpen = false;
@@ -91,6 +93,10 @@
       kind: "path",
       lineId: ln.id!,
     }));
+  }
+
+  function hydrateFieldPoints(data: any): FieldPoint[] {
+    return normalizeFieldPoints(data);
   }
 
   // Debug logging
@@ -261,6 +267,7 @@
       shapes = data.shapes || [];
       sequence = deriveSequence(data, normalizedLines);
       pathChains = data.pathChains || [];
+      fieldPoints = hydrateFieldPoints(data);
 
       // Update Global Store State
       currentFilePath.set(file.path);
@@ -301,6 +308,7 @@
       secondLines = normalizedLines;
       secondShapes = data.shapes || [];
       secondSequence = deriveSequence(data, normalizedLines);
+      fieldPoints = hydrateFieldPoints(data);
 
       // Update Global Store State
       secondFilePath.set(file.path);
@@ -332,6 +340,7 @@
         shapes,
         sequence,
         pathChains,
+        fieldPoints,
         version: "1.2.1", // Add version for compatibility
         timestamp: new Date().toISOString(),
       });
@@ -356,6 +365,7 @@
         shapes,
         sequence,
         pathChains,
+        fieldPoints,
         version: "1.2.1",
         timestamp: new Date().toISOString(),
       }, null, 2);
@@ -409,6 +419,7 @@
         shapes,
         sequence,
         pathChains,
+        fieldPoints,
         version: "1.2.1",
         timestamp: new Date().toISOString(),
       }, null, 2);
@@ -458,6 +469,7 @@
         shapes,
         sequence,
         pathChains,
+        fieldPoints,
         version: "1.2.1",
         timestamp: new Date().toISOString(),
       });

@@ -6,6 +6,12 @@ export interface BasePoint {
   locked?: boolean;
 }
 
+export interface FieldPoint extends BasePoint {
+  color?: string;
+  radius?: number;
+  opacity?: number;
+}
+
 export type Point = BasePoint &
   (
     | {
