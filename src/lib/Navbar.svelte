@@ -76,7 +76,7 @@
   let saveButtonRef: HTMLElement;
 
   let selectedGridSize = 12;
-  const gridSizeOptions = [0, 1, 3, 6, 12, 24];
+  const gridSizeOptions = [0, 1, 3, 6, 12];
 
   // Ensure File Manager and Export dialog are mutually exclusive
   $: if (fileManagerOpen && exportDialogOpen) {

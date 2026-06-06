@@ -800,7 +800,7 @@
                     >
                       Upload Custom Field Image
                       <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                        Accepts PNG, JPG, WEBP (recommended: 144x144 inches aspect ratio)
+                        Accepts PNG, JPG, WEBP (recommended: 141.5x141.5 inches aspect ratio)
                       </div>
                     </label>
                     <input

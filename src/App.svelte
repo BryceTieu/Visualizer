@@ -157,19 +157,30 @@
     if (typeof window === "undefined" || typeof navigator === "undefined") {
       return false;
     }
-
     const userAgent = navigator.userAgent || "";
     const mobileHint = "userAgentData" in navigator
       ? (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ?? false
       : false;
-    const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
 
+    // Pointer and touch heuristics: prefer multi-touch + coarse pointer to avoid false positives
+    const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    const maxTouch = typeof navigator.maxTouchPoints === "number" ? navigator.maxTouchPoints : 0;
+    const multiTouch = maxTouch > 1;
+
+    // Match typical mobile UA strings
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(userAgent);
+
+    // Consider mobile when UA explicitly indicates it, userAgentData reports mobile, or
+    // we observe both a coarse pointer and multiple touch points (more likely a phone/tablet)
+    // Avoid treating single-touch or hybrid laptops as mobile.
     return (
       mobileHint ||
-      /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(userAgent) ||
-      (coarsePointer && navigator.maxTouchPoints > 1)
+      uaMobile ||
+      (coarsePointer && multiTouch) ||
+      (window.matchMedia?.("(any-hover: none)")?.matches && multiTouch)
     );
   }
+
 
   $: fieldMapSrc =
     settings.fieldMap === "custom"
@@ -212,9 +223,22 @@
   let lastFieldMapSrc = "";
   let lastRobotImageSrc = "";
   let isMobileBlocked = false;
+  let effectiveSize = FIELD_SIZE;
 
   if (typeof window !== "undefined") {
+    // Initial detection
     isMobileBlocked = detectMobileDevice();
+
+    // Re-evaluate on viewport changes which can indicate mobile/orientation changes
+    const _updateMobile = () => {
+      try {
+        isMobileBlocked = detectMobileDevice();
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    window.addEventListener("resize", _updateMobile);
+    window.addEventListener("orientationchange", _updateMobile);
   }
   $: selectedChain =
     pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
@@ -1014,14 +1038,18 @@
   $: x = d3
     .scaleLinear()
     .domain([0, FIELD_SIZE])
-    .range([0, width || FIELD_SIZE]);
+    .range([0, effectiveSize || FIELD_SIZE]);
   /**
    * Converter for Y axis from inches to pixels.
    */
   $: y = d3
     .scaleLinear()
     .domain([0, FIELD_SIZE])
-    .range([height || FIELD_SIZE, 0]);
+    .range([effectiveSize || FIELD_SIZE, 0]);
+  $: {
+    // Ensure effectiveSize matches the smallest of width/height so the field image and grid align
+    effectiveSize = Math.min(width || FIELD_SIZE, height || FIELD_SIZE);
+  }
   $: {
     // Calculate robot state using the Timeline
     if (timePrediction && timePrediction.timeline && lines.length > 0) {
