@@ -355,6 +355,8 @@
                             <span>Jeffery the Potato Active!</span>
                             <span>🥔</span>
                           </span>
+                        {:else if settings.robotImage === "/MecanumDuck.png"}
+                          <span>Mecanum Duck Active!</span>
                         {:else}
                           Custom Image Loaded
                         {/if}
@@ -365,6 +367,8 @@
                       >
                         {#if settings.robotImage === "/JefferyThePotato.png"}
                           Best. Robot. Ever. 🥔
+                        {:else if settings.robotImage === "/MecanumDuck.png"}
+                          Quack Quack
                         {:else}
                           {settings.robotImage.substring(0, 30)}...
                         {/if}
@@ -459,6 +463,18 @@
                       <div
                         class="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-200/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
                       ></div>
+                    </button>
+
+                    <button
+                      on:click={() => {
+                        settings.robotImage = "/MecanumDuck.png";
+                        settings = { ...settings };
+                      }}
+                      class="console-action px-4 py-2 text-sm text-white transition-colors flex items-center justify-center gap-2"
+                      style="background-image: linear-gradient(45deg, #eab308 25%, #f59e0b 25%, #f59e0b 50%, #eab308 50%, #eab308 75%, #f59e0b 75%, #f59e0b 100%); background-size: 18px 18px;"
+                      title="Use the Mecanum Duck robot image"
+                    >
+                      <span class="font-semibold">Use Mecanum Duck</span>
                     </button>
                   </div>
 
