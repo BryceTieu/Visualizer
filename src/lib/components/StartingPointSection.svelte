@@ -53,6 +53,21 @@
 
   <div class="grid w-full grid-cols-1 gap-2">
     <label class="flex flex-col gap-1 text-xs">
+      <span class="font-extralight">Name</span>
+      <input
+        value={startPoint.name ?? ""}
+        on:input={(e) => {
+          startPoint.name = e.currentTarget.value;
+          startPoint = { ...startPoint };
+        }}
+        type="text"
+        placeholder="start"
+        class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
+        disabled={startPoint.locked}
+      />
+    </label>
+
+    <label class="flex flex-col gap-1 text-xs">
       <span class="font-extralight">X</span>
       <input
         bind:value={startPoint.x}

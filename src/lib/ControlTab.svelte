@@ -1046,12 +1046,23 @@
         </div>
       </div>
 
-      {#if selectedLine}
-        <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
-          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
-            <div class="text-gray-500">Name</div>
-            <div class="font-medium text-gray-100 truncate">{selectedLine.name || `Path ${selectedLinePathIndex + 1}`}</div>
-          </div>
+    {#if selectedLine}
+      <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
+        <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
+          <div class="text-gray-500">Name</div>
+          <input
+            value={selectedLine.name || ""}
+            placeholder={`Path ${selectedLinePathIndex + 1}`}
+            type="text"
+            class="w-full bg-transparent font-medium text-gray-100 border-none outline-none focus:ring-1 focus:ring-green-500 rounded px-0 py-0.5"
+            disabled={selectedLine.locked}
+            on:input={(e) => {
+              selectedLine.name = e.currentTarget.value;
+              lines = [...lines];
+            }}
+            on:change={() => recordChange?.()}
+          />
+        </div>
           <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
             <div class="text-gray-500">Endpoint</div>
             <div class="font-medium text-gray-100">{selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}</div>
@@ -1091,6 +1102,24 @@
           </div>
 
           {#if selectedPoint}
+            {#if selectedPointIndex === 0}
+              <div class="mt-3 flex flex-col gap-1 text-[11px]">
+                <span class="text-gray-500">Name</span>
+                <input
+                  value={selectedLine.name || ""}
+                  placeholder={`Path ${selectedLinePathIndex + 1}`}
+                  type="text"
+                  class="w-full rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={selectedLine.locked || !!selectedPoint.locked}
+                  on:input={(e) => {
+                    selectedLine.name = e.currentTarget.value;
+                    lines = [...lines];
+                  }}
+                  on:change={() => recordChange?.()}
+                />
+              </div>
+            {/if}
+
             <div class="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
               <label class="flex flex-col gap-1">
                 <span class="text-gray-500">X</span>

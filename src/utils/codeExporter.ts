@@ -1,6 +1,5 @@
 import prettier from "prettier";
 import type { Point, Line, BasePoint, PathChain } from "../types";
-import { getCurvePoint } from "./math";
 
 const FIELD_WIDTH_INCHES = 141.5;
 
@@ -26,13 +25,12 @@ let cachedKotlinPlugin: any | null = null;
 
 async function loadJavaPlugin() {
   if (cachedJavaPlugin !== null) return cachedJavaPlugin;
-  const candidates = ["prettier/plugins/java.js", "prettier/plugins/java"];
-  for (const path of candidates) {
+  for (const path of ["prettier/plugins/java.js", "prettier/plugins/java"]) {
     try {
       const mod = await import(/* @vite-ignore */ path);
       cachedJavaPlugin = (mod as any).default ?? mod;
       return cachedJavaPlugin;
-    } catch (err) {}
+    } catch {}
   }
   cachedJavaPlugin = null;
   return null;
@@ -40,268 +38,223 @@ async function loadJavaPlugin() {
 
 async function loadKotlinPlugin() {
   if (cachedKotlinPlugin !== null) return cachedKotlinPlugin;
-  const candidates = ["prettier-plugin-kotlin"];
-  for (const path of candidates) {
+  for (const path of ["prettier-plugin-kotlin"]) {
     try {
       const mod = await import(/* @vite-ignore */ path);
       cachedKotlinPlugin = (mod as any).default ?? mod;
       return cachedKotlinPlugin;
-    } catch (err) {}
+    } catch {}
   }
   cachedKotlinPlugin = null;
   return null;
 }
 
-function sanitizeIdentifier(input: string | undefined, fallback: string): string {
+function sanitizeIdentifier(
+  input: string | undefined,
+  fallback: string,
+): string {
   const cleaned = (input || "").replace(/[^a-zA-Z0-9]/g, "");
   if (!cleaned) return fallback;
   if (/^[0-9]/.test(cleaned)) return `${fallback}${cleaned}`;
   return cleaned;
 }
 
-// Lowercase first letter for variable names (camelCase)
 function camelCase(str: string): string {
   if (!str) return str;
   return str.charAt(0).toLowerCase() + str.slice(1);
 }
 
-/**
- * Build a single path segment in the Ivy/PedroPathing style used in Far.java:
- *   robot.follower.pathBuilder()
- *     .addPath(new BezierLine(...))
- *     .setConstantHeadingInterpolation(...)
- *     .build()
- */
-function buildIvyPathSegmentCode(
-  line: Line,
-  startExpression: string,
+// Collect every unique pose needed across all chains
+function collectPoses(
+  startPoint: Point,
+  linesWithIds: (Line & { id: string })[],
+  normalizedChains: PathChain[],
   options: ExportTransformOptions,
+): Map<string, { x: number; y: number; headingRad?: number }> {
+  const poses = new Map<
+    string,
+    { x: number; y: number; headingRad?: number }
+  >();
+
+  const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
+  poses.set(startName, {
+    x: transformX(startPoint.x, options),
+    y: startPoint.y,
+    headingRad: 0,
+  });
+
+  const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
+
+  linesWithIds.forEach((line, lineIdx) => {
+    if (!usedLineIds.has(line.id)) return;
+
+    const endName = camelCase(
+      sanitizeIdentifier(line.name, `point${lineIdx + 1}`),
+    );
+    const ep = line.endPoint;
+    const endHeading =
+      ep.heading === "constant"
+        ? (transformHeadingDegrees(ep.degrees ?? 0, options) * Math.PI) / 180
+        : ep.heading === "linear"
+          ? (transformHeadingDegrees(ep.endDeg ?? 0, options) * Math.PI) / 180
+          : undefined;
+
+    poses.set(endName, {
+      x: transformX(ep.x, options),
+      y: ep.y,
+      headingRad: endHeading,
+    });
+
+    line.controlPoints.forEach((cp, cpIdx) => {
+      const cpName = `${endName}Control${cpIdx + 1}`;
+      poses.set(cpName, {
+        x: transformX(cp.x, options),
+        y: cp.y,
+      });
+    });
+  });
+
+  return poses;
+}
+
+  function getStartVarName(
+    lineIdx: number,
+    linesWithIds: (Line & { id: string })[],
+    startPoint?: Point,
+  ): string {
+    if (lineIdx <= 0) {
+      return camelCase(sanitizeIdentifier(startPoint?.name, "start"));
+    }
+    const prevLine = linesWithIds[lineIdx - 1];
+    return camelCase(sanitizeIdentifier(prevLine.name, `point${lineIdx}`));
+  }
+function getEndVarName(
+  line: Line & { id: string },
+  lineIdx: number,
 ): string {
-  const headingFnMap: Record<string, string> = {
+  return camelCase(sanitizeIdentifier(line.name, `point${lineIdx + 1}`));
+}
+
+function buildJavaSegment(
+  line: Line & { id: string },
+  lineIdx: number,
+  linesWithIds: (Line & { id: string })[],
+  options: ExportTransformOptions,
+  indent: string,
+  startPoint?: Point,
+): string {
+  const headingFn: Record<string, string> = {
     constant: "setConstantHeadingInterpolation",
     linear: "setLinearHeadingInterpolation",
     tangential: "setTangentHeadingInterpolation",
   };
 
+  const startVar = getStartVarName(lineIdx, linesWithIds, startPoint);
+  const endVar = getEndVarName(line, lineIdx);
   const curveType =
     line.controlPoints.length === 0 ? "BezierLine" : "BezierCurve";
 
-  const endPose = `new Pose(${transformX(line.endPoint.x, options).toFixed(3)}, ${line.endPoint.y.toFixed(3)})`;
+  const pointVars: string[] = [startVar];
+  line.controlPoints.forEach((_, cpIdx) => {
+    pointVars.push(`${endVar}Control${cpIdx + 1}`);
+  });
+  pointVars.push(endVar);
 
-  const controlPointsStr = line.controlPoints
-    .map(
-      (pt) =>
-        `new Pose(${transformX(pt.x, options).toFixed(3)}, ${pt.y.toFixed(3)})`,
-    )
-    .join(", ");
-
-  const allPoints =
-    controlPointsStr
-      ? `${startExpression}, ${controlPointsStr}, ${endPose}`
-      : `${startExpression}, ${endPose}`;
+  const pointsList = pointVars.join(", ");
 
   let headingArgs = "";
   if (line.endPoint.heading === "constant") {
-    headingArgs = `Math.toRadians(${transformHeadingDegrees(line.endPoint.degrees ?? 0, options).toFixed(3)})`;
+    headingArgs = `Math.toRadians(${transformHeadingDegrees(line.endPoint.degrees ?? 0, options).toFixed(1)})`;
   } else if (line.endPoint.heading === "linear") {
-    headingArgs = `Math.toRadians(${transformHeadingDegrees(line.endPoint.startDeg ?? 0, options).toFixed(3)}), Math.toRadians(${transformHeadingDegrees(line.endPoint.endDeg ?? 0, options).toFixed(3)})`;
+    const startDeg = transformHeadingDegrees(
+      line.endPoint.startDeg ?? 0,
+      options,
+    ).toFixed(1);
+    const endDeg = transformHeadingDegrees(
+      line.endPoint.endDeg ?? 0,
+      options,
+    ).toFixed(1);
+    headingArgs = `Math.toRadians(${startDeg}), Math.toRadians(${endDeg})`;
   }
 
-  const reverseStr = line.endPoint.reverse ? "\n            .setReversed()" : "";
+  const reverse = line.endPoint.reverse
+    ? `\n${indent}.setReversed()`
+    : "";
 
-  return `.addPath(new ${curveType}(${allPoints}))
-            .${headingFnMap[line.endPoint.heading]}(${headingArgs})${reverseStr}`;
+  return [
+    `.addPath(new ${curveType}(${pointsList}))`,
+    `.${headingFn[line.endPoint.heading]}(${headingArgs})${reverse}`,
+  ].join(`\n${indent}`);
 }
 
-/**
- * Build a full PathChain builder call in the Ivy style:
- *
- *   public PathChain myPath() {
- *       return follower.pathBuilder()
- *           .addPath(...)
- *           .setConstantHeadingInterpolation(...)
- *           .build();
- *   }
- */
-function buildIvyPathChainMethod(
-  chain: PathChain,
-  chainIdx: number,
-  linesWithIds: (Line & { id: string })[],
-  startPoint: Point,
-  options: ExportTransformOptions,
-): string {
-  const methodName = camelCase(
-    sanitizeIdentifier(chain.name, `pathChain${chainIdx + 1}`),
-  );
-
-  const segments = chain.lineIds
-    .map((lineId) => {
-      const lineIndex = linesWithIds.findIndex((ln) => ln.id === lineId);
-      const line = linesWithIds[lineIndex];
-      if (!line) return null;
-
-      const startExpression =
-        lineIndex <= 0
-          ? `new Pose(${transformX(startPoint.x, options).toFixed(3)}, ${startPoint.y.toFixed(3)})`
-          : `new Pose(${transformX(linesWithIds[lineIndex - 1].endPoint.x, options).toFixed(3)}, ${linesWithIds[lineIndex - 1].endPoint.y.toFixed(3)})`;
-
-      return buildIvyPathSegmentCode(line, startExpression, options);
-    })
-    .filter((s): s is string => Boolean(s));
-
-  return `public PathChain ${methodName}() {
-        return follower.pathBuilder()
-            ${segments.join("\n            ")}
-            .build();
-    }`;
-}
-
-/**
- * Generate the Ivy-style Paths inner class, mirroring FarPaths structure:
- *
- *   public class Paths {
- *       private final Follower follower;
- *       public final Pose start;
- *
- *       public Paths(Follower follower) {
- *           this.follower = follower;
- *           this.start = new Pose(...);
- *       }
- *
- *       public PathChain myPath() { ... }
- *   }
- */
-function buildIvyPathsClass(
-  startPoint: Point,
-  normalizedChains: PathChain[],
+function buildKotlinSegment(
+  line: Line & { id: string },
+  lineIdx: number,
   linesWithIds: (Line & { id: string })[],
   options: ExportTransformOptions,
+  indent: string,
+  startPoint?: Point,
 ): string {
-  const startPose = `new Pose(${transformX(startPoint.x, options).toFixed(3)}, ${startPoint.y.toFixed(3)}, Math.toRadians(0))`;
+  const headingFn: Record<string, string> = {
+    constant: "setConstantHeadingInterpolation",
+    linear: "setLinearHeadingInterpolation",
+    tangential: "setTangentHeadingInterpolation",
+  };
 
-  const chainMethods = normalizedChains
-    .map((chain, idx) =>
-      buildIvyPathChainMethod(chain, idx, linesWithIds, startPoint, options),
-    )
-    .join("\n\n    ");
+  const startVar = getStartVarName(lineIdx, linesWithIds, startPoint);
+  const endVar = getEndVarName(line, lineIdx);
+  const curveType =
+    line.controlPoints.length === 0 ? "BezierLine" : "BezierCurve";
 
-  return `public class Paths {
-    private final Follower follower;
-    public final Pose start;
+  const pointVars: string[] = [startVar];
+  line.controlPoints.forEach((_, cpIdx) => {
+    pointVars.push(`${endVar}Control${cpIdx + 1}`);
+  });
+  pointVars.push(endVar);
 
-    public Paths(Follower follower) {
-        this.follower = follower;
-        this.start = ${startPose};
-    }
+  const pointsList = pointVars.join(", ");
 
-    ${chainMethods}
-}`;
+  let headingArgs = "";
+  if (line.endPoint.heading === "constant") {
+    headingArgs = `Math.toRadians(${transformHeadingDegrees(line.endPoint.degrees ?? 0, options).toFixed(1)})`;
+  } else if (line.endPoint.heading === "linear") {
+    const startDeg = transformHeadingDegrees(
+      line.endPoint.startDeg ?? 0,
+      options,
+    ).toFixed(1);
+    const endDeg = transformHeadingDegrees(
+      line.endPoint.endDeg ?? 0,
+      options,
+    ).toFixed(1);
+    headingArgs = `Math.toRadians(${startDeg}), Math.toRadians(${endDeg})`;
+  }
+
+  const reverse = line.endPoint.reverse
+    ? `\n${indent}.setReversed()`
+    : "";
+
+  return [
+    `.addPath(${curveType}(${pointsList}))`,
+    `.${headingFn[line.endPoint.heading]}(${headingArgs})${reverse}`,
+  ].join(`\n${indent}`);
 }
 
-/**
- * Generate the Ivy-style autonomous OpMode, matching Far.java's structure:
- *
- *   public class AutoOpMode extends CommandOpMode {
- *       Paths p;
- *       ...
- *       public void init() { ... schedule(...) }
- *       public void start() { ... }
- *       public void stop() { ... }
- *   }
- */
-function buildIvyOpModeClass(
-  className: string,
-  normalizedChains: PathChain[],
-  startPoint: Point,
-  options: ExportTransformOptions,
-  pathsClassName: string = "Paths",
-): string {
-  // Build the sequential groups for each path chain
-  const chainCalls = normalizedChains
-    .map((chain, idx) => {
-      const methodName = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${idx + 1}`),
-      );
-      // Mirror the pattern from Far.java:
-      //   p.myPath()
-      //     .then(waitMs(250.0), robot.shootFar(p.score))
-      return `Groups.sequential(
-                    p.${methodName}()
-                )`;
-    })
-    .join(",\n                ");
-
-  return `@Autonomous(name = "${className}", group = "Autonomous")
-public class ${className} extends CommandOpMode {
-    ${pathsClassName} p;
-    Follower follower;
-    MultipleTelemetry telemetryM;
-
-    @Override
-    public void init() {
-        follower = new Follower(hardwareMap);
-        p = new ${pathsClassName}(follower);
-
-        follower.setStartingPose(p.start);
-        follower.update();
-
-        telemetryM = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
-        telemetryM.addData("Pose", follower.getPose());
-        telemetryM.update();
-
-        schedule(
-            Commands.infinite(() -> {
-                follower.update();
-
-                telemetryM.addData("Pose", follower.getPose());
-                telemetryM.addData("T Value", follower.getCurrentTValue());
-                telemetryM.update();
-            }),
-            Groups.sequential(
-                ${chainCalls}
-            )
-        );
-    }
-
-    @Override
-    public void start() {
-        // Add start logic here
-    }
-
-    @Override
-    public void stop() {
-        super.stop();
-    }
-}`;
-}
-
-export async function generateJavaCode(
-  startPoint: Point,
-  lines: Line[],
-  exportMode: "full" | "class" | "coordinates" = "class",
-  pathChains: PathChain[] = [],
-  mirrorHorizontally = false,
-): Promise<string> {
-  const transformOptions: ExportTransformOptions = { mirrorHorizontally };
-
-  const linesWithIds = lines.map((line, idx) => ({
-    ...line,
-    id: line.id || `line-${idx + 1}`,
-  })) as (Line & { id: string })[];
-
-  const lineById = new Map(linesWithIds.map((line) => [line.id, line]));
-
+function normalizeChains(
+  lines: (Line & { id: string })[],
+  pathChains: PathChain[],
+  lineById: Map<string, Line & { id: string }>,
+): PathChain[] {
   const inputChains: PathChain[] =
     pathChains.length > 0
       ? pathChains
-      : linesWithIds.map((line, idx) => ({
+      : lines.map((line, idx) => ({
           id: line.id,
           name: line.name || `Path${idx + 1}`,
           color: "#22c55e",
           lineIds: [line.id],
         }));
 
-  const normalizedChains: PathChain[] = inputChains
+  return inputChains
     .map((chain, idx) => ({
       ...chain,
       id: chain.id || `chain-${idx + 1}`,
@@ -309,61 +262,176 @@ export async function generateJavaCode(
       lineIds: (chain.lineIds || []).filter((id) => lineById.has(id)),
     }))
     .filter((chain) => chain.lineIds.length > 0);
+}
 
-  // ── coordinates-only mode ────────────────────────────────────────────────
-  if (exportMode === "coordinates") {
-    // Return just the raw pathBuilder() chains, one per PathChain
-    const snippets = normalizedChains.map((chain, chainIdx) => {
+function javaPoseDeclarations(
+  poses: Map<string, { x: number; y: number; headingRad?: number }>,
+): string {
+  const lines: string[] = [];
+
+  poses.forEach((pose, name) => {
+    const x = pose.x.toFixed(3);
+    const y = pose.y.toFixed(3);
+
+    if (pose.headingRad !== undefined) {
+      const hdg = pose.headingRad.toFixed(4);
+      lines.push(
+        `    private final Pose ${name} = new Pose(${x}, ${y}, ${hdg});`,
+      );
+    } else {
+      lines.push(
+        `    private final Pose ${name} = new Pose(${x}, ${y});`,
+      );
+    }
+  });
+
+  return lines.join("\n");
+}
+
+function javaPathMethods(
+  normalizedChains: PathChain[],
+  linesWithIds: (Line & { id: string })[],
+  options: ExportTransformOptions,
+  startPoint?: Point,
+): string {
+  const indent = "            ";
+
+  return normalizedChains
+    .map((chain, chainIdx) => {
+      const methodName = camelCase(
+        sanitizeIdentifier(chain.name, `pathChain${chainIdx + 1}`),
+      );
+
       const segments = chain.lineIds
         .map((lineId) => {
           const lineIndex = linesWithIds.findIndex((ln) => ln.id === lineId);
           const line = linesWithIds[lineIndex];
           if (!line) return null;
-          const startExpression =
-            lineIndex <= 0
-              ? `new Pose(${transformX(startPoint.x, transformOptions).toFixed(3)}, ${startPoint.y.toFixed(3)})`
-              : `new Pose(${transformX(linesWithIds[lineIndex - 1].endPoint.x, transformOptions).toFixed(3)}, ${linesWithIds[lineIndex - 1].endPoint.y.toFixed(3)})`;
-          return buildIvyPathSegmentCode(line, startExpression, transformOptions);
+          return buildJavaSegment(line, lineIndex, linesWithIds, options, indent, startPoint);
         })
         .filter((s): s is string => Boolean(s));
 
-      const methodName = camelCase(
+      return `    public PathChain ${methodName}() {
+        return follower.pathBuilder()
+            ${segments.join(`\n${indent}`)}
+            .build();
+    }`;
+    })
+    .join("\n\n");
+}
+
+function kotlinPoseDeclarations(
+  poses: Map<string, { x: number; y: number; headingRad?: number }>,
+): string {
+  const lines: string[] = [];
+
+  poses.forEach((pose, name) => {
+    const x = pose.x.toFixed(3);
+    const y = pose.y.toFixed(3);
+
+    if (pose.headingRad !== undefined) {
+      const hdg = pose.headingRad.toFixed(4);
+      lines.push(`    private val ${name} = Pose(${x}, ${y}, ${hdg})`);
+    } else {
+      lines.push(`    private val ${name} = Pose(${x}, ${y})`);
+    }
+  });
+
+  return lines.join("\n");
+}
+function kotlinPathMethods(
+  normalizedChains: PathChain[],
+  linesWithIds: (Line & { id: string })[],
+  options: ExportTransformOptions,
+  startPoint?: Point,
+): string {
+  const indent = "            ";
+
+  return normalizedChains
+    .map((chain, chainIdx) => {
+      const fnName = camelCase(
         sanitizeIdentifier(chain.name, `pathChain${chainIdx + 1}`),
       );
 
-      return `// ${methodName}\nfollower.pathBuilder()\n    ${segments.join("\n    ")}\n    .build();`;
-    });
+      const segments = chain.lineIds
+        .map((lineId) => {
+          const lineIndex = linesWithIds.findIndex((ln) => ln.id === lineId);
+          const line = linesWithIds[lineIndex];
+          if (!line) return null;
+          return buildKotlinSegment(
+            line,
+            lineIndex,
+            linesWithIds,
+            options,
+            indent,
+            startPoint,
+          );
+        })
+        .filter((s): s is string => Boolean(s));
 
-    return snippets.join("\n\n");
+      return `    fun ${fnName}(): PathChain =
+        follower.pathBuilder()
+            ${segments.join(`\n${indent}`)}
+            .build()`;
+    })
+    .join("\n\n");
+}
+export async function generateJavaCode(
+  startPoint: Point,
+  lines: Line[],
+  exportMode: "full" | "class" | "coordinates" = "class",
+  pathChains: PathChain[] = [],
+  mirrorHorizontally = false,
+): Promise<string> {
+  const options: ExportTransformOptions = { mirrorHorizontally };
+
+  const linesWithIds = lines.map((line, idx) => ({
+    ...line,
+    id: line.id || `line-${idx + 1}`,
+  })) as (Line & { id: string })[];
+
+  const lineById = new Map(linesWithIds.map((l) => [l.id, l]));
+  const chains = normalizeChains(linesWithIds, pathChains, lineById);
+  const poses = collectPoses(startPoint, linesWithIds, chains, options);
+
+  const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
+
+  if (exportMode === "coordinates") {
+    return javaPathMethods(chains, linesWithIds, options, startPoint);
   }
 
-  // ── class mode ───────────────────────────────────────────────────────────
-  const pathsClass = buildIvyPathsClass(
-    startPoint,
-    normalizedChains,
-    linesWithIds,
-    transformOptions,
-  );
+  const pathsClass = `public class Paths {
+    private final Follower follower;
+
+${javaPoseDeclarations(poses)}
+
+    public Paths(Follower follower) {
+        this.follower = follower;
+    }
+
+${javaPathMethods(chains, linesWithIds, options, startPoint)}
+}`;
 
   if (exportMode === "class") {
     try {
-      const javaPlugin = await loadJavaPlugin();
+      const plugin = await loadJavaPlugin();
       return await prettier.format(pathsClass, {
         parser: "java",
-        plugins: javaPlugin ? [javaPlugin] : [],
+        plugins: plugin ? [plugin] : [],
       });
     } catch {
       return pathsClass;
     }
   }
 
-  // ── full mode ────────────────────────────────────────────────────────────
-  const opModeClass = buildIvyOpModeClass(
-    "AutoOpMode",
-    normalizedChains,
-    startPoint,
-    transformOptions,
-  );
+  const chainCalls = chains
+    .map((chain, idx) => {
+      const name = camelCase(
+        sanitizeIdentifier(chain.name, `pathChain${idx + 1}`),
+      );
+      return `p.${name}()`;
+    })
+    .join(",\n                    ");
 
   const file = `package org.firstinspires.ftc.teamcode;
 
@@ -381,64 +449,71 @@ import com.pedropathing.ivy.groups.Groups;
 import com.pedropathing.paths.PathChain;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
-${opModeClass}
+@Autonomous(name = "AutoOpMode", group = "Autonomous")
+public class AutoOpMode extends CommandOpMode {
 
-${pathsClass}
+    Paths p;
+    Follower follower;
+    MultipleTelemetry telemetryM;
+
+    @Override
+    public void init() {
+        follower = new Follower(hardwareMap);
+        p = new Paths(follower);
+
+        follower.setStartingPose(p.getStart());
+        follower.update();
+
+        telemetryM = new MultipleTelemetry(
+            telemetry,
+            FtcDashboard.getInstance().getTelemetry()
+        );
+
+        schedule(
+            Commands.infinite(() -> {
+                follower.update();
+
+                telemetryM.addData("Pose", follower.getPose());
+                telemetryM.addData("T Value", follower.getCurrentTValue());
+                telemetryM.update();
+            }),
+
+            Groups.sequential(
+                    ${chainCalls}
+            )
+        );
+    }
+
+    @Override
+    public void start() {
+    }
+
+    @Override
+    public void stop() {
+        super.stop();
+    }
+}
+
+${pathsClass.replace(
+  "public Paths(Follower follower) {",
+  `public Pose getStart() {
+        return ${startVarName};
+    }
+
+    public Paths(Follower follower) {`,
+)}
 `;
 
   try {
-    const javaPlugin = await loadJavaPlugin();
+    const plugin = await loadJavaPlugin();
     return await prettier.format(file, {
       parser: "java",
-      plugins: javaPlugin ? [javaPlugin] : [],
+      plugins: plugin ? [plugin] : [],
     });
   } catch (error) {
     console.error("Code formatting error:", error);
     return file;
   }
-}
-
-// ── Kotlin generation (kept compatible, same structural style) ────────────────
-
-function buildKotlinPathSegmentCode(
-  line: Line,
-  startExpression: string,
-  options: ExportTransformOptions,
-): string {
-  const headingFnMap: Record<string, string> = {
-    constant: "setConstantHeadingInterpolation",
-    linear: "setLinearHeadingInterpolation",
-    tangential: "setTangentHeadingInterpolation",
-  };
-
-  const curveType =
-    line.controlPoints.length === 0 ? "BezierLine" : "BezierCurve";
-
-  const endPose = `Pose(${transformX(line.endPoint.x, options).toFixed(3)}, ${line.endPoint.y.toFixed(3)})`;
-
-  const controlPointsStr = line.controlPoints
-    .map(
-      (pt) =>
-        `Pose(${transformX(pt.x, options).toFixed(3)}, ${pt.y.toFixed(3)})`,
-    )
-    .join(", ");
-
-  const allPoints =
-    controlPointsStr
-      ? `${startExpression}, ${controlPointsStr}, ${endPose}`
-      : `${startExpression}, ${endPose}`;
-
-  let headingArgs = "";
-  if (line.endPoint.heading === "constant") {
-    headingArgs = `Math.toRadians(${transformHeadingDegrees(line.endPoint.degrees ?? 0, options).toFixed(3)})`;
-  } else if (line.endPoint.heading === "linear") {
-    headingArgs = `Math.toRadians(${transformHeadingDegrees(line.endPoint.startDeg ?? 0, options).toFixed(3)}), Math.toRadians(${transformHeadingDegrees(line.endPoint.endDeg ?? 0, options).toFixed(3)})`;
-  }
-
-  const reverseStr = line.endPoint.reverse ? "\n            .setReversed()" : "";
-
-  return `.addPath(${curveType}(${allPoints}))
-            .${headingFnMap[line.endPoint.heading]}(${headingArgs})${reverseStr}`;
 }
 
 export async function generateKotlinCode(
@@ -448,100 +523,49 @@ export async function generateKotlinCode(
   pathChains: PathChain[] = [],
   mirrorHorizontally = false,
 ): Promise<string> {
-  const transformOptions: ExportTransformOptions = { mirrorHorizontally };
+  const options: ExportTransformOptions = { mirrorHorizontally };
 
   const linesWithIds = lines.map((line, idx) => ({
     ...line,
     id: line.id || `line-${idx + 1}`,
   })) as (Line & { id: string })[];
 
-  const lineById = new Map(linesWithIds.map((line) => [line.id, line]));
+  const lineById = new Map(linesWithIds.map((l) => [l.id, l]));
+  const chains = normalizeChains(linesWithIds, pathChains, lineById);
+  const poses = collectPoses(startPoint, linesWithIds, chains, options);
 
-  const inputChains: PathChain[] =
-    pathChains.length > 0
-      ? pathChains
-      : linesWithIds.map((line, idx) => ({
-          id: line.id,
-          name: line.name || `Path${idx + 1}`,
-          color: "#22c55e",
-          lineIds: [line.id],
-        }));
-
-  const normalizedChains: PathChain[] = inputChains
-    .map((chain, idx) => ({
-      ...chain,
-      id: chain.id || `chain-${idx + 1}`,
-      name: chain.name || `PathChain${idx + 1}`,
-      lineIds: (chain.lineIds || []).filter((id) => lineById.has(id)),
-    }))
-    .filter((chain) => chain.lineIds.length > 0);
-
-  const startPose = `Pose(${transformX(startPoint.x, transformOptions).toFixed(3)}, ${startPoint.y.toFixed(3)}, Math.toRadians(0.0))`;
-
-  // Build fun declarations for each PathChain
-  const chainFunctions = normalizedChains
-    .map((chain, chainIdx) => {
-      const fnName = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${chainIdx + 1}`),
-      );
-
-      const segments = chain.lineIds
-        .map((lineId) => {
-          const lineIndex = linesWithIds.findIndex((ln) => ln.id === lineId);
-          const line = linesWithIds[lineIndex];
-          if (!line) return null;
-          const startExpression =
-            lineIndex <= 0
-              ? `Pose(${transformX(startPoint.x, transformOptions).toFixed(3)}, ${startPoint.y.toFixed(3)})`
-              : `Pose(${transformX(linesWithIds[lineIndex - 1].endPoint.x, transformOptions).toFixed(3)}, ${linesWithIds[lineIndex - 1].endPoint.y.toFixed(3)})`;
-          return buildKotlinPathSegmentCode(
-            line,
-            startExpression,
-            transformOptions,
-          );
-        })
-        .filter((s): s is string => Boolean(s));
-
-      return `    fun ${fnName}(): PathChain =
-        follower.pathBuilder()
-            ${segments.join("\n            ")}
-            .build()`;
-    })
-    .join("\n\n");
-
-  // Coordinates-only
   if (exportMode === "coordinates") {
-    return chainFunctions;
+    return kotlinPathMethods(chains, linesWithIds, options, startPoint);
   }
 
   const pathsClass = `class Paths(private val follower: Follower) {
-    val start: Pose = ${startPose}
 
-${chainFunctions}
+${kotlinPoseDeclarations(poses)}
+
+${kotlinPathMethods(chains, linesWithIds, options, startPoint)}
 }`;
 
   if (exportMode === "class") {
     try {
-      const kotlinPlugin = await loadKotlinPlugin();
-      if (!kotlinPlugin) return pathsClass;
+      const plugin = await loadKotlinPlugin();
+      if (!plugin) return pathsClass;
       return await prettier.format(pathsClass, {
         parser: "kotlin",
-        plugins: [kotlinPlugin],
+        plugins: [plugin],
       });
     } catch {
       return pathsClass;
     }
   }
 
-  // Full mode
-  const chainCalls = normalizedChains
+  const chainCalls = chains
     .map((chain, idx) => {
-      const fnName = camelCase(
+      const name = camelCase(
         sanitizeIdentifier(chain.name, `pathChain${idx + 1}`),
       );
-      return `Groups.sequential(\n            p.${fnName}()\n        )`;
+      return `p.${name}()`;
     })
-    .join(",\n        ");
+    .join(",\n                ");
 
   const file = `package org.firstinspires.ftc.teamcode
 
@@ -555,9 +579,9 @@ import com.pedropathing.paths.PathChain
 
 ${pathsClass}
 
-// TODO: Replace with your CommandOpMode subclass
 class AutoOpMode : CommandOpMode() {
-    lateinit var p: Paths
+
+    lazy var p: Paths
     lateinit var follower: Follower
 
     override fun init() {
@@ -573,6 +597,7 @@ class AutoOpMode : CommandOpMode() {
                 telemetry.addData("Pose", follower.getPose())
                 telemetry.update()
             },
+
             Groups.sequential(
                 ${chainCalls}
             )
@@ -582,19 +607,17 @@ class AutoOpMode : CommandOpMode() {
 `;
 
   try {
-    const kotlinPlugin = await loadKotlinPlugin();
-    if (!kotlinPlugin) return file;
+    const plugin = await loadKotlinPlugin();
+    if (!plugin) return file;
     return await prettier.format(file, {
       parser: "kotlin",
-      plugins: [kotlinPlugin],
+      plugins: [plugin],
     });
   } catch (error) {
     console.error("Kotlin code formatting error:", error);
     return file;
   }
 }
-
-// ── Points array (unchanged) ─────────────────────────────────────────────────
 
 export function generatePointsArray(startPoint: Point, lines: Line[]): string {
   const points: BasePoint[] = [startPoint];
@@ -619,8 +642,6 @@ export function generatePointsArray(startPoint: Point, lines: Line[]): string {
   return `[${pointsString}]`;
 }
 
-// ── Sequential Command (kept for backward compat, now uses Ivy style) ────────
-
 export async function generateSequentialCommandCode(
   startPoint: Point,
   lines: Line[],
@@ -630,42 +651,54 @@ export async function generateSequentialCommandCode(
   let className = "AutoPath";
   if (fileName) {
     const baseName = fileName.split(/[\\/]/).pop() || "";
-    className = baseName.replace(".pp", "").replace(/[^a-zA-Z0-9]/g, "_") || "AutoPath";
+    className =
+      baseName.replace(".pp", "").replace(/[^a-zA-Z0-9]/g, "_") || "AutoPath";
   }
+
+  const options: ExportTransformOptions = { mirrorHorizontally: false };
 
   const linesWithIds = lines.map((line, idx) => ({
     ...line,
     id: line.id || `line-${idx + 1}`,
   })) as (Line & { id: string })[];
 
-  // Build one PathChain per line for the sequential command format
-  const normalizedChains: PathChain[] = linesWithIds.map((line, idx) => ({
+  const lineById = new Map(linesWithIds.map((l) => [l.id, l]));
+
+  const chains: PathChain[] = linesWithIds.map((line, idx) => ({
     id: line.id,
     name: line.name || `Path${idx + 1}`,
     color: "#22c55e",
     lineIds: [line.id],
   }));
 
-  const transformOptions: ExportTransformOptions = { mirrorHorizontally: false };
+  const normalized = normalizeChains(linesWithIds, chains, lineById);
+  const poses = collectPoses(startPoint, linesWithIds, normalized, options);
 
-  // Method declarations for each path
-  const pathMethods = normalizedChains
-    .map((chain, idx) =>
-      buildIvyPathChainMethod(chain, idx, linesWithIds, startPoint, transformOptions),
-    )
-    .join("\n\n    ");
+  const defaultSeq: SequenceItem[] = lines.map((ln, idx) => ({
+    kind: "path",
+    lineId: ln.id || `line-${idx + 1}`,
+  }));
+  const seq = sequence && sequence.length ? sequence : defaultSeq;
 
-  // Sequential schedule calls
-  const chainCalls = normalizedChains
-    .map((chain, idx) => {
-      const methodName = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${idx + 1}`),
-      );
-      return `${methodName}()`;
-    })
-    .join(",\n                ");
+  const commands: string[] = [];
+  seq.forEach((item) => {
+    if (item.kind === "wait") {
+      commands.push(`waitMs(${(item as any).durationMs}.0)`);
+      return;
+    }
+    const lineIdx = linesWithIds.findIndex(
+      (l) => l.id === (item as any).lineId,
+    );
+    if (lineIdx < 0) return;
 
-  const startPose = `new Pose(${transformX(startPoint.x, transformOptions).toFixed(3)}, ${startPoint.y.toFixed(3)}, Math.toRadians(0))`;
+    const name = camelCase(
+      sanitizeIdentifier(
+        linesWithIds[lineIdx].name,
+        `path${lineIdx + 1}`,
+      ),
+    );
+    commands.push(`${name}()`);
+  });
 
   const file = `package org.firstinspires.ftc.teamcode;
 
@@ -685,20 +718,23 @@ import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 
 @Autonomous(name = "${className}", group = "Autonomous")
 public class ${className} extends CommandOpMode {
+
     Follower follower;
     MultipleTelemetry telemetryM;
 
-    public final Pose start = ${startPose};
+${javaPoseDeclarations(poses)}
 
     @Override
     public void init() {
         follower = new Follower(hardwareMap);
+
         follower.setStartingPose(start);
         follower.update();
 
-        telemetryM = new MultipleTelemetry(telemetry, FtcDashboard.getInstance().getTelemetry());
-        telemetryM.addData("Pose", follower.getPose());
-        telemetryM.update();
+        telemetryM = new MultipleTelemetry(
+            telemetry,
+            FtcDashboard.getInstance().getTelemetry()
+        );
 
         schedule(
             Commands.infinite(() -> {
@@ -708,15 +744,15 @@ public class ${className} extends CommandOpMode {
                 telemetryM.addData("T Value", follower.getCurrentTValue());
                 telemetryM.update();
             }),
+
             Groups.sequential(
-                ${chainCalls}
+                    ${commands.join(",\n                    ")}
             )
         );
     }
 
     @Override
     public void start() {
-        // Add start logic here
     }
 
     @Override
@@ -724,15 +760,15 @@ public class ${className} extends CommandOpMode {
         super.stop();
     }
 
-    ${pathMethods}
+${javaPathMethods(normalized, linesWithIds, options, startPoint)}
 }
 `;
 
   try {
-    const javaPlugin = await loadJavaPlugin();
+    const plugin = await loadJavaPlugin();
     return await prettier.format(file, {
       parser: "java",
-      plugins: javaPlugin ? [javaPlugin] : [],
+      plugins: plugin ? [plugin] : [],
     });
   } catch (error) {
     console.error("Code formatting error:", error);
