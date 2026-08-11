@@ -9,7 +9,18 @@ export * from "./shapes";
 export * from "./timeCalculator";
 export * from "./directorySettings";
 
-export const DPI = 96 / 5;
-
-export const titleCase = (str: string) =>
-  `${str[0].toUpperCase()}${str.slice(1).toLowerCase()}`;
+export {
+  segmentSupportsReverse,
+  createDefaultPiecewiseSegment,
+  createDefaultPiecewiseHeadingInterpolation,
+  normalizePiecewiseHeadingInterpolation,
+  validatePiecewiseHeadingInterpolation,
+  degreesToRadians,
+  radiansToDegrees as headingRadiansToDegrees,
+  toDegreesDisplay,
+  lineCurvePoints,
+  approximateCurveLength,
+  getPointAndTangentAtProgress,
+  getChainTraversalState,
+  evaluatePiecewiseHeading,
+} from "./headingInterpolation";

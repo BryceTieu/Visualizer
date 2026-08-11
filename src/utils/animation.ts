@@ -5,13 +5,29 @@ import {
   radiansToDegrees,
 } from "./math";
 import { getRobotCorners } from "./geometry";
-import type { Point, Line, TimelineEvent, BasePoint, Settings } from "../types";
+import {
+  approximateCurveLength,
+  evaluatePiecewiseHeading,
+  getChainTraversalState,
+  getPointAndTangentAtProgress,
+  lineCurvePoints,
+  normalizePiecewiseHeadingInterpolation,
+} from "./headingInterpolation";
+import type {
+  Point,
+  Line,
+  TimelineEvent,
+  BasePoint,
+  Settings,
+  PathChain,
+} from "../types";
 import type { ScaleLinear } from "d3";
 
 export interface RobotState {
   x: number;
   y: number;
   heading: number;
+  t?: number | null;
 }
 
 type AnimationState = {
@@ -35,9 +51,10 @@ export function calculateRobotState(
   settings: Settings,
   xScale: ScaleLinear<number, number>,
   yScale: ScaleLinear<number, number>,
+  pathChains: PathChain[] = [],
 ): RobotState {
   if (!timeline || timeline.length === 0) {
-    return { x: xScale(startPoint.x), y: yScale(startPoint.y), heading: 0 };
+    return { x: xScale(startPoint.x), y: yScale(startPoint.y), heading: 0, t: null };
   }
 
   // Calculate current time in seconds based on percent (0-100)
@@ -71,6 +88,7 @@ export function calculateRobotState(
       x: xScale(point.x),
       y: yScale(point.y),
       heading: -currentHeading,
+      t: null,
     };
   } else {
     // --- MOVEMENT TRAVEL ---
@@ -83,7 +101,7 @@ export function calculateRobotState(
 
     // Determine fraction along the path using motion profile when available
     let linePercent = 0;
-    const curvePoints = [prevPoint, ...currentLine.controlPoints, currentLine.endPoint];
+    const curvePoints = lineCurvePoints(prevPoint, currentLine);
 
     // Helper: approximate curve length by sampling
     function calculateCurveLength(start: BasePoint, controlPoints: BasePoint[], end: BasePoint, samples = 100) {
@@ -100,7 +118,7 @@ export function calculateRobotState(
       return length;
     }
 
-    const segLength = calculateCurveLength(prevPoint as BasePoint, currentLine.controlPoints as BasePoint[], currentLine.endPoint as BasePoint);
+    const segLength = approximateCurveLength(curvePoints as BasePoint[]);
 
     // If settings provide a motion profile, compute distance fraction accordingly
     if (
@@ -176,43 +194,84 @@ export function calculateRobotState(
     const robotXY = { x: xScale(robotInchesXY.x), y: yScale(robotInchesXY.y) };
     let robotHeading = 0;
 
-    // Calculate Heading based on Line Type
-    switch (currentLine.endPoint.heading) {
-      case "linear":
-        robotHeading = -shortestRotation(
-          currentLine.endPoint.startDeg,
-          currentLine.endPoint.endDeg,
-          linePercent,
-        );
-        break;
-      case "constant":
-        robotHeading = -currentLine.endPoint.degrees;
-        break;
-      case "tangential":
-        const nextPointInches = getCurvePoint(
-          linePercent + (currentLine.endPoint.reverse ? -0.01 : 0.01),
-          [prevPoint, ...currentLine.controlPoints, currentLine.endPoint],
-        );
-        const nextPoint = {
-          x: xScale(nextPointInches.x),
-          y: yScale(nextPointInches.y),
-        };
-        const dx = nextPoint.x - robotXY.x;
-        const dy = nextPoint.y - robotXY.y;
+    const lineChain = pathChains.find((chain) => (chain.lineIds || []).includes(currentLine.id || ""));
+    const lineTraversal = getPointAndTangentAtProgress(curvePoints as BasePoint[], linePercent, currentLine.endPoint.reverse);
+    const globalPiecewise =
+      currentLine.endPoint.heading === "piecewise" &&
+      (currentLine.endPoint.piecewiseHeading.scope || "path") === "path"
+        ? currentLine.endPoint.piecewiseHeading
+        : lineChain?.globalHeadingInterpolation;
 
-        if (dx !== 0 || dy !== 0) {
-          // atan2 returns angle in pixels (Y is down), so -90 is Up.
-          // This matches the -heading logic used elsewhere.
-          const angle = Math.atan2(dy, dx);
-          robotHeading = radiansToDegrees(angle);
-        }
-        break;
+    const chainTraversal =
+      globalPiecewise && lineChain
+        ? (() => {
+            const chainLines = (lineChain.lineIds || [])
+              .map((lineId) => lines.find((line) => line.id === lineId))
+              .filter((line): line is Line => Boolean(line));
+            const currentChainIndex = chainLines.findIndex((line) => line.id === currentLine.id);
+            if (currentChainIndex < 0) return null;
+
+            const chainLengths = chainLines.map((line, index) => {
+              const start = index === 0 ? startPoint : chainLines[index - 1].endPoint;
+              return approximateCurveLength(lineCurvePoints(start, line) as BasePoint[]);
+            });
+            const totalLength = chainLengths.reduce((sum, value) => sum + value, 0);
+            if (totalLength <= 1e-9) return null;
+
+            const priorLength = chainLengths.slice(0, currentChainIndex).reduce((sum, value) => sum + value, 0);
+            const currentLength = chainLengths[currentChainIndex] || 0;
+            const chainProgress = (priorLength + currentLength * linePercent) / totalLength;
+            return getChainTraversalState(lineChain, lines, startPoint, chainProgress);
+          })()
+        : null;
+
+    // Calculate Heading based on Line Type
+    if (globalPiecewise) {
+      robotHeading = -evaluatePiecewiseHeading(globalPiecewise, chainTraversal ? (lineChain ? (chainTraversal ? 0 : 0) : 0) : linePercent, {
+        points: curvePoints as BasePoint[],
+        currentPoint: chainTraversal?.point || lineTraversal.point,
+        tangentDegrees: chainTraversal?.tangentDegrees ?? lineTraversal.tangentDegrees,
+        chainState: chainTraversal || undefined,
+      });
+    } else {
+      switch (currentLine.endPoint.heading) {
+        case "linear":
+          robotHeading = -shortestRotation(
+            currentLine.endPoint.startDeg,
+            currentLine.endPoint.endDeg,
+            linePercent,
+          );
+          break;
+        case "constant":
+          robotHeading = -currentLine.endPoint.degrees;
+          break;
+        case "tangential":
+          const nextPointInches = getCurvePoint(
+            linePercent + (currentLine.endPoint.reverse ? -0.01 : 0.01),
+            [prevPoint, ...currentLine.controlPoints, currentLine.endPoint],
+          );
+          const nextPoint = {
+            x: xScale(nextPointInches.x),
+            y: yScale(nextPointInches.y),
+          };
+          const dx = nextPoint.x - robotXY.x;
+          const dy = nextPoint.y - robotXY.y;
+
+          if (dx !== 0 || dy !== 0) {
+            // atan2 returns angle in pixels (Y is down), so -90 is Up.
+            // This matches the -heading logic used elsewhere.
+            const angle = Math.atan2(dy, dx);
+            robotHeading = radiansToDegrees(angle);
+          }
+          break;
+      }
     }
 
     return {
       x: robotXY.x,
       y: robotXY.y,
       heading: robotHeading,
+      t: linePercent,
     };
   }
 }

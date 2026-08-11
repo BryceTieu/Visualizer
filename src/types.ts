@@ -6,6 +6,30 @@ export interface BasePoint {
   locked?: boolean;
 }
 
+export type PiecewiseHeadingInterpolationType =
+  | "linear"
+  | "constant"
+  | "tangential"
+  | "facing-point";
+
+export interface PiecewiseHeadingSegment {
+  startProgress: number;
+  endProgress: number;
+  interpolationType: PiecewiseHeadingInterpolationType;
+  reversed?: boolean;
+  parameters?: {
+    startDeg?: number;
+    endDeg?: number;
+    degrees?: number;
+    point?: BasePoint;
+  };
+}
+
+export interface PiecewiseHeadingInterpolation {
+  scope?: "path" | "chain";
+  segments: PiecewiseHeadingSegment[];
+}
+
 export interface FieldPoint extends BasePoint {
   color?: string;
   radius?: number;
@@ -20,6 +44,7 @@ export type Point = BasePoint &
         endDeg: number;
         degrees?: never;
         reverse?: never;
+        name?: string;
       }
     | {
         heading: "constant";
@@ -27,6 +52,7 @@ export type Point = BasePoint &
         startDeg?: never;
         endDeg?: never;
         reverse?: never;
+        name?: string;
       }
     | {
         heading: "tangential";
@@ -34,6 +60,16 @@ export type Point = BasePoint &
         startDeg?: never;
         endDeg?: never;
         reverse: boolean;
+        name?: string;
+      }
+    | {
+        heading: "piecewise";
+        piecewiseHeading: PiecewiseHeadingInterpolation;
+        degrees?: never;
+        startDeg?: never;
+        endDeg?: never;
+        reverse?: never;
+        name?: string;
       }
   );
 
@@ -81,6 +117,7 @@ export interface PathChain {
   name: string;
   color: string;
   lineIds: string[];
+  globalHeadingInterpolation?: PiecewiseHeadingInterpolation;
 }
 
 export interface Settings {
@@ -104,6 +141,9 @@ export interface Settings {
   onionColor?: string; // Color for onion-layer colliders
   onionNextPointOnly?: boolean; // When true, onion layers show only for the next point (UI-only for now)
   showHeadingArrow?: boolean; // Show arrow indicating robot heading direction
+  showCurrentTValue?: boolean; // Show the current path t value near the robot
+  leftPanelWidth?: number; // Width of the left sidebar in pixels
+  rightPanelWidth?: number; // Width of the right sidebar in pixels
   headingArrowLength?: number; // Length of the heading arrow in pixels
   headingArrowColor?: string; // Color of the heading arrow
   headingArrowThickness?: number; // Thickness/stroke width of the heading arrow

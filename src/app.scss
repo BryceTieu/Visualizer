@@ -348,8 +348,8 @@ body {
 .side-rail {
   display: flex;
   flex-direction: column;
-  padding: 10px;
-  gap: 10px;
+  padding: 8px;
+  gap: 8px;
   overflow: hidden;
 }
 
@@ -416,7 +416,7 @@ body {
 .module-box {
   border: 1px solid var(--ui-border);
   background: rgba(7, 10, 7, 0.88);
-  padding: 10px;
+  padding: 8px;
 }
 
 .module-fill {
@@ -432,14 +432,14 @@ body {
 }
 
 .module-title {
-  font-size: 0.99rem;
+  font-size: 0.94rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: #e4ecd9;
 }
 
 .module-caption {
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   color: var(--ui-muted);
 }
 
@@ -453,8 +453,8 @@ body {
   border: 1px solid var(--ui-border);
   background: #0f0f0f;
   font-family: "Fira Code", "Consolas", monospace;
-  padding: 8px;
-  font-size: 0.88rem;
+  padding: 7px;
+  font-size: 0.83rem;
   color: #d0d0d0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -465,7 +465,7 @@ body {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
   overflow: auto;
   max-height: 100%;
 }
@@ -473,41 +473,41 @@ body {
 .list-item-box {
   border: 1px solid var(--ui-border);
   background: #1a1a1a;
-  padding: 7px 8px;
+  padding: 6px 7px;
 }
 
 .list-item-box.compact {
-  padding: 6px 8px;
+  padding: 5px 7px;
 }
 
 .list-item-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .list-item-index {
   color: #888888;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
 }
 
 .list-item-name {
   color: #d8d8d8;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
   font-weight: 500;
 }
 
 .list-item-sub {
   margin-top: 2px;
   color: var(--ui-muted);
-  font-size: 0.75rem;
+  font-size: 0.7rem;
 }
 
 .list-empty {
   color: var(--ui-muted);
-  font-size: 0.78rem;
-  padding: 6px 2px;
+  font-size: 0.72rem;
+  padding: 5px 2px;
 }
 
 .chain-swatch {
@@ -588,23 +588,23 @@ body {
 .chain-panel {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.6rem;
 }
 
 .chain-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-height: 15rem;
+  gap: 0.35rem;
+  max-height: 11rem;
   overflow: auto;
 }
 
 .chain-card {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.45rem;
   width: 100%;
-  padding: 0.55rem 0.65rem;
+  padding: 0.42rem 0.5rem;
   border: 1px solid var(--ui-border);
   background: #191919;
   color: var(--ui-text);
@@ -622,8 +622,8 @@ body {
 }
 
 .chain-swatch {
-  width: 0.95rem;
-  height: 0.95rem;
+  width: 0.72rem;
+  height: 0.72rem;
   border: 1px solid rgba(255, 255, 255, 0.16);
   flex: none;
 }
@@ -631,28 +631,29 @@ body {
 .chain-card-copy {
   display: flex;
   min-width: 0;
-  flex: 1;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.02rem;
 }
 
 .chain-card-title {
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 700;
+  line-height: 1.05;
   letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .chain-card-meta {
-  font-size: 0.74rem;
+  font-size: 0.66rem;
+  line-height: 1.05;
   color: var(--ui-muted);
 }
 
 .chain-selected-tag {
   border: 1px solid rgba(141, 104, 189, 0.45);
   background: rgba(141, 104, 189, 0.14);
-  padding: 0.15rem 0.35rem;
-  font-size: 0.65rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -661,10 +662,10 @@ body {
 .chain-editor {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.5rem;
   border: 1px solid var(--ui-border);
   background: #141414;
-  padding: 0.65rem;
+  padding: 0.55rem;
 }
 
 .chain-editor-row {
@@ -672,31 +673,20 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.6rem;
 }
-
 .chain-field {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
   min-width: 0;
 }
 
 .chain-field-label {
-  font-size: 0.7rem;
   color: var(--ui-muted);
-  text-transform: uppercase;
+  font-size: 0.68rem;
   letter-spacing: 0.05em;
 }
 
 .chain-field--swatch {
-  width: 5.4rem;
-}
-
-.chain-color-input {
   width: 100%;
-  height: 2rem;
-  border: 1px solid #444444;
-  background: #101010;
-  padding: 0;
 }
 
 .chain-note {

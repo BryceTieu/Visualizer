@@ -36,6 +36,14 @@ export function transformAngle(angle: number) {
   return ((angle + 180) % 360) - 180;
 }
 
+export function normalizeAngleDegrees(angle: number): number {
+  if (!Number.isFinite(angle)) return 0;
+  let normalized = angle % 360;
+  if (normalized > 180) normalized -= 360;
+  if (normalized <= -180) normalized += 360;
+  return normalized;
+}
+
 /**
  * Calculates the smallest difference between two angles.
  * Returns a value between -180 and 180.
@@ -67,6 +75,27 @@ export function shortestRotation(
   const diff = getAngularDifference(startAngle, endAngle);
   // Apply difference to the ORIGINAL startAngle to preserve winding/continuity
   return startAngle + diff * percentage;
+}
+
+export function reversedRotation(
+  startAngle: number,
+  endAngle: number,
+  percentage: number,
+) {
+  const shortest = getAngularDifference(startAngle, endAngle);
+  const longWay = shortest >= 0 ? shortest - 360 : shortest + 360;
+  return normalizeAngleDegrees(startAngle + longWay * percentage);
+}
+
+export function interpolateAngleDegrees(
+  startAngle: number,
+  endAngle: number,
+  percentage: number,
+  reversed = false,
+) {
+  return reversed
+    ? reversedRotation(startAngle, endAngle, percentage)
+    : shortestRotation(startAngle, endAngle, percentage);
 }
 
 export function radiansToDegrees(radians: number) {

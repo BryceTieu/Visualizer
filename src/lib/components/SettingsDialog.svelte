@@ -2,7 +2,7 @@
   import { cubicInOut } from "svelte/easing";
   import { fade, fly } from "svelte/transition";
   import { resetSettings } from "../../utils/settingsPersistence";
-  import { AVAILABLE_FIELD_MAPS } from "../../config/defaults";
+  import { AVAILABLE_FIELD_MAPS, DEFAULT_SETTINGS } from "../../config/defaults";
   import type { Settings } from "../../types";
 
   export let isOpen = false;
@@ -59,6 +59,18 @@
     const target = e.currentTarget as HTMLInputElement | null;
     if (!target) return;
     handleNumberInput(target.value, "rightPanelMinWidth", 0, 600);
+  }
+
+  function handleLeftPanelWidthInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    handleNumberInput(target.value, "leftPanelWidth", 180, 800);
+  }
+
+  function handleRightPanelWidthInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    handleNumberInput(target.value, "rightPanelWidth", 180, 800);
   }
 
   // Helper function to convert file to base64
@@ -785,6 +797,85 @@
                 </div>
               </div>
 
+              <div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.showCurrentTValue}
+                    class="console-checkbox w-4 h-4 text-blue-500 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    Show Current T Value
+                  </span>
+                </label>
+                <div class="text-xs text-neutral-500 dark:text-neutral-400 ml-6 mt-1">
+                  Display the active path t value beside the robot while it is moving
+                </div>
+              </div>
+
+              <div class="console-section p-3 space-y-3">
+                <div class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                  Panel Layout
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Left Panel Width
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="180"
+                      max="800"
+                      step="5"
+                      value={settings.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 370}
+                      on:input={handleLeftPanelWidthInput}
+                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Right Panel Width
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="180"
+                      max="800"
+                      step="5"
+                      value={settings.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 620}
+                      on:input={handleRightPanelWidthInput}
+                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Right Panel Minimum Width
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="600"
+                      step="5"
+                      value={settings.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth ?? 0}
+                      on:input={handleRightPanelMinWidthInput}
+                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
+                  </div>
+                  <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                    Prevents the right sidebar from being squished smaller than this. Set to 0 for no limit.
+                  </div>
+                </div>
+              </div>
+
               <!-- Field Map Section -->
 
               <div>
@@ -1111,30 +1202,6 @@
                 </div>
                 <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                   Controls visibility of path lines
-                </div>
-              </div>
-
-              <!-- Sidebar Width Limits -->
-              <div
-                class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
-              >
-                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Right Panel Minimum Width
-                </label>
-                <div class="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="0"
-                    max="600"
-                    step="5"
-                    value={settings.rightPanelMinWidth ?? 280}
-                    on:input={handleRightPanelMinWidthInput}
-                    class="w-28 px-2 py-1 rounded border bg-white dark:bg-neutral-800"
-                  />
-                  <span class="text-sm text-neutral-600 dark:text-neutral-400">px</span>
-                </div>
-                <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
-                  Prevents the right sidebar from being squished smaller than this. Set to 0 for no limit.
                 </div>
               </div>
 

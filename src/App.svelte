@@ -98,11 +98,11 @@
   let width = 0;
   let height = 0;
   const SIDE_PANEL_MIN_WIDTH = 240;
-  const SIDE_PANEL_MAX_WIDTH = 430;
-  const CENTER_MIN_WIDTH = 420;
+  const SIDE_PANEL_MAX_WIDTH = 620;
+  const CENTER_MIN_WIDTH = 300;
   const PANEL_DIVIDER_WIDTH = 18;
-  let leftPanelWidth = 330;
-  let rightPanelWidth = 360;
+  let leftPanelWidth = DEFAULT_SETTINGS.leftPanelWidth || 370;
+  let rightPanelWidth = DEFAULT_SETTINGS.rightPanelWidth || 620;
   let leftPanelHidden = false;
   let rightPanelHidden = false;
   let panelResizeState:
@@ -114,6 +114,7 @@
   $: robotHeight = settings?.rHeight || DEFAULT_ROBOT_HEIGHT;
   let robotXY: BasePoint = { x: 0, y: 0 };
   let robotHeading: number = 0;
+  let robotT: number | null = null;
   // Animation state
   let percent: number = 0;
   let playing = false;
@@ -680,6 +681,21 @@
     return clamp(desiredWidth, minWidth, Math.max(minWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxWidth)));
   }
 
+  $: leftPanelWidth = leftPanelHidden
+    ? 0
+    : clamp(
+        Number(settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 240),
+        SIDE_PANEL_MIN_WIDTH,
+        SIDE_PANEL_MAX_WIDTH,
+      );
+  $: rightPanelWidth = rightPanelHidden
+    ? 0
+    : clamp(
+        Number(settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 360),
+        Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth)),
+        SIDE_PANEL_MAX_WIDTH,
+      );
+
   function beginPanelResize(side: "left" | "right", event: MouseEvent) {
     event.preventDefault();
     event.stopPropagation();
@@ -715,11 +731,13 @@
       const desiredWidth = panelResizeState.startWidth + (event.clientX - panelResizeState.startX);
       leftPanelHidden = false;
       leftPanelWidth = clampPanelWidth("left", desiredWidth, availableWidth, otherWidth);
+      settings.leftPanelWidth = leftPanelWidth;
     } else {
       const otherWidth = leftPanelHidden ? 0 : leftPanelWidth;
       const desiredWidth = panelResizeState.startWidth - (event.clientX - panelResizeState.startX);
       rightPanelHidden = false;
       rightPanelWidth = clampPanelWidth("right", desiredWidth, availableWidth, otherWidth);
+      settings.rightPanelWidth = rightPanelWidth;
     }
   }
 
@@ -1064,10 +1082,12 @@
       );
       robotXY = { x: state.x, y: state.y };
       robotHeading = state.heading;
+      robotT = state.t ?? null;
     } else {
       // Fallback for initialization
       robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
       robotHeading = 0;
+      robotT = null;
     }
   }
 
@@ -2243,8 +2263,7 @@
     // Update robot dimensions from loaded settings
     robotWidth = settings.rWidth;
     robotHeight = settings.rHeight;
-    // Ensure panel widths obey min/max after loading settings and maximize sidebars
-    maximizePanelsToAllowed();
+    // Ensure panel widths obey min/max after loading settings
     clampAllPanels();
     if (typeof window !== "undefined") {
       window.addEventListener("resize", clampAllPanels);
@@ -2270,6 +2289,8 @@
     leftPanelWidth = clampPanelWidth("left", leftPanelWidth, availableWidth, otherForLeft);
     const otherForRight = leftPanelHidden ? 0 : leftPanelWidth;
     rightPanelWidth = clampPanelWidth("right", rightPanelWidth, availableWidth, otherForRight);
+    settings.leftPanelWidth = leftPanelWidth;
+    settings.rightPanelWidth = rightPanelWidth;
   }
 
   function maximizePanelsToAllowed() {
@@ -2284,6 +2305,8 @@
     const rightTarget = Math.max(rightPanelMinWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
     leftPanelWidth = leftTarget;
     rightPanelWidth = rightTarget;
+    settings.leftPanelWidth = leftPanelWidth;
+    settings.rightPanelWidth = rightPanelWidth;
   }
 
   const debouncedSaveSession = debounce((snapshot: SessionSnapshot) => {
@@ -4308,6 +4331,14 @@ pointer-events: none;`}
           on:dragstart={(e) => e.preventDefault()}
           on:selectstart={(e) => e.preventDefault()}
         />
+        {#if settings.showCurrentTValue && robotT !== null}
+          <div
+            class="pointer-events-none absolute z-[22] rounded-full border border-white/20 bg-black/60 px-3.5 py-1.5 font-mono text-[22px] font-semibold leading-none tracking-wide text-white shadow-lg backdrop-blur-sm"
+            style={`left: ${robotXY.x}px; top: ${robotXY.y - x(robotHeight) / 2 - 14}px; transform: translate(-50%, -100%);`}
+          >
+            t {robotT.toFixed(3)}
+          </div>
+        {/if}
         <!-- Heading arrow for main robot -->
         {#if settings.showHeadingArrow}
           <svg
