@@ -31,6 +31,7 @@
   import _ from "lodash";
   import hotkeys from "hotkeys-js";
   import { createAnimationController } from "./utils/animation";
+  import { createPerfSampler, sampleNodeCounts } from "./utils/perf";
   import { calculatePathTime, getAnimationDuration } from "./utils";
   import { exportAsGif, downloadBlob } from "./utils/gifExporter";
 
@@ -2600,10 +2601,12 @@
       pause();
     }
   }
+  const robotPerf = createPerfSampler("robot-state");
   $: {
     // This handles both 'travel' (movement) and 'wait' (stationary rotation) events.
     // Don't show main robot in multi-path mode
     if ($activePaths.length === 0 && timePrediction && timePrediction.timeline && lines.length > 0) {
+      const t0 = performance.now();
       const state = calculateRobotState(
         percent,
         timePrediction.timeline,
@@ -2613,6 +2616,7 @@
         x,
         y,
       );
+      robotPerf.sample(t0);
       robotXY = { x: state.x, y: state.y };
       robotHeading = state.heading;
       robotT = state.t ?? null;
@@ -2762,11 +2766,14 @@
    * fully up to date while doing the heavy SVG work only once per frame.
    */
   let sceneRenderScheduled = false;
+  const sceneRenderPerf = createPerfSampler("scene-render");
   function flushScene() {
     sceneRenderScheduled = false;
     if (!two) {
       return;
     }
+    const t0 = performance.now();
+    sampleNodeCounts("scene", twoElement);
 
     two.renderer.domElement.style["z-index"] = "30";
     two.renderer.domElement.style["position"] = "absolute";
@@ -2811,6 +2818,7 @@
     two.add(...points);
 
     two.update();
+    sceneRenderPerf.sample(t0);
   }
   function scheduleSceneRender() {
     if (sceneRenderScheduled) {
@@ -2819,6 +2827,44 @@
     sceneRenderScheduled = true;
     requestAnimationFrame(flushScene);
   }
+  /**
+   * Coalesce the reactive "commit" of a drag into a single per-frame step.
+   *
+   * Dragging fires several mousemove events per animation frame. Reassigning
+   * reactive arrays (lines, secondLines, additionalPaths, shapes) inside the
+   * handler triggers a full reactive cascade — path-time recompute, scene
+   * rebuild, etc. — for *every* event. We mutate the model immediately (so the
+   * data is always current) but only reassign the arrays once per frame, which
+   * bounds the heavy work to at most one pass per frame instead of several.
+   */
+  let dragCommitScheduled = false;
+  let pendingDragCommit: (() => void) | null = null;
+  const dragCommitPerf = createPerfSampler("drag-commit");
+  // Save additional paths a short while after the last drag event, instead of
+  // writing the file on every mousemove (which is heavy: JSON.stringify + write).
+  const debouncedSaveAdditionalPath = debounce((pathIdx: number) => {
+    saveAdditionalPath(pathIdx).catch((err) =>
+      console.error("Failed to auto-save additional path:", err),
+    );
+  }, 400);
+  function scheduleDragCommit(commit: () => void) {
+    pendingDragCommit = commit;
+    if (dragCommitScheduled) {
+      return;
+    }
+    dragCommitScheduled = true;
+    requestAnimationFrame(() => {
+      dragCommitScheduled = false;
+      const fn = pendingDragCommit;
+      pendingDragCommit = null;
+      if (fn) {
+        const t0 = performance.now();
+        fn();
+        dragCommitPerf.sample(t0);
+      }
+    });
+  }
+
   $: {
     // Reference every piece of scene state so this block re-runs (and reschedules
     // the coalesced render) whenever any of it changes.
@@ -3101,7 +3147,10 @@
 
           shapes[shapeIdx].vertices[vertexIdx].x = inchX;
           shapes[shapeIdx].vertices[vertexIdx].y = inchY;
-          shapes = [...shapes];
+          // Coalesce the reactive commit to once per frame instead of per mousemove.
+          scheduleDragCommit(() => {
+            shapes = [...shapes];
+          });
         } else if (currentElem.startsWith("second-point-")) {
           // Handle second path point dragging
           const parts = currentElem.split("-");
@@ -3125,7 +3174,10 @@
               secondLines[line].controlPoints[point - 1].y = inchY;
             }
           }
-          secondLines = [...secondLines];
+          // Coalesce the reactive commit to once per frame instead of per mousemove.
+          scheduleDragCommit(() => {
+            secondLines = [...secondLines];
+          });
         } else if (currentElem.startsWith("additional-path-")) {
           // Handle additional path point dragging
           const parts = currentElem.split("-");
@@ -3140,9 +3192,6 @@
             if (additionalPaths[pathIdx].startPoint) {
               additionalPaths[pathIdx].startPoint.x = inchX;
               additionalPaths[pathIdx].startPoint.y = inchY;
-              additionalPaths = [...additionalPaths];
-              // Auto-save changes to additional path files
-              saveAdditionalPath(pathIdx).catch(err => console.error('Failed to auto-save additional path:', err));
             }
           } else if (additionalPaths[pathIdx].lines[line]) {
             if (point === 0 && additionalPaths[pathIdx].lines[line].endPoint) {
@@ -3152,10 +3201,14 @@
               additionalPaths[pathIdx].lines[line].controlPoints[point - 1].x = inchX;
               additionalPaths[pathIdx].lines[line].controlPoints[point - 1].y = inchY;
             }
-            additionalPaths = [...additionalPaths];
           }
-          // Auto-save changes to additional path files
-          saveAdditionalPath(pathIdx).catch(err => console.error('Failed to auto-save additional path:', err));
+          // Coalesce the reactive commit to once per frame instead of per mousemove.
+          scheduleDragCommit(() => {
+            additionalPaths = [...additionalPaths];
+          });
+          // Debounce the auto-save so it fires after the drag settles instead of
+          // writing the file on every mousemove.
+          debouncedSaveAdditionalPath(pathIdx);
         } else {
           // Handle path point dragging
           const line = Number(currentElem.split("-")[1]) - 1;
@@ -3176,6 +3229,12 @@
               lines[line].controlPoints[point - 1].y = inchY;
             }
           }
+          // Coalesce the reactive commit to once per frame so main-path points
+          // live-track the mouse while the (heavy) path/scene recompute happens
+          // only once per frame instead of on every mousemove.
+          scheduleDragCommit(() => {
+            lines = [...lines];
+          });
         }
       } else {
         if (
