@@ -6,6 +6,7 @@ import type {
   PathChain,
   PiecewiseHeadingInterpolation,
   PiecewiseHeadingSegment,
+  SequenceItem,
 } from "../types";
 import {
   normalizePiecewiseHeadingInterpolation,
@@ -191,51 +192,27 @@ function buildPathExpression(
   return `curve(${startVar}, ${controlVars}, ${endVar})${heading}`;
 }
 
-// Java pose field declarations
-function javaPoseFields(
-  startPoint: Point,
-  linesWithIds: (Line & { id: string })[],
-  normalizedChains: PathChain[],
-): string {
-  const lines: string[] = [];
-  const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
-
-  const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
-  lines.push(`    private Pose ${startName};`);
-
-  linesWithIds.forEach((line, lineIdx) => {
-    if (!usedLineIds.has(line.id)) return;
-    const endName = getEndVarName(line, lineIdx);
-    lines.push(`    private Pose ${endName};`);
-    line.controlPoints.forEach((_, cpIdx) => {
-      lines.push(`    private Pose ${endName}Control${cpIdx + 1};`);
-    });
-  });
-
-  return lines.join("\n");
-}
-
-// Java buildPaths() method with PoseFactory assignments
-function javaBuildPaths(
+// Generates inline declared Java Pose fields
+function javaPoseFieldsInline(
   startPoint: Point,
   linesWithIds: (Line & { id: string })[],
   normalizedChains: PathChain[],
   options: ExportTransformOptions,
   mirrorHorizontally: boolean,
 ): string {
-  const assignments: string[] = [];
+  const lines: string[] = [];
   const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
-
   const mirrorCall = mirrorHorizontally
     ? `.mirrorX(${FIELD_WIDTH_INCHES / 2})`
     : "";
-  assignments.push(`        PoseFactory p = PoseFactory.degrees()${mirrorCall};`);
-  assignments.push("");
+
+  lines.push(`    private final PoseFactory p = PoseFactory.degrees()${mirrorCall};`);
+  lines.push("");
 
   const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
   const startHeading = getStartPoseHeading(0, linesWithIds, startPoint, options);
-  assignments.push(
-    `        ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)});`,
+  lines.push(
+    `    private final Pose ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)});`
   );
 
   linesWithIds.forEach((line, lineIdx) => {
@@ -245,66 +222,42 @@ function javaBuildPaths(
     const ep = line.endPoint;
     const heading = getPoseHeading(ep, options);
 
-    assignments.push(
-      `        ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)});`,
+    lines.push(
+      `    private final Pose ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)});`
     );
 
     line.controlPoints.forEach((cp, cpIdx) => {
       const cpName = `${endName}Control${cpIdx + 1}`;
-      assignments.push(
-        `        ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0);`,
+      lines.push(
+        `    private final Pose ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0);`
       );
-    });
-  });
-
-  return `    public void buildPaths() {\n${assignments.join("\n")}\n    }`;
-}
-
-// Kotlin pose field declarations
-function kotlinPoseFields(
-  startPoint: Point,
-  linesWithIds: (Line & { id: string })[],
-  normalizedChains: PathChain[],
-): string {
-  const lines: string[] = [];
-  const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
-
-  const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
-  lines.push(`    private lateinit var ${startName}: Pose`);
-
-  linesWithIds.forEach((line, lineIdx) => {
-    if (!usedLineIds.has(line.id)) return;
-    const endName = getEndVarName(line, lineIdx);
-    lines.push(`    private lateinit var ${endName}: Pose`);
-    line.controlPoints.forEach((_, cpIdx) => {
-      lines.push(`    private lateinit var ${endName}Control${cpIdx + 1}: Pose`);
     });
   });
 
   return lines.join("\n");
 }
 
-// Kotlin buildPaths() method
-function kotlinBuildPaths(
+// Generates inline declared Kotlin Pose fields
+function kotlinPoseFieldsInline(
   startPoint: Point,
   linesWithIds: (Line & { id: string })[],
   normalizedChains: PathChain[],
   options: ExportTransformOptions,
   mirrorHorizontally: boolean,
 ): string {
-  const assignments: string[] = [];
+  const lines: string[] = [];
   const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
-
   const mirrorCall = mirrorHorizontally
     ? `.mirrorX(${FIELD_WIDTH_INCHES / 2})`
     : "";
-  assignments.push(`        val p = PoseFactory.degrees()${mirrorCall}`);
-  assignments.push("");
+
+  lines.push(`    private val p = PoseFactory.degrees()${mirrorCall}`);
+  lines.push("");
 
   const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
   const startHeading = getStartPoseHeading(0, linesWithIds, startPoint, options);
-  assignments.push(
-    `        ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)})`,
+  lines.push(
+    `    private val ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)})`
   );
 
   linesWithIds.forEach((line, lineIdx) => {
@@ -314,22 +267,22 @@ function kotlinBuildPaths(
     const ep = line.endPoint;
     const heading = getPoseHeading(ep, options);
 
-    assignments.push(
-      `        ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)})`,
+    lines.push(
+      `    private val ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)})`
     );
 
     line.controlPoints.forEach((cp, cpIdx) => {
       const cpName = `${endName}Control${cpIdx + 1}`;
-      assignments.push(
-        `        ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0)`,
+      lines.push(
+        `    private val ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0.0)`
       );
     });
   });
 
-  return `    fun buildPaths() {\n${assignments.join("\n")}\n    }`;
+  return lines.join("\n");
 }
 
-// Java path methods — one follow() per chain
+// Java path methods
 function javaPathMethods(
   normalizedChains: PathChain[],
   linesWithIds: (Line & { id: string })[],
@@ -419,15 +372,12 @@ export async function generateJavaCode(
   const chains = normalizeChains(linesWithIds, pathChains, lineById);
   const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
-  if (exportMode === "coordinates") {
-    const build = javaBuildPaths(startPoint, linesWithIds, chains, options, mirrorHorizontally);
-    const methods = javaPathMethods(chains, linesWithIds, options, startPoint);
-    return `${build}\n\n${methods}`;
-  }
-
-  const fields = javaPoseFields(startPoint, linesWithIds, chains);
-  const build = javaBuildPaths(startPoint, linesWithIds, chains, options, mirrorHorizontally);
+  const fields = javaPoseFieldsInline(startPoint, linesWithIds, chains, options, mirrorHorizontally);
   const methods = javaPathMethods(chains, linesWithIds, options, startPoint);
+
+  if (exportMode === "coordinates") {
+    return `${fields}\n\n${methods}`;
+  }
 
   const pathsClass = `import static com.pedropathing.api.Paths.*;
 
@@ -438,8 +388,6 @@ import com.pedropathing.paths.Path;
 public class Paths {
 
 ${fields}
-
-${build}
 
 ${methods}
 }`;
@@ -456,7 +404,7 @@ ${methods}
     }
   }
 
-  // Full mode
+  // Full OpMode mode (Super cleaned up, no useless telemetry, no double initialization)
   const chainFollows = chains
     .map((chain, idx) => {
       const name = camelCase(
@@ -490,8 +438,6 @@ public class AutoOpMode extends LinearOpMode {
 
 ${fields}
 
-${build}
-
     // Autonomous routine
     public Command autoRoutine() {
         return sequential(
@@ -503,7 +449,6 @@ ${chainFollows}
     public void runOpMode() {
         Scheduler.reset();
         follower = Constants.create(hardwareMap);
-        buildPaths();
         follower.setPose(${startVarName});
         follower.update();
 
@@ -513,11 +458,6 @@ ${chainFollows}
         while (opModeIsActive()) {
             follower.update();
             Scheduler.execute();
-
-            telemetry.addData("x", follower.pose().x());
-            telemetry.addData("y", follower.pose().y());
-            telemetry.addData("heading", follower.pose().heading());
-            telemetry.update();
         }
     }
 
@@ -555,15 +495,12 @@ export async function generateKotlinCode(
   const chains = normalizeChains(linesWithIds, pathChains, lineById);
   const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
-  if (exportMode === "coordinates") {
-    const build = kotlinBuildPaths(startPoint, linesWithIds, chains, options, mirrorHorizontally);
-    const methods = kotlinPathMethods(chains, linesWithIds, options, startPoint);
-    return `${build}\n\n${methods}`;
-  }
-
-  const fields = kotlinPoseFields(startPoint, linesWithIds, chains);
-  const build = kotlinBuildPaths(startPoint, linesWithIds, chains, options, mirrorHorizontally);
+  const fields = kotlinPoseFieldsInline(startPoint, linesWithIds, chains, options, mirrorHorizontally);
   const methods = kotlinPathMethods(chains, linesWithIds, options, startPoint);
+
+  if (exportMode === "coordinates") {
+    return `${fields}\n\n${methods}`;
+  }
 
   const pathsClass = `import com.pedropathing.api.Paths.*
 import com.pedropathing.api.PoseFactory
@@ -573,8 +510,6 @@ import com.pedropathing.paths.Path
 class Paths {
 
 ${fields}
-
-${build}
 
 ${methods}
 }`;
@@ -592,7 +527,7 @@ ${methods}
     }
   }
 
-  // Full mode
+  // Full OpMode mode (Kotlin)
   const chainFollows = chains
     .map((chain, idx) => {
       const name = camelCase(
@@ -625,8 +560,6 @@ class AutoOpMode : LinearOpMode() {
 
 ${fields}
 
-${build}
-
     // Autonomous routine
     fun autoRoutine(): Command = sequential(
 ${chainFollows}
@@ -635,7 +568,6 @@ ${chainFollows}
     override fun runOpMode() {
         Scheduler.reset()
         follower = Constants.create(hardwareMap)
-        buildPaths()
         follower.setPose(${startVarName})
         follower.update()
 
@@ -645,11 +577,6 @@ ${chainFollows}
         while (opModeIsActive()) {
             follower.update()
             Scheduler.execute()
-
-            telemetry.addData("x", follower.pose().x())
-            telemetry.addData("y", follower.pose().y())
-            telemetry.addData("heading", follower.pose().heading())
-            telemetry.update()
         }
     }
 
@@ -723,8 +650,7 @@ export async function generateSequentialCommandCode(
   }));
 
   const normalized = normalizeChains(linesWithIds, chains, lineById);
-  const fields = javaPoseFields(startPoint, linesWithIds, normalized);
-  const build = javaBuildPaths(startPoint, linesWithIds, normalized, options, false);
+  const fields = javaPoseFieldsInline(startPoint, linesWithIds, normalized, options, false);
   const methods = javaPathMethods(normalized, linesWithIds, options, startPoint);
   const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
@@ -774,8 +700,6 @@ public class ${className} extends LinearOpMode {
 
 ${fields}
 
-${build}
-
     // Autonomous routine
     public Command autoRoutine() {
         return sequential(
@@ -787,7 +711,6 @@ ${commands.join(",\n")}
     public void runOpMode() {
         Scheduler.reset();
         follower = Constants.create(hardwareMap);
-        buildPaths();
         follower.setPose(${startVarName});
         follower.update();
 
@@ -797,11 +720,6 @@ ${commands.join(",\n")}
         while (opModeIsActive()) {
             follower.update();
             Scheduler.execute();
-
-            telemetry.addData("x", follower.pose().x());
-            telemetry.addData("y", follower.pose().y());
-            telemetry.addData("heading", follower.pose().heading());
-            telemetry.update();
         }
     }
 
