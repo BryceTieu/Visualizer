@@ -1068,29 +1068,6 @@
     // Ensure effectiveSize matches the smallest of width/height so the field image and grid align
     effectiveSize = Math.min(width || FIELD_SIZE, height || FIELD_SIZE);
   }
-  $: {
-    // Calculate robot state using the Timeline
-    if (timePrediction && timePrediction.timeline && lines.length > 0) {
-      const state = calculateRobotState(
-        percent,
-        timePrediction.timeline,
-        lines,
-        startPoint,
-        settings,
-        x,
-        y,
-      );
-      robotXY = { x: state.x, y: state.y };
-      robotHeading = state.heading;
-      robotT = state.t ?? null;
-    } else {
-      // Fallback for initialization
-      robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
-      robotHeading = 0;
-      robotT = null;
-    }
-  }
-
   $: points = (() => {
     let _points = [];
     
@@ -2643,9 +2620,11 @@
       );
       robotXY = { x: state.x, y: state.y };
       robotHeading = state.heading;
+      robotT = state.t ?? null;
     } else {
       // Fallback for initialization or empty state
       robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
+      robotT = null;
       // Calculate initial heading based on start point settings
       if (startPoint.heading === "linear") robotHeading = -startPoint.startDeg;
       else if (startPoint.heading === "constant")
@@ -2693,60 +2672,103 @@
     }
   }
 
-  // Calculate robot states for all additional paths
+  // Precompute per-additional-path time predictions and their animation
+  // scaling ONCE per edit (keyed by the additionalPaths array reference)
+  // instead of rebuilding the full path timeline on every animation frame.
+  type AdditionalPathEntry = {
+    prediction: ReturnType<typeof calculatePathTime>;
+    completionPercent: number;
+  };
+  let additionalPathCache = new Map<
+    AdditionalPathData,
+    AdditionalPathEntry | null
+  >();
+  let additionalPathCacheKey: AdditionalPathData[] | null = null;
+  $: {
+    if (additionalPathCacheKey !== additionalPaths) {
+      additionalPathCacheKey = additionalPaths;
+      const cache = new Map<AdditionalPathData, AdditionalPathEntry | null>();
+      additionalPaths.forEach((pathData) => {
+        if (!pathData.startPoint) {
+          cache.set(pathData, null);
+          return;
+        }
+        const prediction = calculatePathTime(
+          pathData.startPoint,
+          pathData.lines,
+          pathData.settings,
+          pathData.sequence,
+        );
+        if (
+          !prediction ||
+          !prediction.timeline ||
+          pathData.lines.length === 0
+        ) {
+          cache.set(pathData, null);
+          return;
+        }
+        const maxDuration = effectiveAnimationDuration;
+        const thisDuration = getAnimationDuration(prediction.totalTime / 1000);
+        const completionPercent =
+          maxDuration > 0 ? (thisDuration / maxDuration) * 100 : 100;
+        cache.set(pathData, { prediction, completionPercent });
+      });
+      additionalPathCache = cache;
+    }
+  }
+
+  // Calculate robot states for all additional paths (cheap: uses the cached
+  // per-path predictions above, only evaluating positions for the current %).
   let additionalRobotStates: Array<{ xy: BasePoint; heading: number }> = [];
   $: {
     additionalRobotStates = additionalPaths.map((pathData) => {
-      if (!pathData.startPoint) {
+      const entry = additionalPathCache.get(pathData);
+      if (!entry || !pathData.startPoint) {
         return {
           xy: { x: 0, y: 0 },
           heading: 0,
         };
       }
 
-      const pathTimePrediction = calculatePathTime(
-        pathData.startPoint,
-        pathData.lines,
-        pathData.settings,
-        pathData.sequence
-      );
-      
-      if (pathTimePrediction && pathTimePrediction.timeline && pathData.lines.length > 0 && pathData.startPoint) {
-        // Calculate actual percent for this path based on max duration
-        const maxDuration = effectiveAnimationDuration;
-        const thisDuration = getAnimationDuration(pathTimePrediction.totalTime / 1000);
-        const completionPercent = (thisDuration / maxDuration) * 100;
-        
-        // If this path should be complete, cap at 100% (robot waits at end)
-        const actualPercent = Math.min(percent, completionPercent);
-        const normalizedPercent = completionPercent > 0 ? (actualPercent / completionPercent) * 100 : 0;
+      // If this path should be complete, cap at 100% (robot waits at end)
+      const actualPercent = Math.min(percent, entry.completionPercent);
+      const normalizedPercent =
+        entry.completionPercent > 0
+          ? (actualPercent / entry.completionPercent) * 100
+          : 0;
 
-        const state = calculateRobotState(
-          normalizedPercent,
-          pathTimePrediction.timeline,
-          pathData.lines,
-          pathData.startPoint,
-          pathData.settings,
-          x,
-          y,
-        );
-        
-        return {
-          xy: { x: state.x, y: state.y },
-          heading: state.heading,
-        };
-      }
-      
+      const state = calculateRobotState(
+        normalizedPercent,
+        entry.prediction.timeline,
+        pathData.lines,
+        pathData.startPoint,
+        pathData.settings,
+        x,
+        y,
+      );
+
       return {
-        xy: { x: 0, y: 0 },
-        heading: 0,
+        xy: { x: state.x, y: state.y },
+        heading: state.heading,
       };
     });
   }
 
   // Event markers removed: no runtime visualization created
 
-  $: (() => {
+  /**
+   * Render the Two.js scene at most once per animation frame.
+   *
+   * Previously this reactive immediately cleared and rebuilt the entire scene
+   * on every reactive change. During a drag, mousemove fires several times per
+   * frame, so the scene (all paths, points, shapes, onion layers) was rebuilt
+   * and re-rendered synchronously each event — a major source of jank. Coalescing
+   * the clear/re-add/update into a single requestAnimationFrame keeps the scene
+   * fully up to date while doing the heavy SVG work only once per frame.
+   */
+  let sceneRenderScheduled = false;
+  function flushScene() {
+    sceneRenderScheduled = false;
     if (!two) {
       return;
     }
@@ -2794,7 +2816,38 @@
     two.add(...points);
 
     two.update();
-  })();
+  }
+  function scheduleSceneRender() {
+    if (sceneRenderScheduled) {
+      return;
+    }
+    sceneRenderScheduled = true;
+    requestAnimationFrame(flushScene);
+  }
+  $: {
+    // Reference every piece of scene state so this block re-runs (and reschedules
+    // the coalesced render) whenever any of it changes.
+    const sceneDeps: unknown[] = [
+      two,
+      shapeElements,
+      ghostPathElement,
+      secondGhostPathElement,
+      additionalGhostPathElements,
+      onionLayerElements,
+      secondOnionLayerElements,
+      penGhostPath,
+      path,
+      secondPath,
+      additionalPathElements,
+      points,
+      $dualPathMode,
+      $activePaths,
+    ];
+    void sceneDeps;
+    if (two) {
+      scheduleSceneRender();
+    }
+  }
 
   $: if (fieldPointsCanvas && width > 0 && height > 0) {
     renderFieldPoints(fieldPointsCanvas, fieldPoints, x, y, width, height);

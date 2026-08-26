@@ -41,6 +41,49 @@ type AnimationState = {
 };
 
 /**
+ * Memoization for per-segment curve geometry.
+ *
+ * `calculateRobotState` is called on every animation frame, and each call used
+ * to re-sample the bezier curve (100 recursive evaluations) just to recover the
+ * curve's arc length. Since the geometry of a segment only changes when the
+ * user edits the path, we cache the sampled points + length keyed by the exact
+ * coordinates of the segment. This eliminates ~100 bezier evaluations per robot
+ * per frame while staying correct after edits (a coordinate change produces a
+ * different key).
+ */
+const curveGeometryCache = new Map<
+  string,
+  { points: BasePoint[]; length: number }
+>();
+const CURVE_CACHE_LIMIT = 1024;
+
+function getCurveGeometry(
+  start: BasePoint,
+  line: Line,
+): { points: BasePoint[]; length: number } {
+  const end = line.endPoint;
+  const cps = line.controlPoints;
+
+  let key = start.x.toFixed(3) + "," + start.y.toFixed(3);
+  for (let i = 0; i < cps.length; i++) {
+    key += ";" + cps[i].x.toFixed(3) + "," + cps[i].y.toFixed(3);
+  }
+  key += ";" + end.x.toFixed(3) + "," + end.y.toFixed(3);
+
+  const cached = curveGeometryCache.get(key);
+  if (cached) return cached;
+
+  const points = lineCurvePoints(start, line);
+  const value = { points, length: approximateCurveLength(points) };
+
+  if (curveGeometryCache.size >= CURVE_CACHE_LIMIT) {
+    curveGeometryCache.clear();
+  }
+  curveGeometryCache.set(key, value);
+  return value;
+}
+
+/**
  * Calculate the robot position and heading based on the Timeline
  */
 export function calculateRobotState(
@@ -101,24 +144,10 @@ export function calculateRobotState(
 
     // Determine fraction along the path using motion profile when available
     let linePercent = 0;
-    const curvePoints = lineCurvePoints(prevPoint, currentLine);
-
-    // Helper: approximate curve length by sampling
-    function calculateCurveLength(start: BasePoint, controlPoints: BasePoint[], end: BasePoint, samples = 100) {
-      let length = 0;
-      let prev = start;
-      for (let i = 1; i <= samples; i++) {
-        const t = i / samples;
-        const p = getCurvePoint(t, [start, ...controlPoints, end]);
-        const dx = p.x - prev.x;
-        const dy = p.y - prev.y;
-        length += Math.sqrt(dx * dx + dy * dy);
-        prev = p;
-      }
-      return length;
-    }
-
-    const segLength = approximateCurveLength(curvePoints as BasePoint[]);
+    const { points: curvePoints, length: segLength } = getCurveGeometry(
+      prevPoint,
+      currentLine,
+    );
 
     // If settings provide a motion profile, compute distance fraction accordingly
     if (
@@ -248,7 +277,7 @@ export function calculateRobotState(
         case "tangential":
           const nextPointInches = getCurvePoint(
             linePercent + (currentLine.endPoint.reverse ? -0.01 : 0.01),
-            [prevPoint, ...currentLine.controlPoints, currentLine.endPoint],
+            curvePoints,
           );
           const nextPoint = {
             x: xScale(nextPointInches.x),
