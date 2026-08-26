@@ -159,27 +159,22 @@
       return false;
     }
     const userAgent = navigator.userAgent || "";
+    // Prefer the standard, high-confidence signal when it's available.
     const mobileHint = "userAgentData" in navigator
       ? (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ?? false
       : false;
 
-    // Pointer and touch heuristics: prefer multi-touch + coarse pointer to avoid false positives
-    const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
-    const maxTouch = typeof navigator.maxTouchPoints === "number" ? navigator.maxTouchPoints : 0;
-    const multiTouch = maxTouch > 1;
+    // Only treat a device as mobile when the user agent itself reports it.
+    //
+    // Previously this also used pointer/touch heuristics (coarse pointer,
+    // maxTouchPoints, any-hover). Those are unreliable on modern desktops and
+    // laptops, which often ship with built-in touchscreens (and embedded preview
+    // iframes can report touch capability) — so they flagged real desktops as
+    // mobile. Real phones/tablets always present a mobile user agent, so this
+    // conservative check is sufficient and avoids false positives.
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk/i.test(userAgent);
 
-    // Match typical mobile UA strings
-    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(userAgent);
-
-    // Consider mobile when UA explicitly indicates it, userAgentData reports mobile, or
-    // we observe both a coarse pointer and multiple touch points (more likely a phone/tablet)
-    // Avoid treating single-touch or hybrid laptops as mobile.
-    return (
-      mobileHint ||
-      uaMobile ||
-      (coarsePointer && multiTouch) ||
-      (window.matchMedia?.("(any-hover: none)")?.matches && multiTouch)
-    );
+    return mobileHint || uaMobile;
   }
 
 
