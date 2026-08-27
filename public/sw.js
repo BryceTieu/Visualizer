@@ -1,8 +1,12 @@
-const VERSION = "v2";
+// IMPORTANT: bump this whenever you ship a new build. The service worker uses
+// cache-first for the JS/CSS bundle, so a stale cache (same VERSION) will keep
+// serving the previous build forever. Bumping forces old caches to be purged.
+const VERSION = "v4";
 const CACHE_NAME = `pedro-visualizer-${VERSION}`;
 
 const APP_STATIC_RESOURCES = [
   "/",
+  "/manifest.webmanifest",
   "/favicon.ico",
   "/fields/centerstage.webp",
   "/fields/intothedeep.webp",
@@ -47,11 +51,21 @@ self.addEventListener("activate", (event) => {
 // On fetch, intercept server requests
 // and respond with cached responses instead of going to network
 self.addEventListener("fetch", (event) => {
-  // As a single page app, direct app to always go to cached home page.
-  // if (event.request.mode === "navigate") {
-  //   event.respondWith(caches.match("/"));
-  //   return;
-  // }
+  // As a single page app, direct app navigation to cached home page when offline.
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      (async () => {
+        try {
+          return await fetch(event.request);
+        } catch (error) {
+          const cache = await caches.open(CACHE_NAME);
+          const fallback = await cache.match("/");
+          return fallback || new Response("Offline", { status: 503 });
+        }
+      })(),
+    );
+    return;
+  }
 
   // For all other requests, go to the cache first, and then the network.
   event.respondWith(

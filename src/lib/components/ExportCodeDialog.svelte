@@ -1,17 +1,17 @@
 <script lang="ts">
   import type { Point, Line, SequenceItem } from "../../types";
   import Highlight from "svelte-highlight";
-  import { java } from "svelte-highlight/languages";
-  import plaintext from "svelte-highlight/languages/plaintext";
+  import { java, kotlin, plaintext } from "svelte-highlight/languages";
   import codeStyle from "svelte-highlight/styles/androidstudio";
   import { cubicInOut } from "svelte/easing";
   import { fade, fly } from "svelte/transition";
   import { currentFilePath } from "../../stores";
   import {
     generateJavaCode,
+    generateKotlinCode,
     generatePointsArray,
     generateSequentialCommandCode,
-  } from "../../utils";
+  } from "../../utils/codeExporter";
 
   export let isOpen = false;
   export let startPoint: Point;
@@ -19,10 +19,11 @@
   export let sequence: SequenceItem[];
 
   let exportMode: "full" | "class" | "coordinates" = "class";
-  let exportFormat: "java" | "points" | "sequential" = "java";
+  let exportFormat: "java" | "kotlin" | "points" | "sequential" = "java";
   let sequentialClassName = "AutoPath";
+  let mirrorHorizontally = false;
   let exportedCode = "";
-  let currentLanguage: typeof java | typeof plaintext = java;
+  let currentLanguage: typeof java | typeof kotlin | typeof plaintext = java;
   let copied = false;
 
   // Update sequential class name when file changes
@@ -42,7 +43,7 @@
   }
 
   export async function openWithFormat(
-    format: "java" | "points" | "sequential",
+    format: "java" | "kotlin" | "points" | "sequential",
   ) {
     exportFormat = format;
 
@@ -52,8 +53,17 @@
           startPoint,
           lines,
           exportMode,
+          mirrorHorizontally,
         );
         currentLanguage = java;
+      } else if (format === "kotlin") {
+        exportedCode = await generateKotlinCode(
+          startPoint,
+          lines,
+          exportMode,
+          mirrorHorizontally,
+        );
+        currentLanguage = kotlin;
       } else if (format === "points") {
         exportedCode = generatePointsArray(startPoint, lines);
         currentLanguage = plaintext;
@@ -107,7 +117,42 @@
 
   async function handleExportModeChange() {
     if (exportFormat === "java") {
-      exportedCode = await generateJavaCode(startPoint, lines, exportMode);
+      exportedCode = await generateJavaCode(
+        startPoint,
+        lines,
+        exportMode,
+        mirrorHorizontally,
+      );
+    } else if (exportFormat === "kotlin") {
+      exportedCode = await generateKotlinCode(
+        startPoint,
+        lines,
+        exportMode,
+        mirrorHorizontally,
+      );
+    }
+  }
+
+  async function handleMirrorChange() {
+    if (!isOpen) return;
+
+    if (exportFormat === "kotlin") {
+      exportedCode = await generateKotlinCode(
+        startPoint,
+        lines,
+        exportMode,
+        mirrorHorizontally,
+      );
+      return;
+    }
+
+    if (exportFormat === "java") {
+      exportedCode = await generateJavaCode(
+        startPoint,
+        lines,
+        exportMode,
+        mirrorHorizontally,
+      );
     }
   }
 </script>
@@ -135,6 +180,8 @@
         <p class="text-sm font-light text-neutral-700 dark:text-neutral-400">
           {#if exportFormat === "java"}
             Here is the generated Java code for this path:
+          {:else if exportFormat === "kotlin"}
+            Here is the generated Kotlin code for this path:
           {:else if exportFormat === "points"}
             Here is the points array for this path:
           {:else if exportFormat === "sequential"}
@@ -142,7 +189,7 @@
           {/if}
         </p>
         <div class="flex items-center gap-2">
-          {#if exportFormat === "java"}
+          {#if exportFormat === "java" || exportFormat === "kotlin"}
             <label
               for="export-mode"
               class="text-sm font-light text-neutral-700 dark:text-neutral-400"
@@ -158,6 +205,21 @@
               <option value="class">Class Only</option>
               <option value="full">Full Code</option>
             </select>
+            {#if exportFormat === "kotlin" || exportFormat === "java"}
+              <label
+                for="mirror-horizontal"
+                class="text-sm font-light text-neutral-700 dark:text-neutral-400 ml-2 flex items-center gap-2"
+              >
+                <input
+                  id="mirror-horizontal"
+                  type="checkbox"
+                  bind:checked={mirrorHorizontally}
+                  on:change={handleMirrorChange}
+                  class="cursor-pointer"
+                />
+                Mirror Horizontally
+              </label>
+            {/if}
           {:else if exportFormat === "sequential"}
             <div class="flex items-center gap-2">
               <label

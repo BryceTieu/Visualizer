@@ -28,9 +28,12 @@
   function toggleCollapsed() {
     collapsed = !collapsed;
   }
+
+  $: optimizeLine;
+  $: optimizing;
 </script>
 
-<div class="flex flex-col w-full justify-start items-start gap-1">
+<div class="flex flex-col w-full justify-start items-start gap-1 rounded-md p-1">
   <div class="flex flex-row w-full items-center gap-3 flex-wrap">
     <div class="flex flex-row items-center gap-2">
       <button
@@ -73,16 +76,13 @@
           if (recordChange) recordChange();
         }}
       />
+
+
       <div
         class="relative size-5 rounded-full overflow-hidden shadow-sm border border-neutral-300 dark:border-neutral-600 shrink-0"
         style="background-color: {line.color}"
       >
-        <input
-          type="color"
-          bind:value={line.color}
-          class="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
-          title="Change Path Color"
-        />
+        <div class="absolute inset-0" title="Path color" />
       </div>
 
       <!-- Lock/Unlock Button -->
@@ -177,17 +177,6 @@
       </div>
     </div>
 
-    <div class="flex flex-row items-center gap-1">
-      <button
-        class="px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-200 bg-neutral-200/80 dark:bg-neutral-800/80 border border-neutral-300 dark:border-neutral-700 rounded disabled:opacity-40 disabled:cursor-not-allowed"
-        title={line.locked ? "Path locked" : "Optimize this path"}
-        on:click={() => line.id && optimizeLine && optimizeLine(line.id)}
-        disabled={!line.id || line.locked || optimizing}
-      >
-        {optimizing ? "Optimizing…" : "Optimize"}
-      </button>
-    </div>
-
     <div class="flex flex-row items-center gap-1 ml-auto">
       <button
         title="Add control point after this line"
@@ -214,7 +203,7 @@
       <button
         title="Insert point between this path and the next"
         on:click={() => onInsertMidpoint && onInsertMidpoint()}
-        class="text-blue-700 hover:text-blue-500"
+        class="text-blue-950 hover:text-blue-800"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -222,7 +211,7 @@
           viewBox="0 0 24 24"
           stroke-width={2}
           stroke="currentColor"
-          class="size-5"
+          class="size-5 stroke-blue-950"
         >
           <path
             stroke-linecap="round"
@@ -293,7 +282,7 @@
           step={$snapToGrid && $showGrid ? $gridSize : 0.1}
           type="number"
           min="0"
-          max="144"
+          max="141.5"
           bind:value={line.endPoint.x}
           disabled={line.locked}
           title={snapToGridTitle}
@@ -303,7 +292,7 @@
           class="pl-1.5 rounded-md bg-neutral-100 dark:bg-neutral-950 dark:border-neutral-700 border-[0.5px] focus:outline-none w-28"
           step={$snapToGrid && $showGrid ? $gridSize : 0.1}
           min="0"
-          max="144"
+          max="141.5"
           type="number"
           bind:value={line.endPoint.y}
           disabled={line.locked}

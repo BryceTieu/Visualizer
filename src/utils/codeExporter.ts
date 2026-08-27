@@ -1,214 +1,661 @@
 import prettier from "prettier";
-import type { Point, Line, BasePoint } from "../types";
-import { getCurvePoint } from "./math";
+import type {
+  Point,
+  Line,
+  BasePoint,
+  SequenceItem,
+} from "../types";
 
-// Lazy-load Prettier's Java plugin; fall back gracefully if unavailable
+const FIELD_WIDTH_INCHES = 141.5;
+
+interface ExportTransformOptions {
+  mirrorHorizontally?: boolean;
+}
+
+interface ExportPathGroup {
+  id: string;
+  name: string;
+  color: string;
+  lineIds: string[];
+}
+
+function transformX(x: number, options: ExportTransformOptions): number {
+  if (!options.mirrorHorizontally) return x;
+  return FIELD_WIDTH_INCHES - x;
+}
+
+function transformHeadingDegrees(
+  deg: number,
+  options: ExportTransformOptions,
+): number {
+  if (!options.mirrorHorizontally) return deg;
+  return 180 - deg;
+}
+
 let cachedJavaPlugin: any | null = null;
+let cachedKotlinPlugin: any | null = null;
+
 async function loadJavaPlugin() {
   if (cachedJavaPlugin !== null) return cachedJavaPlugin;
-  const candidates = ["prettier/plugins/java.js", "prettier/plugins/java"];
-  for (const path of candidates) {
+  for (const path of ["prettier/plugins/java.js", "prettier/plugins/java"]) {
     try {
-      const mod = await import(path);
+      const mod = await import(/* @vite-ignore */ path);
       cachedJavaPlugin = (mod as any).default ?? mod;
       return cachedJavaPlugin;
-    } catch (err) {
-      // ignore and try next
-    }
+    } catch {}
   }
   cachedJavaPlugin = null;
   return null;
 }
 
-/**
- * Generate Java code from path data
- */
+async function loadKotlinPlugin() {
+  if (cachedKotlinPlugin !== null) return cachedKotlinPlugin;
+  for (const path of ["prettier-plugin-kotlin"]) {
+    try {
+      const mod = await import(/* @vite-ignore */ path);
+      cachedKotlinPlugin = (mod as any).default ?? mod;
+      return cachedKotlinPlugin;
+    } catch {}
+  }
+  cachedKotlinPlugin = null;
+  return null;
+}
+
+function sanitizeIdentifier(
+  input: string | undefined,
+  fallback: string,
+): string {
+  const cleaned = (input || "").replace(/[^a-zA-Z0-9]/g, "");
+  if (!cleaned) return fallback;
+  if (/^[0-9]/.test(cleaned)) return `${fallback}${cleaned}`;
+  return cleaned;
+}
+
+function camelCase(str: string): string {
+  if (!str) return str;
+  return str.charAt(0).toLowerCase() + str.slice(1);
+}
+
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  const rounded = Number(value.toFixed(4));
+  return Number.isInteger(rounded) ? rounded.toString() : rounded.toString();
+}
+
+function normalizeCompoundPaths(
+  lines: (Line & { id: string })[],
+): ExportPathGroup[] {
+  return lines
+    .map((line, idx) => ({
+      id: line.id,
+      name: line.name || `Path${idx + 1}`,
+      color: line.color || "#22c55e",
+      lineIds: [line.id],
+    }))
+    .filter((compoundPath) => compoundPath.lineIds.length > 0);
+}
+function getStartVarName(
+  lineIdx: number,
+  linesWithIds: (Line & { id: string })[],
+  startPoint?: Point,
+): string {
+  if (lineIdx <= 0) {
+    return camelCase(sanitizeIdentifier(startPoint?.name, "start"));
+  }
+  const prevLine = linesWithIds[lineIdx - 1];
+  return camelCase(sanitizeIdentifier(prevLine.name, `point${lineIdx}`));
+}
+
+function getEndVarName(line: Line & { id: string }, lineIdx: number): string {
+  return camelCase(sanitizeIdentifier(line.name, `point${lineIdx + 1}`));
+}
+
+function getPoseHeading(ep: Point, options: ExportTransformOptions): number {
+  if (ep.heading === "constant") {
+    return transformHeadingDegrees(ep.degrees ?? 0, options);
+  }
+  if (ep.heading === "linear") {
+    return transformHeadingDegrees(ep.endDeg ?? 0, options);
+  }
+  if (ep.heading === "tangential") {
+    return 0;
+  }
+  return 0;
+}
+
+function getStartPoseHeading(
+  lineIdx: number,
+  linesWithIds: (Line & { id: string })[],
+  startPoint: Point,
+  options: ExportTransformOptions,
+): number {
+  if (lineIdx <= 0) {
+    const firstLine = linesWithIds[0];
+    if (!firstLine) return 0;
+    const ep = firstLine.endPoint;
+    if (ep.heading === "linear") {
+      return transformHeadingDegrees(ep.startDeg ?? 0, options);
+    }
+    return 0;
+  }
+  return getPoseHeading(linesWithIds[lineIdx - 1].endPoint, options);
+}
+
+function buildHeadingInterpolation(
+  line: Line & { id: string },
+  startVarName: string,
+  endVarName: string,
+): string {
+  const ep = line.endPoint;
+  switch (ep.heading) {
+    case "constant":
+      return `.constant(${startVarName})`;
+    case "linear":
+      return `.linear(${startVarName}, ${endVarName})`;
+    case "tangential":
+      return "";
+    default:
+      return "";
+  }
+}
+
+function buildPathExpression(
+  line: Line & { id: string },
+  lineIdx: number,
+  linesWithIds: (Line & { id: string })[],
+  startPoint?: Point,
+): string {
+  const startVar = getStartVarName(lineIdx, linesWithIds, startPoint);
+  const endVar = getEndVarName(line, lineIdx);
+  const heading = buildHeadingInterpolation(line, startVar, endVar);
+
+  if (line.controlPoints.length === 0) {
+    return `line(${startVar}, ${endVar})${heading}`;
+  }
+
+  const controlVars = line.controlPoints
+    .map((_, cpIdx) => `${endVar}Control${cpIdx + 1}`)
+    .join(", ");
+  return `curve(${startVar}, ${controlVars}, ${endVar})${heading}`;
+}
+
+// Generates inline declared Java Pose fields
+function javaPoseFieldsInline(
+  startPoint: Point,
+  linesWithIds: (Line & { id: string })[],
+  compoundPaths: ExportPathGroup[],
+  options: ExportTransformOptions,
+  mirrorHorizontally: boolean,
+): string {
+  const lines: string[] = [];
+  const usedLineIds = new Set(compoundPaths.flatMap((c) => c.lineIds));
+  const mirrorCall = mirrorHorizontally
+    ? `.mirrorX(${FIELD_WIDTH_INCHES / 2})`
+    : "";
+
+  lines.push(
+    `    private final PoseFactory p = PoseFactory.degrees()${mirrorCall};`,
+  );
+  lines.push("");
+
+  const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
+  const startHeading = getStartPoseHeading(
+    0,
+    linesWithIds,
+    startPoint,
+    options,
+  );
+  lines.push(
+    `    private final Pose ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)});`,
+  );
+
+  linesWithIds.forEach((line, lineIdx) => {
+    if (!usedLineIds.has(line.id)) return;
+
+    const endName = getEndVarName(line, lineIdx);
+    const ep = line.endPoint;
+    const heading = getPoseHeading(ep, options);
+
+    lines.push(
+      `    private final Pose ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)});`,
+    );
+
+    line.controlPoints.forEach((cp, cpIdx) => {
+      const cpName = `${endName}Control${cpIdx + 1}`;
+      lines.push(
+        `    private final Pose ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0);`,
+      );
+    });
+  });
+
+  return lines.join("\n");
+}
+
+// Generates inline declared Kotlin Pose fields
+function kotlinPoseFieldsInline(
+  startPoint: Point,
+  linesWithIds: (Line & { id: string })[],
+  compoundPaths: ExportPathGroup[],
+  options: ExportTransformOptions,
+  mirrorHorizontally: boolean,
+): string {
+  const lines: string[] = [];
+  const usedLineIds = new Set(compoundPaths.flatMap((c) => c.lineIds));
+  const mirrorCall = mirrorHorizontally
+    ? `.mirrorX(${FIELD_WIDTH_INCHES / 2})`
+    : "";
+
+  lines.push(`    private val p = PoseFactory.degrees()${mirrorCall}`);
+  lines.push("");
+
+  const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
+  const startHeading = getStartPoseHeading(
+    0,
+    linesWithIds,
+    startPoint,
+    options,
+  );
+  lines.push(
+    `    private val ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)})`,
+  );
+
+  linesWithIds.forEach((line, lineIdx) => {
+    if (!usedLineIds.has(line.id)) return;
+
+    const endName = getEndVarName(line, lineIdx);
+    const ep = line.endPoint;
+    const heading = getPoseHeading(ep, options);
+
+    lines.push(
+      `    private val ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)})`,
+    );
+
+    line.controlPoints.forEach((cp, cpIdx) => {
+      const cpName = `${endName}Control${cpIdx + 1}`;
+      lines.push(
+        `    private val ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0.0)`,
+      );
+    });
+  });
+
+  return lines.join("\n");
+}
+
+// Java path methods - each compound path becomes a method
+function javaPathMethods(
+  compoundPaths: ExportPathGroup[],
+  linesWithIds: (Line & { id: string })[],
+  _options: ExportTransformOptions,
+  startPoint?: Point,
+): string {
+  return compoundPaths
+    .map((compound, compoundIdx) => {
+      const methodName = camelCase(
+        sanitizeIdentifier(compound.name, `path${compoundIdx + 1}`),
+      );
+
+      if (compound.lineIds.length === 1) {
+        // Atomic path (single line/curve)
+        const lineId = compound.lineIds[0];
+        const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
+        const line = linesWithIds[lineIdx];
+        if (!line) return "";
+        const expr = buildPathExpression(
+          line,
+          lineIdx,
+          linesWithIds,
+          startPoint,
+        );
+        return `    public Path ${methodName}() {\n        return ${expr};\n    }`;
+      }
+
+      // Compound path (multiple paths grouped together)
+      const pathExprs = compound.lineIds
+        .map((lineId) => {
+          const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
+          const line = linesWithIds[lineIdx];
+          if (!line) return null;
+          return buildPathExpression(line, lineIdx, linesWithIds, startPoint);
+        })
+        .filter((s): s is string => Boolean(s));
+
+      return `    public Path ${methodName}() {\n        return path(\n            ${pathExprs.join(",\n            ")}\n        );\n    }`;
+    })
+    .join("\n\n");
+}
+
+// Kotlin path methods
+function kotlinPathMethods(
+  compoundPaths: ExportPathGroup[],
+  linesWithIds: (Line & { id: string })[],
+  _options: ExportTransformOptions,
+  startPoint?: Point,
+): string {
+  return compoundPaths
+    .map((compoundPath, compoundIdx) => {
+      const fnName = camelCase(
+        sanitizeIdentifier(compoundPath.name, `path${compoundIdx + 1}`),
+      );
+
+      if (compoundPath.lineIds.length === 1) {
+        const lineId = compoundPath.lineIds[0];
+        const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
+        const line = linesWithIds[lineIdx];
+        if (!line) return "";
+        const expr = buildPathExpression(
+          line,
+          lineIdx,
+          linesWithIds,
+          startPoint,
+        );
+        return `    fun ${fnName}(): Path = ${expr}`;
+      }
+
+      const pathExprs = compoundPath.lineIds
+        .map((lineId) => {
+          const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
+          const line = linesWithIds[lineIdx];
+          if (!line) return null;
+          return buildPathExpression(line, lineIdx, linesWithIds, startPoint);
+        })
+        .filter((s): s is string => Boolean(s));
+
+      return `    fun ${fnName}(): Path = path(\n            ${pathExprs.join(",\n            ")}\n        )`;
+    })
+    .join("\n\n");
+}
+
 export async function generateJavaCode(
   startPoint: Point,
   lines: Line[],
   exportMode: "full" | "class" | "coordinates" = "class",
+  mirrorHorizontally = false,
 ): Promise<string> {
-  const headingTypeToFunctionName = {
-    constant: "setConstantHeadingInterpolation",
-    linear: "setLinearHeadingInterpolation",
-    tangential: "setTangentHeadingInterpolation",
-  };
+  const options: ExportTransformOptions = { mirrorHorizontally };
 
-  // Generate field declarations with proper indentation
-  const fieldDeclarations = lines
-    .map((line, idx) => {
-      const variableName = line.name
-        ? line.name.replace(/[^a-zA-Z0-9]/g, "")
-        : `line${idx + 1}`;
-      // declare waits as doubles, paths as PathChain
-      return (line as any).waitMs !== undefined
-        ? `public double ${variableName};`
-        : `public PathChain ${variableName};`;
-    })
-    .join("\n    ");
+  const linesWithIds = lines.map((line, idx) => ({
+    ...line,
+    id: line.id || `line-${idx + 1}`,
+  })) as (Line & { id: string })[];
 
-  // Generate path assignments with proper indentation
-  const pathAssignments = lines
-    .map((line, idx) => {
-      const variableName = line.name
-        ? line.name.replace(/[^a-zA-Z0-9]/g, "")
-        : `line${idx + 1}`;
+  const compoundPaths = normalizeCompoundPaths(linesWithIds);
+  const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
-      if ((line as any).waitMs !== undefined) {
-        // assign wait duration (ms) to double
-        return `${variableName} = ${Number((line as any).waitMs)};`;
-      }
+  const fields = javaPoseFieldsInline(
+    startPoint,
+    linesWithIds,
+    compoundPaths,
+    options,
+    mirrorHorizontally,
+  );
+  const methods = javaPathMethods(
+    compoundPaths,
+    linesWithIds,
+    options,
+    startPoint,
+  );
 
-      const start =
-        idx === 0
-          ? `new Pose(${startPoint.x.toFixed(3)}, ${startPoint.y.toFixed(3)})`
-          : `new Pose(${lines[idx - 1].endPoint.x.toFixed(3)}, ${lines[idx - 1].endPoint.y.toFixed(3)})`;
-
-      const controlPoints = line.controlPoints
-        .map(
-          (point) =>
-            `new Pose(${point.x.toFixed(3)}, ${point.y.toFixed(3)})`,
-        )
-        .join(",\n            ");
-
-      const curveType =
-        line.controlPoints.length === 0 ? `BezierLine` : `BezierCurve`;
-
-      const allPoints = controlPoints
-        ? `${start},\n            ${controlPoints},\n            new Pose(${line.endPoint.x.toFixed(3)}, ${line.endPoint.y.toFixed(3)})`
-        : `${start},\n            new Pose(${line.endPoint.x.toFixed(3)}, ${line.endPoint.y.toFixed(3)})`;
-
-      const headingConfig =
-        line.endPoint.heading === "constant"
-          ? `Math.toRadians(${line.endPoint.degrees})`
-          : line.endPoint.heading === "linear"
-            ? `Math.toRadians(${line.endPoint.startDeg}), Math.toRadians(${line.endPoint.endDeg})`
-            : "";
-
-      const reverseConfig = line.endPoint.reverse
-        ? "\n          .setReversed()"
-        : "";
-
-      return `${variableName} = follower.pathBuilder()
-          .addPath(
-            new ${curveType}(
-              ${allPoints}
-            )
-          )
-          .${headingTypeToFunctionName[line.endPoint.heading]}(${headingConfig})${reverseConfig}
-          .build();`;
-    })
-    .join("\n\n      ");
-
-  // If coordinates-only mode, return just the path assignments
   if (exportMode === "coordinates") {
-    return pathAssignments;
+    return `${fields}\n\n${methods}`;
   }
 
-  const pathsClass = `public static class Paths {
-    ${fieldDeclarations}
+  const pathsClass = `import static com.pedropathing.api.Paths.*;
 
-    public Paths(Follower follower) {
-      ${pathAssignments}
-    }
-  }`;
+import com.pedropathing.api.PoseFactory;
+import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
 
-  let file = "";
-  if (exportMode === "class") {
-    file = pathsClass;
-  } else {
-    file = `package org.firstinspires.ftc.teamcode;
-import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
-import com.bylazar.configurables.annotations.Configurable;
-import com.bylazar.telemetry.TelemetryManager;
-import com.bylazar.telemetry.PanelsTelemetry;
-import org.firstinspires.ftc.teamcode.pedroPathing.Constants;
-import com.pedropathing.geometry.BezierCurve;
-import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.follower.Follower;
-import com.pedropathing.paths.PathChain;
-import com.pedropathing.geometry.Pose;
+public class Paths {
 
-@Autonomous(name = "Pedro Pathing Autonomous", group = "Autonomous")
-@Configurable // Panels
-public class PedroAutonomous extends OpMode {
-  private TelemetryManager panelsTelemetry; // Panels Telemetry instance
-  public Follower follower; // Pedro Pathing follower instance
-  private int pathState; // Current autonomous path state (state machine)
-  private Paths paths; // Paths defined in the Paths class
+${fields}
 
-  @Override
-  public void init() {
-    panelsTelemetry = PanelsTelemetry.INSTANCE.getTelemetry();
-
-    follower = Constants.createFollower(hardwareMap);
-    follower.setStartingPose(new Pose(72, 8, Math.toRadians(90)));
-
-    paths = new Paths(follower); // Build paths
-
-    panelsTelemetry.debug("Status", "Initialized");
-    panelsTelemetry.update(telemetry);
-  }
-
-  @Override
-  public void loop() {
-    follower.update(); // Update Pedro Pathing
-    pathState = autonomousPathUpdate(); // Update autonomous state machine
-
-    // Log values to Panels and Driver Station
-    panelsTelemetry.debug("Path State", pathState);
-    panelsTelemetry.debug("X", follower.getPose().getX());
-    panelsTelemetry.debug("Y", follower.getPose().getY());
-    panelsTelemetry.debug("Heading", follower.getPose().getHeading());
-    panelsTelemetry.update(telemetry);
-  }
-
-  ${pathsClass}
-
-  public int autonomousPathUpdate() {
-    // Add your state machine Here
-    // Access paths with paths.pathName
-    // Refer to the Pedro Pathing Docs (Auto Example) for an example state machine
-    return 0;
-  }
+${methods}
 }`;
+
+  if (exportMode === "class") {
+    try {
+      const plugin = await loadJavaPlugin();
+      return await prettier.format(pathsClass, {
+        parser: "java",
+        plugins: plugin ? [plugin] : [],
+      });
+    } catch {
+      return pathsClass;
+    }
   }
+
+  // Full OpMode mode following Pedro Pathing Ivy autonomous structure
+  const pathFollows = compoundPaths
+    .map((compoundPath, idx) => {
+      const name = camelCase(
+        sanitizeIdentifier(compoundPath.name, `path${idx + 1}`),
+      );
+      return `            follow(follower, ${name}())`;
+    })
+    .join(",\n");
+
+  const file = `package org.firstinspires.ftc.teamcode;
+
+import static com.pedropathing.api.Paths.*;
+
+import com.pedropathing.api.PoseFactory;
+import com.pedropathing.follower.Follower;
+import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
+import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.Scheduler;
+import static com.pedropathing.ivy.Scheduler.schedule;
+import static com.pedropathing.ivy.commands.Commands.*;
+import static com.pedropathing.ivy.groups.Groups.sequential;
+import static com.pedropathing.ivy.pedro.PedroCommands.follow;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
+
+@Autonomous(name = "AutoOpMode", group = "Autonomous")
+public class AutoOpMode extends LinearOpMode {
+
+    private Follower follower;
+
+${fields}
+
+    // Autonomous routine
+    public Command autoRoutine() {
+        return sequential(
+${pathFollows}
+        );
+    }
+
+    @Override
+    public void runOpMode() {
+        Scheduler.reset();
+        follower = Constants.create(hardwareMap);
+        follower.setPose(${startVarName});
+        follower.update();
+
+        waitForStart();
+        schedule(autoRoutine());
+
+        while (opModeIsActive()) {
+            follower.update();
+            Scheduler.execute();
+
+            telemetry.addData("x", follower.pose().x());
+            telemetry.addData("y", follower.pose().y());
+            telemetry.addData("heading", follower.pose().heading());
+
+            if (follower.currentPath() != null) {
+                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint());
+                telemetry.addData("Path number", follower.pathIndex());
+            }
+
+            telemetry.update();
+        }
+    }
+
+${methods}
+}
+`;
 
   try {
-    const javaPlugin = await loadJavaPlugin();
-    const formattedCode = await prettier.format(file, {
+    const plugin = await loadJavaPlugin();
+    return await prettier.format(file, {
       parser: "java",
-      plugins: javaPlugin ? [javaPlugin] : [],
+      plugins: plugin ? [plugin] : [],
     });
-    return formattedCode;
   } catch (error) {
     console.error("Code formatting error:", error);
     return file;
   }
 }
 
-/**
- * Generate an array of waypoints (not sampled points) along the path
- */
-export function generatePointsArray(startPoint: Point, lines: Line[]): string {
-  const points: BasePoint[] = [];
+export async function generateKotlinCode(
+  startPoint: Point,
+  lines: Line[],
+  exportMode: "full" | "class" | "coordinates" = "class",
+  mirrorHorizontally = false,
+): Promise<string> {
+  const options: ExportTransformOptions = { mirrorHorizontally };
 
-  // Add start point
-  points.push(startPoint);
+  const linesWithIds = lines.map((line, idx) => ({
+    ...line,
+    id: line.id || `line-${idx + 1}`,
+  })) as (Line & { id: string })[];
 
-  // Add all waypoints (end points and control points)
-  lines.forEach((line) => {
-    // Add control points for this line
-    line.controlPoints.forEach((controlPoint) => {
-      points.push(controlPoint);
+  const compoundPaths = normalizeCompoundPaths(linesWithIds);
+  const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
+
+  const fields = kotlinPoseFieldsInline(
+    startPoint,
+    linesWithIds,
+    compoundPaths,
+    options,
+    mirrorHorizontally,
+  );
+  const methods = kotlinPathMethods(
+    compoundPaths,
+    linesWithIds,
+    options,
+    startPoint,
+  );
+
+  if (exportMode === "coordinates") {
+    return `${fields}\n\n${methods}`;
+  }
+
+  const pathsClass = `import com.pedropathing.api.Paths.*
+import com.pedropathing.api.PoseFactory
+import com.pedropathing.math.Pose
+import com.pedropathing.paths.Path
+
+class Paths {
+
+${fields}
+
+${methods}
+}`;
+
+  if (exportMode === "class") {
+    try {
+      const plugin = await loadKotlinPlugin();
+      if (!plugin) return pathsClass;
+      return await prettier.format(pathsClass, {
+        parser: "kotlin",
+        plugins: [plugin],
+      });
+    } catch {
+      return pathsClass;
+    }
+  }
+
+  // Full OpMode mode (Kotlin)
+  const pathFollows = compoundPaths
+    .map((compoundPath, idx) => {
+      const name = camelCase(
+        sanitizeIdentifier(compoundPath.name, `path${idx + 1}`),
+      );
+      return `            follow(follower, ${name}())`;
+    })
+    .join(",\n");
+
+  const file = `package org.firstinspires.ftc.teamcode
+
+import com.pedropathing.api.Paths.*
+import com.pedropathing.api.PoseFactory
+import com.pedropathing.follower.Follower
+import com.pedropathing.math.Pose
+import com.pedropathing.paths.Path
+import com.pedropathing.ivy.Command
+import com.pedropathing.ivy.Scheduler
+import com.pedropathing.ivy.Scheduler.schedule
+import com.pedropathing.ivy.commands.Commands.*
+import com.pedropathing.ivy.groups.Groups.sequential
+import com.pedropathing.ivy.pedro.PedroCommands.follow
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode
+
+@Autonomous(name = "AutoOpMode", group = "Autonomous")
+class AutoOpMode : LinearOpMode() {
+
+    private lateinit var follower: Follower
+
+${fields}
+
+    // Autonomous routine
+    fun autoRoutine(): Command = sequential(
+${pathFollows}
+    )
+
+    override fun runOpMode() {
+        Scheduler.reset()
+        follower = Constants.create(hardwareMap)
+        follower.setPose(${startVarName})
+        follower.update()
+
+        waitForStart()
+        schedule(autoRoutine())
+
+        while (opModeIsActive()) {
+            follower.update()
+            Scheduler.execute()
+
+            telemetry.addData("x", follower.pose().x())
+            telemetry.addData("y", follower.pose().y())
+            telemetry.addData("heading", follower.pose().heading())
+
+            if (follower.currentPath() != null) {
+                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint())
+                telemetry.addData("Path number", follower.pathIndex())
+            }
+
+            telemetry.update()
+        }
+    }
+
+${methods}
+}
+`;
+
+  try {
+    const plugin = await loadKotlinPlugin();
+    if (!plugin) return file;
+    return await prettier.format(file, {
+      parser: "kotlin",
+      plugins: [plugin],
     });
+  } catch (error) {
+    console.error("Kotlin code formatting error:", error);
+    return file;
+  }
+}
 
-    // Add end point of this line
+export function generatePointsArray(startPoint: Point, lines: Line[]): string {
+  const points: BasePoint[] = [startPoint];
+
+  lines.forEach((line) => {
+    line.controlPoints.forEach((cp) => points.push(cp));
     points.push(line.endPoint);
   });
 
-  // Format as string array, removing decimal places for whole numbers
   const pointsString = points
     .map((point) => {
       const x = Number.isInteger(point.x)
@@ -224,281 +671,134 @@ export function generatePointsArray(startPoint: Point, lines: Line[]): string {
   return `[${pointsString}]`;
 }
 
-/**
- * Generate Sequential Command code
- */
 export async function generateSequentialCommandCode(
   startPoint: Point,
   lines: Line[],
   fileName: string | null = null,
   sequence?: SequenceItem[],
 ): Promise<string> {
-  // Determine class name from file name or use default
   let className = "AutoPath";
   if (fileName) {
-    const baseName = fileName.split(/[\\/]/).pop() || "";
-    className = baseName.replace(".pp", "").replace(/[^a-zA-Z0-9]/g, "_");
-    if (!className) className = "AutoPath";
+    const baseName = fileName.split(/[\/]/).pop() || "";
+    className =
+      baseName.replace(".pp", "").replace(/[^a-zA-Z0-9]/g, "_") || "AutoPath";
   }
 
-  // Collect all pose names including control points
-  const allPoseDeclarations: string[] = [];
-  const allPoseInitializations: string[] = [];
+  const options: ExportTransformOptions = { mirrorHorizontally: false };
 
-  // Track all pose variable names
-  const poseVariableNames: Map<string, string> = new Map();
+  const linesWithIds = lines.map((line, idx) => ({
+    ...line,
+    id: line.id || `line-${idx + 1}`,
+  })) as (Line & { id: string })[];
 
-  // Add start point
-  allPoseDeclarations.push("  private Pose startPoint;");
-  poseVariableNames.set("startPoint", "startPoint");
-  allPoseInitializations.push('    startPoint = pp.get("startPoint");');
+  const compoundPaths = normalizeCompoundPaths(linesWithIds);
+  const fields = javaPoseFieldsInline(
+    startPoint,
+    linesWithIds,
+    compoundPaths,
+    options,
+    false,
+  );
+  const methods = javaPathMethods(
+    compoundPaths,
+    linesWithIds,
+    options,
+    startPoint,
+  );
+  const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
-  // Process each line
-  lines.forEach((line, lineIdx) => {
-    const endPointName = line.name
-      ? line.name.replace(/[^a-zA-Z0-9]/g, "")
-      : `point${lineIdx + 1}`;
-
-    // Add end point declaration
-    allPoseDeclarations.push(`  private Pose ${endPointName};`);
-    poseVariableNames.set(`point${lineIdx + 1}`, endPointName);
-    allPoseInitializations.push(
-      `    ${endPointName} = pp.get(\"${endPointName}\");`,
-    );
-
-    // Add control points if they exist
-    if (line.controlPoints && line.controlPoints.length > 0) {
-      line.controlPoints.forEach((_, controlIdx) => {
-        const controlPointName = `${endPointName}_control${controlIdx + 1}`;
-        allPoseDeclarations.push(`  private Pose ${controlPointName};`);
-        allPoseInitializations.push(
-          `    ${controlPointName} = pp.get(\"${controlPointName}\");`,
-        );
-        // Store for use in path building
-        poseVariableNames.set(
-          `${endPointName}_control${controlIdx + 1}`,
-          controlPointName,
-        );
-      });
-    }
-  });
-
-  // Generate path chain declarations
-  const pathChainDeclarations = lines
-    .map((_, idx) => {
-      const startPoseName =
-        idx === 0
-          ? "startPoint"
-          : lines[idx - 1]?.name
-            ? lines[idx - 1]!.name!.replace(/[^a-zA-Z0-9]/g, "")
-            : `point${idx}`;
-      const endPoseName = lines[idx].name
-        ? lines[idx].name.replace(/[^a-zA-Z0-9]/g, "")
-        : `point${idx + 1}`;
-      const pathName = `${startPoseName}TO${endPoseName}`;
-      return `  private PathChain ${pathName};`;
-    })
-    .join("\n");
-
-  // Generate ProgressTracker field
-  const progressTrackerField = `  private final ProgressTracker progressTracker;`;
-
-  // Generate addCommands calls with event handling; iterate sequence if provided
-  const commands: string[] = [];
-
-  const defaultSequence: SequenceItem[] = lines.map((ln, idx) => ({
+  const defaultSeq: SequenceItem[] = lines.map((ln, idx) => ({
     kind: "path",
     lineId: ln.id || `line-${idx + 1}`,
   }));
-  const seq = sequence && sequence.length ? sequence : defaultSequence;
+  const seq = sequence && sequence.length ? sequence : defaultSeq;
 
-  seq.forEach((item, idx) => {
+  const commands: string[] = [];
+  seq.forEach((item) => {
     if (item.kind === "wait") {
-      commands.push(`        new WaitCommand(${(item as any).durationMs})`);
+      commands.push(`            waitMs(${(item as any).durationMs})`);
       return;
     }
-    const lineIdx = lines.findIndex((l) => l.id === (item as any).lineId);
-    if (lineIdx < 0) {
-      return; // skip if sequence references a missing line
-    }
-    const line = lines[lineIdx];
-    if (!line) {
-      return;
-    }
-    const startPoseName =
-      lineIdx === 0
-        ? "startPoint"
-        : lines[lineIdx - 1]?.name
-          ? lines[lineIdx - 1]!.name!.replace(/[^a-zA-Z0-9]/g, "")
-          : `point${lineIdx}`;
-    const endPoseName = line.name
-      ? line.name.replace(/[^a-zA-Z0-9]/g, "")
-      : `point${lineIdx + 1}`;
-    const pathName = `${startPoseName}TO${endPoseName}`;
-    const pathDisplayName = `${startPoseName}TO${endPoseName}`;
-
-    if (line.eventMarkers && line.eventMarkers.length > 0) {
-      // Path has event markers - use reg.java style structure
-      // First: InstantCommand to set up tracker
-      commands.push(`        new InstantCommand(
-            () -> {
-              progressTracker.setCurrentChain(${pathName});
-              progressTracker.setCurrentPathName("${pathDisplayName}");`);
-
-      // Add event registrations
-      line.eventMarkers.forEach((event) => {
-        commands[commands.length - 1] += `
-              progressTracker.registerEvent("${event.name}", ${event.position.toFixed(3)});`;
-      });
-
-      commands[commands.length - 1] += `
-            })`;
-
-      // Second: ParallelRaceGroup for following path with event handling
-      commands.push(`        new ParallelRaceGroup(
-            new FollowPathCommand(follower, ${pathName}),
-            new SequentialCommandGroup(`);
-
-      // Add WaitUntilCommand for each event
-      line.eventMarkers.forEach((event, eventIdx) => {
-        if (eventIdx > 0) commands[commands.length - 1] += ",";
-        commands[commands.length - 1] += `
-                new WaitUntilCommand(() -> progressTracker.shouldTriggerEvent("${event.name}")),
-                new InstantCommand(
-                    () -> {
-                      progressTracker.executeEvent("${event.name}");
-                    })`;
-      });
-
-      commands[commands.length - 1] += `
-            ))`;
-    } else {
-      // No event markers - simple InstantCommand + FollowPathCommand
-      commands.push(`        new InstantCommand(
-            () -> {
-              progressTracker.setCurrentChain(${pathName});
-              progressTracker.setCurrentPathName("${pathDisplayName}");
-            }),
-        new FollowPathCommand(follower, ${pathName})`);
-    }
+    const lineIdx = linesWithIds.findIndex(
+      (l) => l.id === (item as any).lineId,
+    );
+    if (lineIdx < 0) return;
+    const name = camelCase(
+      sanitizeIdentifier(linesWithIds[lineIdx].name, `path${lineIdx + 1}`),
+    );
+    commands.push(`            follow(follower, ${name}())`);
   });
 
-  // Generate path building
-  const pathBuilders = lines
-    .map((line, idx) => {
-      const startPoseName =
-        idx === 0
-          ? "startPoint"
-          : lines[idx - 1]?.name
-            ? lines[idx - 1]!.name!.replace(/[^a-zA-Z0-9]/g, "")
-            : `point${idx}`;
-      const endPoseName = line.name
-        ? line.name.replace(/[^a-zA-Z0-9]/g, "")
-        : `point${idx + 1}`;
-      const pathName = `${startPoseName}TO${endPoseName}`;
+  const file = `package org.firstinspires.ftc.teamcode;
 
-      const isCurve = line.controlPoints.length > 0;
-      const curveType = isCurve ? "BezierCurve" : "BezierLine";
+import static com.pedropathing.api.Paths.*;
 
-      // Build control points string
-      let controlPointsStr = "";
-      if (isCurve) {
-        const controlPoints: string[] = [];
-        line.controlPoints.forEach((_, cpIdx) => {
-          const controlPointName = `${endPoseName}_control${cpIdx + 1}`;
-          controlPoints.push(controlPointName);
-        });
-        controlPointsStr = controlPoints.join(", ") + ", ";
-      }
-
-      // Determine heading interpolation
-      let headingConfig = "";
-      if (line.endPoint.heading === "constant") {
-        headingConfig = `setConstantHeadingInterpolation(${endPoseName}.getHeading())`;
-      } else if (line.endPoint.heading === "linear") {
-        headingConfig = `setLinearHeadingInterpolation(${startPoseName}.getHeading(), ${endPoseName}.getHeading())`;
-      } else {
-        headingConfig = `setTangentHeadingInterpolation()`;
-      }
-
-      // Build reverse config
-      const reverseConfig = line.endPoint.reverse
-        ? "\n            .setReversed()"
-        : "";
-
-      return `${pathName} =
-        follower
-            .pathBuilder()
-            .addPath(new ${curveType}(${startPoseName}, ${controlPointsStr}${endPoseName}))
-            .${headingConfig}${reverseConfig}
-            .build();`;
-    })
-    .join("\n\n    ");
-
-  const sequentialCommandCode = `
-package org.firstinspires.ftc.teamcode.Commands.AutoCommands;
-
+import com.pedropathing.api.PoseFactory;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.BezierCurve;
-import com.pedropathing.geometry.BezierLine;
-import com.pedropathing.geometry.Pose;
-import com.pedropathing.paths.PathChain;
-import com.qualcomm.robotcore.hardware.HardwareMap;
-import com.seattlesolvers.solverslib.command.SequentialCommandGroup;
-import com.seattlesolvers.solverslib.command.ParallelRaceGroup;
-import com.seattlesolvers.solverslib.command.WaitUntilCommand;
-import com.seattlesolvers.solverslib.command.WaitCommand;
-import com.seattlesolvers.solverslib.command.InstantCommand;
-import com.seattlesolvers.solverslib.pedroCommand.FollowPathCommand;
-import org.firstinspires.ftc.robotcore.external.Telemetry;
-import org.firstinspires.ftc.teamcode.Utils.Pathing.ProgressTracker;
-import java.io.IOException;
-import org.firstinspires.ftc.teamcode.Subsystems.Drivetrain;
-import org.firstinspires.ftc.teamcode.Utils.PedroPathReader;
+import com.pedropathing.math.Pose;
+import com.pedropathing.paths.Path;
+import com.pedropathing.ivy.Command;
+import com.pedropathing.ivy.Scheduler;
+import static com.pedropathing.ivy.Scheduler.schedule;
+import static com.pedropathing.ivy.commands.Commands.*;
+import static com.pedropathing.ivy.groups.Groups.sequential;
+import static com.pedropathing.ivy.pedro.PedroCommands.follow;
+import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 
-public class ${className} extends SequentialCommandGroup {
+@Autonomous(name = "${className}", group = "Autonomous")
+public class ${className} extends LinearOpMode {
 
-  private final Follower follower;
-  ${progressTrackerField}
+    private Follower follower;
 
-  // Poses
-${allPoseDeclarations.join("\n")}
+${fields}
 
-  // Path chains
-${pathChainDeclarations}
+    // Autonomous routine
+    public Command autoRoutine() {
+        return sequential(
+${commands.join(",\n")}
+        );
+    }
 
-  public ${className}(final Drivetrain drive, HardwareMap hw, Telemetry telemetry) throws IOException {
-    this.follower = drive.getFollower();
-    this.progressTracker = new ProgressTracker(follower, telemetry);
+    @Override
+    public void runOpMode() {
+        Scheduler.reset();
+        follower = Constants.create(hardwareMap);
+        follower.setPose(${startVarName});
+        follower.update();
 
-    PedroPathReader pp = new PedroPathReader("${fileName ? fileName.split(/[\\/]/).pop() + ".pp" || "AutoPath.pp" : "AutoPath.pp"}", hw.appContext);
+        waitForStart();
+        schedule(autoRoutine());
 
-    // Load poses
-${allPoseInitializations.join("\n")}
+        while (opModeIsActive()) {
+            follower.update();
+            Scheduler.execute();
 
-    follower.setStartingPose(startPoint);
+            telemetry.addData("x", follower.pose().x());
+            telemetry.addData("y", follower.pose().y());
+            telemetry.addData("heading", follower.pose().heading());
 
-    buildPaths();
+            if (follower.currentPath() != null) {
+                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint());
+                telemetry.addData("Path number", follower.pathIndex());
+            }
 
-    addCommands(
-${commands.join(",\n")});
-  }
+            telemetry.update();
+        }
+    }
 
-  public void buildPaths() {
-    ${pathBuilders}
-  }
+${methods}
 }
 `;
 
   try {
-    const javaPlugin = await loadJavaPlugin();
-    const formattedCode = await prettier.format(sequentialCommandCode, {
+    const plugin = await loadJavaPlugin();
+    return await prettier.format(file, {
       parser: "java",
-      plugins: javaPlugin ? [javaPlugin] : [],
+      plugins: plugin ? [plugin] : [],
     });
-    return formattedCode;
   } catch (error) {
     console.error("Code formatting error:", error);
-    return sequentialCommandCode;
+    return file;
   }
 }

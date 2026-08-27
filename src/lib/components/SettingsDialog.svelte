@@ -2,7 +2,7 @@
   import { cubicInOut } from "svelte/easing";
   import { fade, fly } from "svelte/transition";
   import { resetSettings } from "../../utils/settingsPersistence";
-  import { AVAILABLE_FIELD_MAPS } from "../../config/defaults";
+  import { AVAILABLE_FIELD_MAPS, DEFAULT_SETTINGS } from "../../config/defaults";
   import type { Settings } from "../../types";
 
   export let isOpen = false;
@@ -55,6 +55,24 @@
     settings[property] = num;
   }
 
+  function handleRightPanelMinWidthInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    handleNumberInput(target.value, "rightPanelMinWidth", 0, 600);
+  }
+
+  function handleLeftPanelWidthInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    handleNumberInput(target.value, "leftPanelWidth", 180, 800);
+  }
+
+  function handleRightPanelWidthInput(e: Event) {
+    const target = e.currentTarget as HTMLInputElement | null;
+    if (!target) return;
+    handleNumberInput(target.value, "rightPanelWidth", 180, 800);
+  }
+
   // Helper function to convert file to base64
   function imageToBase64(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
@@ -93,30 +111,30 @@
 {#if isOpen}
   <div
     transition:fade={{ duration: 500, easing: cubicInOut }}
-    class="bg-black bg-opacity-25 flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-[1005]"
+    class="console-backdrop flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-[1005]"
     role="dialog"
     aria-modal="true"
     aria-labelledby="settings-title"
   >
     <div
       transition:fly={{ duration: 500, easing: cubicInOut, y: 20 }}
-      class="flex flex-col justify-start items-start p-6 bg-white dark:bg-neutral-900 rounded-lg w-full max-w-2xl max-h-[80vh]"
+      class="console-panel console-settings-shell flex flex-col justify-start items-start p-6 w-full max-w-2xl max-h-[80vh]"
     >
       <!-- Header -->
       <div class="flex flex-row justify-between items-center w-full mb-4">
         <h2
           id="settings-title"
-          class="text-xl font-semibold text-neutral-900 dark:text-white"
+          class="text-xl font-semibold text-[#e8e8e8]"
         >
           Settings
         </h2>
-        <span class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+        <span class="text-xs text-[#888888] mt-1">
           Pedro Pathing Visualizer
         </span>
         <button
           on:click={() => (isOpen = false)}
           aria-label="Close settings"
-          class="p-1 rounded transition-colors duration-250"
+          class="console-icon-button"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -124,7 +142,7 @@
             viewBox="0 0 24 24"
             stroke-width={2}
             stroke="currentColor"
-            class="size-6 text-neutral-700 dark:text-neutral-400"
+            class="size-6 text-[#888888]"
           >
             <path
               stroke-linecap="round"
@@ -137,7 +155,7 @@
 
       <!-- Warning Banner -->
       <div
-        class="w-full mb-4 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-lg"
+        class="console-section w-full mb-4 p-3"
       >
         <div class="flex items-start gap-2">
           <svg
@@ -146,7 +164,7 @@
             viewBox="0 0 24 24"
             stroke-width={1.5}
             stroke="currentColor"
-            class="size-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+            class="size-5 text-[#888888] flex-shrink-0 mt-0.5"
           >
             <path
               stroke-linecap="round"
@@ -154,7 +172,7 @@
               d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
             />
           </svg>
-          <div class="text-sm text-amber-800 dark:text-amber-200">
+          <div class="text-sm text-[#d0d0d0]">
             <div class="font-medium mb-1">UI Settings Only</div>
             <div class="text-xs opacity-90">
               These settings only affect the visualizer/UI. Ensure your robot
@@ -171,7 +189,7 @@
           <button
             on:click={() =>
               (collapsedSections.robot = !collapsedSections.robot)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="console-trigger w-full justify-between transition-colors duration-250"
             aria-expanded={!collapsedSections.robot}
           >
             <div class="flex items-center gap-2">
@@ -210,7 +228,7 @@
 
           {#if !collapsedSections.robot}
             <div
-              class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
+              class="console-section mt-2 space-y-3 p-3"
             >
               <div>
                 <label
@@ -231,7 +249,7 @@
                   step="0.5"
                   on:input={(e) =>
                     handleNumberInput(e.target.value, "rWidth", 1, 36)}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -254,7 +272,7 @@
                   step="0.5"
                   on:input={(e) =>
                     handleNumberInput(e.target.value, "rHeight", 1, 36)}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -277,7 +295,7 @@
                   step="0.5"
                   on:input={(e) =>
                     handleNumberInput(e.target.value, "safetyMargin", 0, 24)}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
 
@@ -292,11 +310,11 @@
                   </div>
                 </div>
                 <div
-                  class="flex flex-col items-center gap-3 p-4 border border-neutral-300 dark:border-neutral-700 rounded-md bg-neutral-50 dark:bg-neutral-800/50"
+                  class="console-section flex flex-col items-center gap-3 p-4"
                 >
                   <!-- Current robot image preview -->
                   <div
-                    class="relative w-20 h-20 border-2 border-neutral-300 dark:border-neutral-600 rounded-md overflow-hidden bg-white dark:bg-neutral-900"
+                    class="relative w-20 h-20 border-2 border-neutral-300 dark:border-neutral-600 overflow-hidden bg-white dark:bg-neutral-900"
                   >
                     <img
                       src={settings.robotImage || "/robot.png"}
@@ -316,7 +334,7 @@
                           settings.robotImage = "/robot.png";
                           settings = { ...settings }; // Force reactivity
                         }}
-                        class="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                          class="console-action absolute top-1 right-1 p-1 bg-red-500 text-white hover:bg-red-600 transition-colors"
                         title="Remove custom image"
                       >
                         <svg
@@ -349,6 +367,8 @@
                             <span>Jeffery the Potato Active!</span>
                             <span>🥔</span>
                           </span>
+                        {:else if settings.robotImage === "/MecanumDuck.png"}
+                          <span>Mecanum Duck Active!</span>
                         {:else}
                           Custom Image Loaded
                         {/if}
@@ -359,6 +379,8 @@
                       >
                         {#if settings.robotImage === "/JefferyThePotato.png"}
                           Best. Robot. Ever. 🥔
+                        {:else if settings.robotImage === "/MecanumDuck.png"}
+                          Quack Quack
                         {:else}
                           {settings.robotImage.substring(0, 30)}...
                         {/if}
@@ -401,7 +423,7 @@
                     <button
                       on:click={() =>
                         document.getElementById("robot-image-input").click()}
-                      class="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors flex items-center justify-center gap-2"
+                      class="console-action px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-2"
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -425,7 +447,7 @@
                         settings.robotImage = "/robot.png";
                         settings = { ...settings };
                       }}
-                      class="px-4 py-2 text-sm bg-neutral-500 hover:bg-neutral-600 text-white rounded-md transition-colors"
+                      class="console-action px-4 py-2 text-sm bg-neutral-500 hover:bg-neutral-600 text-white transition-colors"
                       disabled={!settings.robotImage ||
                         settings.robotImage === "/robot.png"}
                     >
@@ -437,7 +459,7 @@
                         settings.robotImage = "/JefferyThePotato.png";
                         settings = { ...settings };
                       }}
-                      class="potato-tooltip px-4 py-2 text-sm bg-amber-700 hover:bg-amber-800 text-white rounded-md transition-colors flex items-center justify-center gap-2 group relative overflow-hidden"
+                      class="potato-tooltip console-action px-4 py-2 text-sm bg-amber-700 hover:bg-amber-800 text-white transition-colors flex items-center justify-center gap-2 group relative overflow-hidden"
                       style="background-image: linear-gradient(45deg, #a16207 25%, #ca8a04 25%, #ca8a04 50%, #a16207 50%, #a16207 75%, #ca8a04 75%, #ca8a04 100%); background-size: 20px 20px;"
                       title="Transform your robot into Jeffery the Potato!"
                     >
@@ -453,6 +475,18 @@
                       <div
                         class="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-200/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
                       ></div>
+                    </button>
+
+                    <button
+                      on:click={() => {
+                        settings.robotImage = "/MecanumDuck.png";
+                        settings = { ...settings };
+                      }}
+                      class="console-action px-4 py-2 text-sm text-white transition-colors flex items-center justify-center gap-2"
+                      style="background-image: linear-gradient(45deg, #eab308 25%, #f59e0b 25%, #f59e0b 50%, #eab308 50%, #eab308 75%, #f59e0b 75%, #f59e0b 100%); background-size: 18px 18px;"
+                      title="Use the Mecanum Duck robot image"
+                    >
+                      <span class="font-semibold">Use Mecanum Duck</span>
                     </button>
                   </div>
 
@@ -471,7 +505,7 @@
                   <input
                     type="checkbox"
                     bind:checked={settings.showHeadingArrow}
-                    class="w-4 h-4 rounded border-neutral-300 dark:border-neutral-600 text-blue-500 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    class="console-checkbox w-4 h-4 text-blue-500 focus:ring-2 focus:ring-blue-500 cursor-pointer"
                   />
                   <span
                     class="text-sm font-medium text-neutral-700 dark:text-neutral-300"
@@ -492,7 +526,7 @@
           <button
             on:click={() =>
               (collapsedSections.motion = !collapsedSections.motion)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="console-trigger w-full justify-between transition-colors duration-250"
             aria-expanded={!collapsedSections.motion}
           >
             <div class="flex items-center gap-2">
@@ -688,7 +722,7 @@
           <button
             on:click={() =>
               (collapsedSections.theme = !collapsedSections.theme)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
             aria-expanded={!collapsedSections.theme}
           >
             <div class="flex items-center gap-2">
@@ -763,6 +797,85 @@
                 </div>
               </div>
 
+              <div>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    bind:checked={settings.showCurrentTValue}
+                    class="console-checkbox w-4 h-4 text-blue-500 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                    Show Current T Value
+                  </span>
+                </label>
+                <div class="text-xs text-neutral-500 dark:text-neutral-400 ml-6 mt-1">
+                  Display the active path t value beside the robot while it is moving
+                </div>
+              </div>
+
+              <div class="console-section p-3 space-y-3">
+                <div class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+                  Panel Layout
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Left Panel Width
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="180"
+                      max="800"
+                      step="5"
+                      value={settings.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 370}
+                      on:input={handleLeftPanelWidthInput}
+                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Right Panel Width
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="180"
+                      max="800"
+                      step="5"
+                      value={settings.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 620}
+                      on:input={handleRightPanelWidthInput}
+                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    Right Panel Minimum Width
+                  </label>
+                  <div class="flex items-center gap-2">
+                    <input
+                      type="number"
+                      min="0"
+                      max="600"
+                      step="5"
+                      value={settings.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth ?? 0}
+                      on:input={handleRightPanelMinWidthInput}
+                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
+                  </div>
+                  <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                    Prevents the right sidebar from being squished smaller than this. Set to 0 for no limit.
+                  </div>
+                </div>
+              </div>
+
               <!-- Field Map Section -->
 
               <div>
@@ -794,7 +907,7 @@
                     >
                       Upload Custom Field Image
                       <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                        Accepts PNG, JPG, WEBP (recommended: 144x144 inches aspect ratio)
+                        Accepts PNG, JPG, WEBP (recommended: 141.5x141.5 inches aspect ratio)
                       </div>
                     </label>
                     <input
@@ -824,7 +937,7 @@
           <button
             on:click={() =>
               (collapsedSections.advanced = !collapsedSections.advanced)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-neutral-100 dark:bg-neutral-800 rounded-lg transition-colors duration-250"
+            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
             aria-expanded={!collapsedSections.advanced}
           >
             <div class="flex items-center gap-2">
@@ -865,6 +978,29 @@
             <div
               class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
             >
+              <div
+                class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
+              >
+                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Pen Tool Accuracy
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  bind:value={settings.penToolAccuracy}
+                  class="w-full px-3 py-2 rounded border bg-white dark:bg-neutral-800"
+                />
+                <div class="mt-2 flex items-center justify-between gap-2">
+                  <span class="text-xs text-neutral-500 dark:text-neutral-400">
+                    Maximum control points used when fitting freehand strokes
+                  </span>
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right">
+                    {settings.penToolAccuracy ?? 8}
+                  </span>
+                </div>
+              </div>
+
               <!-- Ghost Paths Toggle -->
               <!-- <div
                 class="flex items-center justify-between p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
@@ -1069,6 +1205,50 @@
                 </div>
               </div>
 
+              <!-- Experimental Features -->
+              <div
+                class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 mt-3"
+              >
+                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                  Experimental Features
+                </label>
+                <div class="flex flex-col gap-2">
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.experimentalFeatures?.optimize ?? false}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), optimize: e.target.checked })}
+                      class="h-4 w-4"
+                    />
+                    <span class="text-sm">Enable Optimize button</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.experimentalFeatures?.curveThrough ?? false}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), curveThrough: e.target.checked })}
+                      class="h-4 w-4"
+                    />
+                    <span class="text-sm">Enable Curve Through features</span>
+                  </label>
+                  <label class="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={settings.experimentalFeatures?.obstacles ?? false}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), obstacles: e.target.checked })}
+                      class="h-4 w-4"
+                    />
+                    <span class="text-sm">Enable Obstacles</span>
+                  </label>
+                </div>
+                <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
+                  Toggle experimental UI features. Disabled by default.
+                </div>
+                <div class="text-xs text-red-600 dark:text-red-400 mt-2">
+                  Disclaimer: Most features labeled "Experimental" are currently non-functional and are not recommended for use.
+                </div>
+              </div>
+
               <!-- (moved Next-Point Only toggle next to the main onion toggle) -->
 
               <svg
@@ -1135,6 +1315,21 @@
 {/if}
 
 <style>
+  .console-settings-shell :global(.rounded),
+  .console-settings-shell :global(.rounded-md),
+  .console-settings-shell :global(.rounded-lg),
+  .console-settings-shell :global(.rounded-full) {
+    border-radius: 0 !important;
+  }
+
+  .console-settings-shell :global(.shadow-sm),
+  .console-settings-shell :global(.shadow-md),
+  .console-settings-shell :global(.shadow-lg),
+  .console-settings-shell :global(.shadow-xl),
+  .console-settings-shell :global(.shadow-2xl) {
+    box-shadow: none !important;
+  }
+
   .potato-tooltip {
     position: relative;
   }

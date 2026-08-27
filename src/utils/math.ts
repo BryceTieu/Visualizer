@@ -36,6 +36,14 @@ export function transformAngle(angle: number) {
   return ((angle + 180) % 360) - 180;
 }
 
+export function normalizeAngleDegrees(angle: number): number {
+  if (!Number.isFinite(angle)) return 0;
+  let normalized = angle % 360;
+  if (normalized > 180) normalized -= 360;
+  if (normalized <= -180) normalized += 360;
+  return normalized;
+}
+
 /**
  * Calculates the smallest difference between two angles.
  * Returns a value between -180 and 180.
@@ -67,6 +75,27 @@ export function shortestRotation(
   const diff = getAngularDifference(startAngle, endAngle);
   // Apply difference to the ORIGINAL startAngle to preserve winding/continuity
   return startAngle + diff * percentage;
+}
+
+export function reversedRotation(
+  startAngle: number,
+  endAngle: number,
+  percentage: number,
+) {
+  const shortest = getAngularDifference(startAngle, endAngle);
+  const longWay = shortest >= 0 ? shortest - 360 : shortest + 360;
+  return normalizeAngleDegrees(startAngle + longWay * percentage);
+}
+
+export function interpolateAngleDegrees(
+  startAngle: number,
+  endAngle: number,
+  percentage: number,
+  reversed = false,
+) {
+  return reversed
+    ? reversedRotation(startAngle, endAngle, percentage)
+    : shortestRotation(startAngle, endAngle, percentage);
 }
 
 export function radiansToDegrees(radians: number) {
@@ -162,4 +191,71 @@ export function vw(percent: number) {
     window.innerWidth || 0,
   );
   return (percent * w) / 100;
+}
+
+/**
+ * Convert a Catmull-Rom segment to a cubic Bezier control pair.
+ * scaledTension should be tension/3 like in the Java implementation.
+ * Returns an object { start, cp1, cp2, end } where start==p1 and end==p2
+ */
+export function catmullToCubic(
+  scaledTension: number,
+  p0: { x: number; y: number },
+  p1: { x: number; y: number },
+  p2: { x: number; y: number },
+  p3: { x: number; y: number },
+) {
+  const cp1 = {
+    x: p1.x + (p2.x - p0.x) * scaledTension,
+    y: p1.y + (p2.y - p0.y) * scaledTension,
+  };
+
+  const cp2 = {
+    x: p2.x - (p3.x - p1.x) * scaledTension,
+    y: p2.y - (p3.y - p1.y) * scaledTension,
+  };
+
+  return { start: p1, cp1, cp2, end: p2 };
+}
+
+/**
+ * Given an array of points (poses), generate cubic Bezier segments that pass
+ * through the interior points using Catmull-Rom to Bezier conversion.
+ *
+ * Usage: provide an array where the first two entries are the prevPoint and
+ * the startPoint (like the Java PathBuilder expects), followed by the rest of
+ * the target points. The function will auto-append a mirrored final point so
+ * the tangent for the last segment can be computed.
+ *
+ * Returns an array of segments: { cp1, cp2, end }
+ */
+export function curveThroughPoints(
+  tension: number,
+  poses: { x: number; y: number }[],
+): { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] {
+  if (!poses || poses.length < 3) return [];
+
+  // Clone to avoid mutating input
+  const pts = poses.map((p) => ({ x: p.x, y: p.y }));
+
+  // Auto-extend last point to create a valid tangent (mirror last diff)
+  const last = pts[pts.length - 1];
+  const penultimate = pts[pts.length - 2];
+  const diff = { x: last.x - penultimate.x, y: last.y - penultimate.y };
+  pts.push({ x: last.x + diff.x, y: last.y + diff.y });
+
+  const scaledTension = tension / 3.0;
+  const out: { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+
+  // For i = 1 .. pts.length-3 produce segment between pts[i] and pts[i+1]
+  for (let i = 1; i < pts.length - 2; i++) {
+    const p0 = pts[i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2];
+    const seg = catmullToCubic(scaledTension, p0, p1, p2, p3);
+    out.push({ cp1: seg.cp1, cp2: seg.cp2, end: seg.end });
+  }
+
+  return out;
 }

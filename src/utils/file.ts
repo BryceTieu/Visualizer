@@ -1,4 +1,4 @@
-import type { Point, Line, Shape, SequenceItem } from "../types";
+import type { FieldPoint, Point, Line, Shape, SequenceItem } from "../types";
 
 /**
  * File save/load utilities for the visualizer
@@ -10,6 +10,8 @@ export interface SaveData {
   shapes?: Shape[];
   settings?: any;
   sequence?: SequenceItem[];
+  activePaths?: string[];
+  fieldPoints?: FieldPoint[];
 }
 
 /**
@@ -20,8 +22,15 @@ export function downloadTrajectory(
   lines: Line[],
   shapes: Shape[],
   sequence?: SequenceItem[],
+  activePaths?: string[],
 ): void {
-  const jsonString = JSON.stringify({ startPoint, lines, shapes, sequence });
+  const jsonString = JSON.stringify({
+    startPoint,
+    lines,
+    shapes,
+    sequence,
+    activePaths,
+  });
   const blob = new Blob([jsonString], { type: "application/json" });
   const linkObj = document.createElement("a");
   const url = URL.createObjectURL(blob);
@@ -49,8 +58,9 @@ export function loadTrajectoryFromFile(
   if (!file) return;
 
   // Check file extension
-  if (!file.name.toLowerCase().endsWith(".pp")) {
-    const error = new Error("Please select a .pp file");
+  const lowerName = file.name.toLowerCase();
+  if (!lowerName.endsWith(".pp") && !lowerName.endsWith(".json")) {
+    const error = new Error("Please select a .pp or .json file");
     if (onError) onError(error);
     alert(error.message);
     return;

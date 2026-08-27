@@ -6,6 +6,36 @@ export interface BasePoint {
   locked?: boolean;
 }
 
+export type PiecewiseHeadingInterpolationType =
+  | "linear"
+  | "constant"
+  | "tangential"
+  | "facing-point";
+
+export interface PiecewiseHeadingSegment {
+  startProgress: number;
+  endProgress: number;
+  interpolationType: PiecewiseHeadingInterpolationType;
+  reversed?: boolean;
+  parameters?: {
+    startDeg?: number;
+    endDeg?: number;
+    degrees?: number;
+    point?: BasePoint;
+  };
+}
+
+export interface PiecewiseHeadingInterpolation {
+  scope?: "path" | "chain";
+  segments: PiecewiseHeadingSegment[];
+}
+
+export interface FieldPoint extends BasePoint {
+  color?: string;
+  radius?: number;
+  opacity?: number;
+}
+
 export type Point = BasePoint &
   (
     | {
@@ -14,6 +44,7 @@ export type Point = BasePoint &
         endDeg: number;
         degrees?: never;
         reverse?: never;
+        name?: string;
       }
     | {
         heading: "constant";
@@ -21,6 +52,7 @@ export type Point = BasePoint &
         startDeg?: never;
         endDeg?: never;
         reverse?: never;
+        name?: string;
       }
     | {
         heading: "tangential";
@@ -28,6 +60,16 @@ export type Point = BasePoint &
         startDeg?: never;
         endDeg?: never;
         reverse: boolean;
+        name?: string;
+      }
+    | {
+        heading: "piecewise";
+        piecewiseHeading: PiecewiseHeadingInterpolation;
+        degrees?: never;
+        startDeg?: never;
+        endDeg?: never;
+        reverse?: never;
+        name?: string;
       }
   );
 
@@ -70,6 +112,16 @@ export type SequenceWaitItem = {
 
 export type SequenceItem = SequencePathItem | SequenceWaitItem;
 
+// PathChain is kept only for backward compatibility with older saved files.
+// The visualizer and code export now treat timeline entries as Pedro Path objects.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export interface PathChain {
+  id: string;
+  name: string;
+  color: string;
+  lineIds: string[];
+}
+
 export interface Settings {
   xVelocity: number;
   yVelocity: number;
@@ -91,10 +143,20 @@ export interface Settings {
   onionColor?: string; // Color for onion-layer colliders
   onionNextPointOnly?: boolean; // When true, onion layers show only for the next point (UI-only for now)
   showHeadingArrow?: boolean; // Show arrow indicating robot heading direction
+  showCurrentTValue?: boolean; // Show the current path t value near the robot
+  leftPanelWidth?: number; // Width of the left sidebar in pixels
+  rightPanelWidth?: number; // Width of the right sidebar in pixels
   headingArrowLength?: number; // Length of the heading arrow in pixels
   headingArrowColor?: string; // Color of the heading arrow
   headingArrowThickness?: number; // Thickness/stroke width of the heading arrow
   pathOpacity?: number; // Opacity of path lines (0-1)
+  rightPanelMinWidth?: number; // Minimum width of the right sidebar in pixels
+  penToolAccuracy?: number; // Maximum number of control points used by the pen tool
+  experimentalFeatures?: {
+    optimize?: boolean;
+    curveThrough?: boolean;
+    obstacles?: boolean;
+  };
 }
 
 export interface Shape {

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
+  import { createDefaultPiecewiseHeadingInterpolation } from "../../utils/headingInterpolation";
   export let endPoint: any;
   export let locked: boolean = false;
   const dispatch = createEventDispatcher();
@@ -16,6 +17,10 @@
       if (endPoint.endDeg === undefined) endPoint.endDeg = 0;
     } else if (endPoint.heading === "tangential") {
       if (endPoint.reverse === undefined) endPoint.reverse = false;
+    } else if (endPoint.heading === "piecewise") {
+      if (!endPoint.piecewiseHeading) {
+        endPoint.piecewiseHeading = createDefaultPiecewiseHeadingInterpolation("path");
+      }
     }
     dispatch("change");
   }}
@@ -29,6 +34,7 @@ With tangential heading, the heading follows the direction of the line."
   <option value="constant">Constant</option>
   <option value="linear">Linear</option>
   <option value="tangential">Tangential</option>
+  <option value="piecewise">Piecewise</option>
 </select>
 
 {#if endPoint.heading === "linear"}

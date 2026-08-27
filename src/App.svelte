@@ -30,6 +30,7 @@
   import _ from "lodash";
   import hotkeys from "hotkeys-js";
   import { createAnimationController } from "./utils/animation";
+  import { createPerfSampler, sampleNodeCounts } from "./utils/perf";
   import { calculatePathTime, getAnimationDuration } from "./utils";
   import { exportAsGif, downloadBlob } from "./utils/gifExporter";
 
@@ -38,6 +39,7 @@
     generateGhostPathPoints,
     generateOnionLayers,
   } from "./utils";
+  import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
   import {
     easeInOutQuad,
     getCurvePoint,
@@ -63,7 +65,7 @@
   } from "./config";
   import { loadSettings, saveSettings } from "./utils/settingsPersistence";
   import * as browserFileStore from "./utils/browserFileStore";
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { debounce } from "lodash";
   import { createHistory, type AppState } from "./utils/history";
   // Browser-only build: file operations use the browser file store and
@@ -92,13 +94,27 @@
   // Canvas state
   let two: Two;
   let twoElement: HTMLDivElement;
+  let fieldPointsCanvas: HTMLCanvasElement;
   let width = 0;
   let height = 0;
+  const SIDE_PANEL_MIN_WIDTH = 240;
+  const SIDE_PANEL_MAX_WIDTH = 620;
+  const CENTER_MIN_WIDTH = 300;
+  const PANEL_DIVIDER_WIDTH = 18;
+  let leftPanelWidth = DEFAULT_SETTINGS.leftPanelWidth || 370;
+  let rightPanelWidth = DEFAULT_SETTINGS.rightPanelWidth || 620;
+  let leftPanelHidden = false;
+  let rightPanelHidden = false;
+  let panelResizeState:
+    | { side: "left"; startX: number; startWidth: number }
+    | { side: "right"; startX: number; startWidth: number }
+    | null = null;
   // Robot state
   $: robotWidth = settings?.rWidth || DEFAULT_ROBOT_WIDTH;
   $: robotHeight = settings?.rHeight || DEFAULT_ROBOT_HEIGHT;
   let robotXY: BasePoint = { x: 0, y: 0 };
   let robotHeading: number = 0;
+  let robotT: number | null = null;
   // Animation state
   let percent: number = 0;
   let playing = false;
@@ -118,6 +134,7 @@
   let settings: Settings = { ...DEFAULT_SETTINGS };
   let startPoint: Point = getDefaultStartPoint();
   let lines: Line[] = normalizeLines(getDefaultLines());
+  let fieldPoints: FieldPoint[] = [];
 
   function normalizeLegacyFieldMap(input: Settings): Settings {
     const next = { ...input };
@@ -137,6 +154,30 @@
     return next;
   }
 
+  function detectMobileDevice() {
+    if (typeof window === "undefined" || typeof navigator === "undefined") {
+      return false;
+    }
+    const userAgent = navigator.userAgent || "";
+    // Prefer the standard, high-confidence signal when it's available.
+    const mobileHint = "userAgentData" in navigator
+      ? (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ?? false
+      : false;
+
+    // Only treat a device as mobile when the user agent itself reports it.
+    //
+    // Previously this also used pointer/touch heuristics (coarse pointer,
+    // maxTouchPoints, any-hover). Those are unreliable on modern desktops and
+    // laptops, which often ship with built-in touchscreens (and embedded preview
+    // iframes can report touch capability) — so they flagged real desktops as
+    // mobile. Real phones/tablets always present a mobile user agent, so this
+    // conservative check is sufficient and avoids false positives.
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk/i.test(userAgent);
+
+    return mobileHint || uaMobile;
+  }
+
+
   $: fieldMapSrc =
     settings.fieldMap === "custom"
       ? settings.customFieldImage || "/fields/decode.webp"
@@ -147,6 +188,68 @@
     kind: "path",
     lineId: ln.id!,
   }));
+  const makeId = () =>
+    `line-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  let selectedLineIndex = 0;
+  let selectedPointIndex = 0;
+  let selectedLine: Line | null = null;
+  let selectedPoint: BasePoint | null = null;
+  let penToolEnabled = false;
+  let penStroke: BasePoint[] = [];
+  let penIsDrawing = false;
+  let penGhostPath: (Path | PathLine)[] = [];
+  let fieldMapLoaded = false;
+  let robotImageLoaded = false;
+  let lastFieldMapSrc = "";
+  let lastRobotImageSrc = "";
+  let isMobileBlocked = false;
+  let effectiveSize = FIELD_SIZE;
+  let fieldStageWidth = FIELD_SIZE;
+  let fieldStageHeight = FIELD_SIZE;
+  $: fieldPixelSize = Math.max(
+    1,
+    Math.floor(
+      Math.min(fieldStageWidth || FIELD_SIZE, fieldStageHeight || FIELD_SIZE) - 16,
+    ),
+  );
+
+  if (typeof window !== "undefined") {
+    // Initial detection
+    isMobileBlocked = detectMobileDevice();
+
+    // Re-evaluate on viewport changes which can indicate mobile/orientation changes
+    const _updateMobile = () => {
+      try {
+        isMobileBlocked = detectMobileDevice();
+      } catch (e) {
+        /* ignore */
+      }
+    };
+    window.addEventListener("resize", _updateMobile);
+    window.addEventListener("orientationchange", _updateMobile);
+  }
+  $: if (fieldMapSrc !== lastFieldMapSrc) {
+    fieldMapLoaded = false;
+    lastFieldMapSrc = fieldMapSrc;
+  }
+
+  $: if ((settings.robotImage || "/robot.png") !== lastRobotImageSrc) {
+    robotImageLoaded = false;
+    lastRobotImageSrc = settings.robotImage || "/robot.png";
+  }
+
+  $: initialAssetsReady = fieldMapLoaded && robotImageLoaded;
+  $: if (lines.length > 0 && selectedLineIndex >= lines.length) {
+    selectedLineIndex = lines.length - 1;
+  }
+
+  $: selectedLine = lines[selectedLineIndex] || null;
+  $: selectedPoint =
+    selectedLine && selectedPointIndex >= 0
+      ? selectedPointIndex === 0
+        ? selectedLine.endPoint
+        : selectedLine.controlPoints[selectedPointIndex - 1] || null
+      : null;
   let shapes: Shape[] = getDefaultShapes();
   let optimizingLineIds: Record<string, boolean> = {};
   let optimizingAll = false;
@@ -169,9 +272,397 @@
   }
   let additionalPaths: AdditionalPathData[] = [];
 
+  const formatPathPoint = (value: number) =>
+    Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
+
+  const SESSION_RECOVERY_KEY = "pedro_session_recovery_v1";
+
+  interface SessionSnapshot {
+    startPoint: Point;
+    lines: Line[];
+    sequence: SequenceItem[];
+    shapes: Shape[];
+    settings: Settings;
+    currentFilePath: string | null;
+    secondFilePath: string | null;
+    secondStartPoint: Point | null;
+    secondLines: Line[];
+    secondSequence: SequenceItem[];
+    secondShapes: Shape[];
+    activePaths: string[];
+    timestamp: string;
+  }
+
   const history = createHistory();
   const { canUndoStore, canRedoStore } = history;
   const OPTIMIZER_BASE_URL = "https://fpa.pedropathing.com";
+
+  function clampFieldCoordinate(value: number): number {
+    return clamp(value, 0, FIELD_SIZE);
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+  function distanceBetweenPoints(a: BasePoint, b: BasePoint): number {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+  
+  function perpendicularDistance(
+    point: BasePoint,
+    lineStart: BasePoint,
+    lineEnd: BasePoint,
+  ): number {
+    const denominator = Math.hypot(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y);
+    if (denominator === 0) {
+      return distanceBetweenPoints(point, lineStart);
+    }
+  
+    const numerator = Math.abs(
+      (lineEnd.y - lineStart.y) * point.x -
+        (lineEnd.x - lineStart.x) * point.y +
+        lineEnd.x * lineStart.y -
+        lineEnd.y * lineStart.x,
+    );
+  
+    return numerator / denominator;
+  }
+  
+  function simplifyStrokePoints(points: BasePoint[], tolerance: number): BasePoint[] {
+    if (points.length <= 2) return points.map((point) => ({ ...point }));
+  
+    const simplifyRange = (startIndex: number, endIndex: number): BasePoint[] => {
+      let maxDistance = 0;
+      let farthestIndex = -1;
+  
+      for (let index = startIndex + 1; index < endIndex; index += 1) {
+        const distance = perpendicularDistance(points[index], points[startIndex], points[endIndex]);
+        if (distance > maxDistance) {
+          maxDistance = distance;
+          farthestIndex = index;
+        }
+      }
+  
+      if (maxDistance <= tolerance || farthestIndex === -1) {
+        return [{ ...points[startIndex] }, { ...points[endIndex] }];
+      }
+  
+      const left = simplifyRange(startIndex, farthestIndex);
+      const right = simplifyRange(farthestIndex, endIndex);
+      return [...left.slice(0, -1), ...right];
+    };
+  
+    return simplifyRange(0, points.length - 1);
+  }
+  
+  function dedupeStrokePoints(points: BasePoint[], minDistance: number): BasePoint[] {
+    const deduped: BasePoint[] = [];
+  
+    for (const point of points) {
+      const lastPoint = deduped[deduped.length - 1];
+      if (!lastPoint || distanceBetweenPoints(lastPoint, point) >= minDistance) {
+        deduped.push({ ...point });
+      }
+    }
+  
+    return deduped;
+  }
+
+  function getPointOnStroke(points: BasePoint[], targetDistance: number): BasePoint {
+    if (points.length === 0) return { x: 0, y: 0 };
+    if (points.length === 1) return { ...points[0] };
+
+    let remaining = targetDistance;
+
+    for (let index = 0; index < points.length - 1; index += 1) {
+      const current = points[index];
+      const next = points[index + 1];
+      const segmentLength = distanceBetweenPoints(current, next);
+
+      if (segmentLength === 0) continue;
+      if (remaining <= segmentLength) {
+        const ratio = remaining / segmentLength;
+        return {
+          x: current.x + (next.x - current.x) * ratio,
+          y: current.y + (next.y - current.y) * ratio,
+        };
+      }
+
+      remaining -= segmentLength;
+    }
+
+    return { ...points[points.length - 1] };
+  }
+
+  function sampleStrokeControlPoints(points: BasePoint[], controlPointCount: number): BasePoint[] {
+    if (points.length < 2 || controlPointCount <= 0) return [];
+
+    const totalLength = points.reduce((sum, point, index) => {
+      if (index === 0) return 0;
+      return sum + distanceBetweenPoints(points[index - 1], point);
+    }, 0);
+
+    if (totalLength === 0) return [];
+
+    const sampled: BasePoint[] = [];
+    for (let index = 1; index <= controlPointCount; index += 1) {
+      const targetDistance = (totalLength * index) / (controlPointCount + 1);
+      sampled.push(getPointOnStroke(points, targetDistance));
+    }
+
+    return sampled;
+  }
+  
+  function fitStrokeToLines(
+    stroke: BasePoint[],
+    startAnchor?: BasePoint,
+  ): { startPoint: Point; lines: Line[] } | null {
+    const cleanedStroke = dedupeStrokePoints(
+      stroke.map((point) => ({
+        x: clampFieldCoordinate(point.x),
+        y: clampFieldCoordinate(point.y),
+      })),
+      0.25,
+    );
+  
+    if (cleanedStroke.length < 2) return null;
+  
+    const simplifiedStroke = simplifyStrokePoints(cleanedStroke, 0.45);
+    const strokePoints = dedupeStrokePoints(simplifiedStroke, 0.05);
+  
+    if (strokePoints.length < 2) return null;
+  
+      const maxControlPoints = Math.max(0, Math.round(Number(settings?.penToolAccuracy ?? DEFAULT_SETTINGS.penToolAccuracy)));
+      const controlPointsSource = startAnchor
+        ? [
+            { x: clampFieldCoordinate(startAnchor.x), y: clampFieldCoordinate(startAnchor.y) },
+            ...strokePoints,
+          ]
+        : strokePoints;
+      const controlPoints = sampleStrokeControlPoints(controlPointsSource, maxControlPoints);
+
+      const fittedLines: Line[] = [
+        {
+          id: makeId(),
+          name: "Path 1",
+          endPoint: {
+            x: strokePoints[strokePoints.length - 1].x,
+            y: strokePoints[strokePoints.length - 1].y,
+            heading: "tangential",
+            reverse: false,
+          },
+          controlPoints,
+          color: getRandomColor(),
+          waitBeforeMs: 0,
+          waitAfterMs: 0,
+          waitBeforeName: "",
+          waitAfterName: "",
+        },
+      ];
+  
+    return {
+      startPoint: {
+          x: (startAnchor?.x ?? strokePoints[0].x),
+          y: (startAnchor?.y ?? strokePoints[0].y),
+        heading: "tangential",
+        reverse: false,
+      },
+      lines: fittedLines,
+    };
+  }
+  
+  function commitPenStroke() {
+      const selectedLine = lines[selectedLineIndex];
+      const startAnchor = selectedLine?.endPoint || undefined;
+      const fitted = fitStrokeToLines(penStroke, startAnchor);
+    penStroke = [];
+    penIsDrawing = false;
+  
+    if (!fitted) return;
+  
+      const newLine = fitted.lines[0];
+      if (!newLine) return;
+
+      if (selectedLine?.id) {
+        const insertAt = lines.findIndex((line) => line.id === selectedLine.id);
+        const nextLines = [...lines];
+        nextLines.splice(insertAt >= 0 ? insertAt + 1 : nextLines.length, 0, newLine);
+        lines = normalizeLines(nextLines);
+
+        const nextSequence = [...sequence];
+        const seqIndex = sequence.findIndex((item) => item.kind === "path" && item.lineId === selectedLine.id);
+        nextSequence.splice(seqIndex >= 0 ? seqIndex + 1 : nextSequence.length, 0, { kind: "path", lineId: newLine.id! });
+        sequence = nextSequence;
+
+        selectedLineIndex = insertAt >= 0 ? insertAt + 1 : lines.length - 1;
+        selectedPointIndex = 0;
+      } else {
+        startPoint = fitted.startPoint;
+        lines = normalizeLines(fitted.lines);
+        sequence = lines.map((line) => ({ kind: "path", lineId: line.id! }));
+        selectedLineIndex = 0;
+        selectedPointIndex = 0;
+      }
+
+    selectedPointIndex = 0;
+    recordChange();
+    two?.update();
+  }
+  
+  function togglePenTool() {
+    penToolEnabled = !penToolEnabled;
+    if (!penToolEnabled) {
+      penStroke = [];
+      penIsDrawing = false;
+    }
+  }
+
+  function clampPanelWidth(
+    side: "left" | "right",
+    desiredWidth: number,
+    availableWidth: number,
+    otherPanelWidth: number,
+  ) {
+    const rightPanelMinWidth = Math.max(
+      0,
+      Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
+    );
+    const minWidth = side === "right" ? rightPanelMinWidth : SIDE_PANEL_MIN_WIDTH;
+    // Calculate the minimum center width needed to make the field square or wider.
+    // The field height is determined by the center-stage layout, roughly:
+    // window height - navbar (~80px) - ui-shell padding (~24px) - center-stage padding (~20px) - field-stage padding (~16px)
+    const estimatedFieldHeight = Math.max(
+      300,
+      window.innerHeight - 80 - 24 - 20 - 16 - PANEL_DIVIDER_WIDTH * 2
+    );
+    // Center must be at least as wide as the field height to avoid a tall rectangle
+    const minCenterWidthForSquare = estimatedFieldHeight;
+    // Maximum panel width is constrained so center is at least minCenterWidthForSquare
+    const maxPanelWidth = availableWidth - otherPanelWidth - minCenterWidthForSquare - PANEL_DIVIDER_WIDTH * 2;
+    // Panel cannot exceed maxPanelWidth, but must be at least minWidth
+    // If maxPanelWidth < minWidth, the panel will be shrunk to fit (making center bigger)
+    const effectiveMax = Math.max(minWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxPanelWidth));
+    return clamp(desiredWidth, minWidth, effectiveMax);
+  }
+
+  // Calculate the minimum center width needed for a square-or-wider field
+  function getMinCenterWidthForSquare(): number {
+    // Estimate field height: window height minus navbar, padding, and dividers
+    const estimatedFieldHeight = Math.max(
+      300,
+      window.innerHeight - 80 - 24 - 20 - 16 - PANEL_DIVIDER_WIDTH * 2
+    );
+    return estimatedFieldHeight;
+  }
+
+  // Reactive center width calculation for the field constraint
+  $: centerWidth = Math.max(
+    300,
+    window.innerWidth - 24 - (leftPanelHidden ? 0 : leftPanelWidth) - (rightPanelHidden ? 0 : rightPanelWidth) - PANEL_DIVIDER_WIDTH * 2
+  );
+
+  // Calculate available width for panels after ensuring center is at least square
+  // If default panel sizes would make center too small, panels auto-shrink
+  $: {
+    const minCenterWidth = getMinCenterWidthForSquare();
+    const totalAvailable = window.innerWidth - 24 - PANEL_DIVIDER_WIDTH * 2;
+    const availableForPanels = totalAvailable - minCenterWidth;
+    
+    // Auto-shrink left panel if needed to fit
+    if (!leftPanelHidden) {
+      const rightMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
+      const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
+      const desiredLeft = Number(settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 240);
+      leftPanelWidth = clamp(desiredLeft, SIDE_PANEL_MIN_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, maxLeft));
+    }
+    
+    // Auto-shrink right panel if needed to fit
+    if (!rightPanelHidden) {
+      const leftWidth = leftPanelHidden ? 0 : leftPanelWidth;
+      const rightMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const maxRight = Math.max(rightMinWidth, availableForPanels - leftWidth);
+      const desiredRight = Number(settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 360);
+      rightPanelWidth = clamp(desiredRight, rightMinWidth, Math.max(rightMinWidth, maxRight));
+    }
+  }
+
+  function beginPanelResize(side: "left" | "right", event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    panelResizeState = {
+      side,
+      startX: event.clientX,
+      startWidth: side === "left" ? leftPanelWidth : rightPanelWidth,
+    };
+
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = "ew-resize";
+      document.body.style.userSelect = "none";
+    }
+  }
+
+  function endPanelResize() {
+    panelResizeState = null;
+
+    if (typeof document !== "undefined") {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+  }
+
+  function handlePanelResize(event: MouseEvent) {
+    if (!panelResizeState) return;
+
+    const availableWidth = Math.max(0, window.innerWidth - 24);
+    if (panelResizeState.side === "left") {
+      const rightPanelMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const otherWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
+      const desiredWidth = panelResizeState.startWidth + (event.clientX - panelResizeState.startX);
+      leftPanelHidden = false;
+      leftPanelWidth = clampPanelWidth("left", desiredWidth, availableWidth, otherWidth);
+      settings.leftPanelWidth = leftPanelWidth;
+    } else {
+      const otherWidth = leftPanelHidden ? 0 : leftPanelWidth;
+      const desiredWidth = panelResizeState.startWidth - (event.clientX - panelResizeState.startX);
+      rightPanelHidden = false;
+      rightPanelWidth = clampPanelWidth("right", desiredWidth, availableWidth, otherWidth);
+      settings.rightPanelWidth = rightPanelWidth;
+    }
+  }
+
+  function toggleLeftPanelVisibility() {
+    leftPanelHidden = !leftPanelHidden;
+  }
+
+  function toggleRightPanelVisibility() {
+    rightPanelHidden = !rightPanelHidden;
+  }
+
+  function getMouseFieldPoint(evt: MouseEvent): BasePoint | null {
+    if (!two?.renderer?.domElement) return null;
+    const rect = two.renderer.domElement.getBoundingClientRect();
+    return {
+      x: clampFieldCoordinate(x.invert(evt.clientX - rect.left)),
+      y: clampFieldCoordinate(y.invert(evt.clientY - rect.top)),
+    };
+  }
+
+  function buildProjectData(overrides: Record<string, unknown> = {}) {
+    return {
+      startPoint,
+      lines,
+      shapes,
+      sequence,
+      fieldPoints,
+      activePaths: $activePaths,
+      settings,
+      version: "1.3.0",
+      timestamp: new Date().toISOString(),
+      ...overrides,
+    };
+  }
 
   function getAppState(): AppState {
     return {
@@ -180,6 +671,7 @@
       shapes,
       sequence,
       settings,
+      fieldPoints,
     };
   }
 
@@ -199,6 +691,7 @@
       shapes = prev.shapes;
       sequence = prev.sequence;
       settings = prev.settings;
+      fieldPoints = prev.fieldPoints;
       isUnsaved.set(true);
       two && two.update();
     }
@@ -214,6 +707,7 @@
       shapes = next.shapes;
       sequence = next.sequence;
       settings = next.settings;
+      fieldPoints = next.fieldPoints;
       isUnsaved.set(true);
       two && two.update();
     }
@@ -238,12 +732,12 @@
   // Animation controller
   let loopAnimation = true;
   let animationController: ReturnType<typeof createAnimationController>;
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
+  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
   $: animationDuration = getAnimationDuration(timePrediction.totalTime / 1000);
   
   // Second path timeline (for dual path mode)
   $: secondTimePrediction = $dualPathMode && secondStartPoint && secondLines.length > 0 
-    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
+    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence, [])
     : null;
   
   // Calculate max duration across all paths for playbar scaling
@@ -257,7 +751,8 @@
             pathData.startPoint,
             pathData.lines,
             pathData.settings,
-            pathData.sequence
+            pathData.sequence,
+            []
           );
           if (pathTime) {
             maxTime = Math.max(maxTime, pathTime.totalTime);
@@ -276,6 +771,14 @@
     
     return getAnimationDuration(maxTime / 1000);
   })();
+
+  $: pathPreviewItems = lines.slice(0, 14).map((line, idx) => ({
+    index: idx + 1,
+    lineIndex: idx,
+    name: line.name || `Path ${idx + 1}`,
+    x: formatPathPoint(line.endPoint.x),
+    y: formatPathPoint(line.endPoint.y),
+  }));
   
   // Load additional paths when activePaths changes
   $: {
@@ -325,6 +828,77 @@
 
     additionalPaths = newAdditionalPaths;
   }
+
+  function buildSessionSnapshot(): SessionSnapshot {
+    return {
+      startPoint,
+      lines,
+      sequence,
+      shapes,
+      settings,
+      currentFilePath: $currentFilePath,
+      secondFilePath: $secondFilePath,
+      secondStartPoint,
+      secondLines,
+      secondSequence,
+      secondShapes,
+      activePaths: $activePaths,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  function restoreSessionSnapshot(): boolean {
+    try {
+      const raw = localStorage.getItem(SESSION_RECOVERY_KEY);
+      if (!raw) return false;
+
+      const parsed: SessionSnapshot = JSON.parse(raw);
+      if (!parsed?.startPoint || !Array.isArray(parsed?.lines)) {
+        return false;
+      }
+
+      startPoint = parsed.startPoint;
+
+      const restoredLines = normalizeLines(parsed.lines || []);
+      lines = restoredLines;
+
+      sequence =
+        parsed.sequence && parsed.sequence.length
+          ? parsed.sequence
+          : restoredLines.map((ln) => ({
+              kind: "path",
+              lineId: ln.id!,
+            }));
+
+      shapes = parsed.shapes || [];
+      settings = normalizeLegacyFieldMap({
+        ...DEFAULT_SETTINGS,
+        ...(parsed.settings || {}),
+      });
+
+      currentFilePath.set(parsed.currentFilePath || null);
+      secondFilePath.set(parsed.secondFilePath || null);
+
+      secondStartPoint = parsed.secondStartPoint || null;
+      secondLines = normalizeLines(parsed.secondLines || []);
+      secondSequence =
+        parsed.secondSequence && parsed.secondSequence.length
+          ? parsed.secondSequence
+          : secondLines.map((ln) => ({
+              kind: "path",
+              lineId: ln.id!,
+            }));
+      secondShapes = parsed.secondShapes || [];
+
+      activePaths.set(parsed.activePaths || []);
+      isUnsaved.set(true);
+
+      return true;
+    } catch (error) {
+      console.error("Session restore failed:", error);
+      return false;
+    }
+  }
   
   let secondRobotXY: BasePoint = { x: 0, y: 0 };
   let secondRobotHeading: number = 0;
@@ -334,35 +908,18 @@
   $: x = d3
     .scaleLinear()
     .domain([0, FIELD_SIZE])
-    .range([0, width || FIELD_SIZE]);
+    .range([0, effectiveSize || FIELD_SIZE]);
   /**
    * Converter for Y axis from inches to pixels.
    */
   $: y = d3
     .scaleLinear()
     .domain([0, FIELD_SIZE])
-    .range([height || FIELD_SIZE, 0]);
+    .range([effectiveSize || FIELD_SIZE, 0]);
   $: {
-    // Calculate robot state using the Timeline
-    if (timePrediction && timePrediction.timeline && lines.length > 0) {
-      const state = calculateRobotState(
-        percent,
-        timePrediction.timeline,
-        lines,
-        startPoint,
-        settings,
-        x,
-        y,
-      );
-      robotXY = { x: state.x, y: state.y };
-      robotHeading = state.heading;
-    } else {
-      // Fallback for initialization
-      robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
-      robotHeading = 0;
-    }
+    // Ensure effectiveSize matches the smallest of width/height so the field image and grid align
+    effectiveSize = Math.min(width || FIELD_SIZE, height || FIELD_SIZE);
   }
-
   $: points = (() => {
     let _points = [];
     
@@ -393,7 +950,8 @@
             );
             pointElem.id = `point-${idx + 1}-${idx1}-background`;
             pointElem.fill = line.color;
-            pointElem.noStroke();
+            pointElem.stroke = selectedLineIndex === idx ? "#facc15" : line.color;
+            pointElem.linewidth = x(selectedLineIndex === idx ? 0.7 : 0.25);
 
             let pointText = new Two.Text(
               `${idx1}`,
@@ -410,6 +968,19 @@
             pointText.fill = "white";
             pointText.noStroke();
 
+            if (selectedLineIndex === idx) {
+              const highlightRing = new Two.Circle(
+                x(point.x),
+                y(point.y),
+                x(POINT_RADIUS) * 1.45,
+              );
+              highlightRing.id = `point-${idx + 1}-${idx1}-highlight`;
+              highlightRing.fill = "transparent";
+              highlightRing.stroke = selectedPointIndex === idx1 ? "#f59e0b" : "#facc15";
+              highlightRing.linewidth = x(selectedPointIndex === idx1 ? 0.45 : 0.25);
+              pointGroup.add(highlightRing);
+            }
+
             pointGroup.add(pointElem, pointText);
             _points.push(pointGroup);
           } else {
@@ -420,14 +991,50 @@
             );
             pointElem.id = `point-${idx + 1}-${idx1}`;
             pointElem.fill = line.color;
-            pointElem.noStroke();
+            pointElem.stroke = selectedLineIndex === idx ? "#facc15" : line.color;
+            pointElem.linewidth = x(selectedLineIndex === idx ? 0.7 : 0.25);
+            if (selectedLineIndex === idx) {
+              const highlightRing = new Two.Circle(
+                x(point.x),
+                y(point.y),
+                x(POINT_RADIUS) * 1.45,
+              );
+              highlightRing.id = `point-${idx + 1}-${idx1}-highlight`;
+              highlightRing.fill = "transparent";
+              highlightRing.stroke = selectedPointIndex === idx1 ? "#f59e0b" : "#facc15";
+              highlightRing.linewidth = x(selectedPointIndex === idx1 ? 0.45 : 0.25);
+              _points.push(highlightRing);
+            }
             _points.push(pointElem);
           }
         });
       });
+
+      const selectedLine = lines[selectedLineIndex];
+      const selectedPoint =
+        selectedLine && selectedPointIndex >= 0
+          ? selectedPointIndex === 0
+            ? selectedLine.endPoint
+            : selectedLine.controlPoints[selectedPointIndex - 1]
+          : null;
+
+      if (selectedLine && selectedPoint) {
+        const selectedPointRing = new Two.Circle(
+          x(selectedPoint.x),
+          y(selectedPoint.y),
+          x(POINT_RADIUS) * 1.7,
+        );
+        selectedPointRing.id = `selected-point-${selectedLineIndex}-${selectedPointIndex}`;
+        selectedPointRing.fill = "transparent";
+        selectedPointRing.stroke = "#facc15";
+        selectedPointRing.linewidth = x(0.35);
+        selectedPointRing.opacity = 0.95;
+        _points.push(selectedPointRing);
+      }
     }
     
     // Add obstacle vertices as draggable points
+    if (settings?.experimentalFeatures?.obstacles) {
     shapes.forEach((shape, shapeIdx) => {
       shape.vertices.forEach((vertex, vertexIdx) => {
         let pointGroup = new Two.Group();
@@ -460,6 +1067,7 @@
         _points.push(pointGroup);
       });
     });
+    }
 
     // Add second path points (for dual path mode) - not in multi-path mode
     if ($activePaths.length === 0 && $dualPathMode && secondStartPoint && secondLines.length > 0) {
@@ -916,8 +1524,42 @@
     return _path;
   });
 
+  $: penGhostPath = (() => {
+    if (!penToolEnabled || !penIsDrawing || penStroke.length < 2 || $activePaths.length > 0) {
+      return [];
+    }
+
+    const anchors = penStroke.map(
+      (point, index) =>
+        new Two.Anchor(
+          x(point.x),
+          y(point.y),
+          0,
+          0,
+          0,
+          0,
+          index === 0 ? Two.Commands.move : Two.Commands.line,
+        ),
+    );
+    anchors.forEach((anchor) => (anchor.relative = false));
+
+    const ghost = new Two.Path(anchors);
+    ghost.automatic = false;
+    ghost.stroke = "#facc15";
+    ghost.fill = "transparent";
+    ghost.linewidth = x(LINE_WIDTH * 0.9);
+    ghost.opacity = 0.35;
+    ghost.dashes = [x(0.6), x(0.6)];
+    ghost.id = "pen-ghost-path";
+
+    return [ghost];
+  })();
+
   $: shapeElements = (() => {
-    // Obstacles removed: return empty array for shape elements
+    if (!(settings?.experimentalFeatures?.obstacles ?? false)) {
+      return [];
+    }
+
     let _shapes: Path[] = [];
 
     shapes.forEach((shape, idx) => {
@@ -1428,25 +2070,81 @@
 
   // Allow the app to stabilize before tracking changes
   onMount(() => {
+    if (isMobileBlocked) return;
+
     setTimeout(() => {
       isLoaded = true;
       recordChange();
     }, 500);
   });
   onMount(async () => {
+    if (isMobileBlocked) return;
+
     // Load saved settings
     const savedSettings = await loadSettings();
     settings = normalizeLegacyFieldMap({ ...savedSettings });
 
+    const restored = restoreSessionSnapshot();
+    if (restored) {
+      console.info("Recovered previous unsaved session.");
+    }
+
     // Update robot dimensions from loaded settings
     robotWidth = settings.rWidth;
     robotHeight = settings.rHeight;
+    // Ensure panel widths obey min/max after loading settings
+    clampAllPanels();
+    if (typeof window !== "undefined") {
+      window.addEventListener("resize", clampAllPanels);
+    }
+  });
+
+  onDestroy(() => {
+    if (typeof window !== "undefined") {
+      window.removeEventListener("resize", clampAllPanels);
+    }
   });
   // Debounced save function
   const debouncedSaveSettings = debounce(async (settingsToSave: Settings) => {
     await saveSettings(settingsToSave);
   }, 1000);
   // Save after 1 second of inactivity
+
+  function clampAllPanels() {
+    if (typeof window === "undefined") return;
+    const availableWidth = Math.max(0, window.innerWidth - 24);
+    const rightPanelMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+    const otherForLeft = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
+    leftPanelWidth = clampPanelWidth("left", leftPanelWidth, availableWidth, otherForLeft);
+    const otherForRight = leftPanelHidden ? 0 : leftPanelWidth;
+    rightPanelWidth = clampPanelWidth("right", rightPanelWidth, availableWidth, otherForRight);
+    settings.leftPanelWidth = leftPanelWidth;
+    settings.rightPanelWidth = rightPanelWidth;
+  }
+
+  function maximizePanelsToAllowed() {
+    if (typeof window === "undefined") return;
+    const availableWidth = Math.max(0, window.innerWidth - 24);
+    const rightPanelMinWidth = Math.max(
+      0,
+      Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
+    );
+    const maxEach = Math.floor((availableWidth - CENTER_MIN_WIDTH - PANEL_DIVIDER_WIDTH * 2) / 2);
+    const leftTarget = Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
+    const rightTarget = Math.max(rightPanelMinWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
+    leftPanelWidth = leftTarget;
+    rightPanelWidth = rightTarget;
+    settings.leftPanelWidth = leftPanelWidth;
+    settings.rightPanelWidth = rightPanelWidth;
+  }
+
+  const debouncedSaveSession = debounce((snapshot: SessionSnapshot) => {
+    try {
+      localStorage.setItem(SESSION_RECOVERY_KEY, JSON.stringify(snapshot));
+    } catch (error) {
+      console.warn("Session snapshot save failed:", error);
+    }
+  }, 750);
 
   // Watch for settings changes and save
   $: {
@@ -1455,8 +2153,22 @@
     }
   }
 
+  $: {
+    if (isLoaded) {
+      debouncedSaveSession(buildSessionSnapshot());
+    }
+  }
+
+  onDestroy(() => {
+    debouncedSaveSession.cancel();
+    debouncedSaveSettings.cancel();
+    endPanelResize();
+  });
+
   // Initialize animation controller
   onMount(() => {
+    if (isMobileBlocked) return;
+
     animationController = createAnimationController(
       animationDuration,
       (newPercent) => {
@@ -1496,21 +2208,27 @@
     if (!pathData || !pathData.filePath) return;
     
     try {
-      const fileData = JSON.stringify({
+      const fileData = JSON.stringify(buildProjectData({
         startPoint: pathData.startPoint,
         lines: pathData.lines,
         shapes: pathData.shapes,
         sequence: pathData.sequence,
         settings: pathData.settings,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
-      });
+      }));
       
       await browserFileStore.writeFile(pathData.filePath, fileData);
       console.log(`Auto-saved additional path: ${pathData.filePath}`);
     } catch (error) {
       console.error(`Failed to save additional path ${pathData.filePath}:`, error);
       throw error;
+    }
+  }
+
+  async function saveAllAdditionalPaths() {
+    if ($activePaths.length === 0) return;
+
+    for (let pathIdx = 0; pathIdx < additionalPaths.length; pathIdx += 1) {
+      await saveAdditionalPath(pathIdx);
     }
   }
 
@@ -1612,6 +2330,7 @@
       if (hasActivePaths) {
         // Multiple paths mode - use the longest path duration
         for (const pathData of additionalPaths) {
+          if (!pathData.startPoint) continue;
           const pathTime = calculatePathTime(
             pathData.startPoint,
             pathData.lines,
@@ -1622,14 +2341,14 @@
         }
       } else if (hasDualPath) {
         // Dual path mode - use the longer path
-        const path1Time = calculatePathTime(startPoint, lines, settings, sequence);
+        const path1Time = calculatePathTime(startPoint, lines, settings, sequence, []);
         const path2Time = secondStartPoint 
-          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
+          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence, [])
           : { totalTime: 0 };
         totalDuration = Math.max(path1Time?.totalTime || 0, path2Time?.totalTime || 0);
       } else {
         // Single path mode
-        const pathTime = calculatePathTime(startPoint, lines, settings, sequence);
+        const pathTime = calculatePathTime(startPoint, lines, settings, sequence, []);
         totalDuration = pathTime?.totalTime || 0;
       }
 
@@ -1738,10 +2457,12 @@
       pause();
     }
   }
+  const robotPerf = createPerfSampler("robot-state");
   $: {
     // This handles both 'travel' (movement) and 'wait' (stationary rotation) events.
     // Don't show main robot in multi-path mode
     if ($activePaths.length === 0 && timePrediction && timePrediction.timeline && lines.length > 0) {
+      const t0 = performance.now();
       const state = calculateRobotState(
         percent,
         timePrediction.timeline,
@@ -1751,11 +2472,14 @@
         x,
         y,
       );
+      robotPerf.sample(t0);
       robotXY = { x: state.x, y: state.y };
       robotHeading = state.heading;
+      robotT = state.t ?? null;
     } else {
       // Fallback for initialization or empty state
       robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
+      robotT = null;
       // Calculate initial heading based on start point settings
       if (startPoint.heading === "linear") robotHeading = -startPoint.startDeg;
       else if (startPoint.heading === "constant")
@@ -1803,63 +2527,109 @@
     }
   }
 
-  // Calculate robot states for all additional paths
+  // Precompute per-additional-path time predictions and their animation
+  // scaling ONCE per edit (keyed by the additionalPaths array reference)
+  // instead of rebuilding the full path timeline on every animation frame.
+  type AdditionalPathEntry = {
+    prediction: ReturnType<typeof calculatePathTime>;
+    completionPercent: number;
+  };
+  let additionalPathCache = new Map<
+    AdditionalPathData,
+    AdditionalPathEntry | null
+  >();
+  let additionalPathCacheKey: AdditionalPathData[] | null = null;
+  $: {
+    if (additionalPathCacheKey !== additionalPaths) {
+      additionalPathCacheKey = additionalPaths;
+      const cache = new Map<AdditionalPathData, AdditionalPathEntry | null>();
+      additionalPaths.forEach((pathData) => {
+        if (!pathData.startPoint) {
+          cache.set(pathData, null);
+          return;
+        }
+        const prediction = calculatePathTime(
+          pathData.startPoint,
+          pathData.lines,
+          pathData.settings,
+          pathData.sequence,
+        );
+        if (
+          !prediction ||
+          !prediction.timeline ||
+          pathData.lines.length === 0
+        ) {
+          cache.set(pathData, null);
+          return;
+        }
+        const maxDuration = effectiveAnimationDuration;
+        const thisDuration = getAnimationDuration(prediction.totalTime / 1000);
+        const completionPercent =
+          maxDuration > 0 ? (thisDuration / maxDuration) * 100 : 100;
+        cache.set(pathData, { prediction, completionPercent });
+      });
+      additionalPathCache = cache;
+    }
+  }
+
+  // Calculate robot states for all additional paths (cheap: uses the cached
+  // per-path predictions above, only evaluating positions for the current %).
   let additionalRobotStates: Array<{ xy: BasePoint; heading: number }> = [];
   $: {
     additionalRobotStates = additionalPaths.map((pathData) => {
-      if (!pathData.startPoint) {
+      const entry = additionalPathCache.get(pathData);
+      if (!entry || !pathData.startPoint) {
         return {
           xy: { x: 0, y: 0 },
           heading: 0,
         };
       }
 
-      const pathTimePrediction = calculatePathTime(
-        pathData.startPoint,
-        pathData.lines,
-        pathData.settings,
-        pathData.sequence
-      );
-      
-      if (pathTimePrediction && pathTimePrediction.timeline && pathData.lines.length > 0 && pathData.startPoint) {
-        // Calculate actual percent for this path based on max duration
-        const maxDuration = effectiveAnimationDuration;
-        const thisDuration = getAnimationDuration(pathTimePrediction.totalTime / 1000);
-        const completionPercent = (thisDuration / maxDuration) * 100;
-        
-        // If this path should be complete, cap at 100% (robot waits at end)
-        const actualPercent = Math.min(percent, completionPercent);
-        const normalizedPercent = completionPercent > 0 ? (actualPercent / completionPercent) * 100 : 0;
+      // If this path should be complete, cap at 100% (robot waits at end)
+      const actualPercent = Math.min(percent, entry.completionPercent);
+      const normalizedPercent =
+        entry.completionPercent > 0
+          ? (actualPercent / entry.completionPercent) * 100
+          : 0;
 
-        const state = calculateRobotState(
-          normalizedPercent,
-          pathTimePrediction.timeline,
-          pathData.lines,
-          pathData.startPoint,
-          pathData.settings,
-          x,
-          y,
-        );
-        
-        return {
-          xy: { x: state.x, y: state.y },
-          heading: state.heading,
-        };
-      }
-      
+      const state = calculateRobotState(
+        normalizedPercent,
+        entry.prediction.timeline,
+        pathData.lines,
+        pathData.startPoint,
+        pathData.settings,
+        x,
+        y,
+      );
+
       return {
-        xy: { x: 0, y: 0 },
-        heading: 0,
+        xy: { x: state.x, y: state.y },
+        heading: state.heading,
       };
     });
   }
 
   // Event markers removed: no runtime visualization created
 
-  $: (() => {
+  /**
+   * Render the Two.js scene at most once per animation frame.
+   *
+   * Previously this reactive immediately cleared and rebuilt the entire scene
+   * on every reactive change. During a drag, mousemove fires several times per
+   * frame, so the scene (all paths, points, shapes, onion layers) was rebuilt
+   * and re-rendered synchronously each event — a major source of jank. Coalescing
+   * the clear/re-add/update into a single requestAnimationFrame keeps the scene
+   * fully up to date while doing the heavy SVG work only once per frame.
+   */
+  let sceneRenderScheduled = false;
+  const sceneRenderPerf = createPerfSampler("scene-render");
+  function flushScene() {
+    sceneRenderScheduled = false;
     if (!two) {
       return;
     }
+    const t0 = performance.now();
+    sampleNodeCounts("scene", twoElement);
 
     two.renderer.domElement.style["z-index"] = "30";
     two.renderer.domElement.style["position"] = "absolute";
@@ -1886,6 +2656,9 @@
     if (secondOnionLayerElements.length > 0) {
       two.add(...secondOnionLayerElements);
     }
+    if (penGhostPath.length > 0) {
+      two.add(...penGhostPath);
+    }
     two.add(...path);
     if ($dualPathMode && secondPath.length > 0) {
       two.add(...secondPath);
@@ -1901,22 +2674,86 @@
     two.add(...points);
 
     two.update();
-  })();
+    sceneRenderPerf.sample(t0);
+  }
+  function scheduleSceneRender() {
+    if (sceneRenderScheduled) {
+      return;
+    }
+    sceneRenderScheduled = true;
+    requestAnimationFrame(flushScene);
+  }
+  /**
+   * Coalesce the reactive "commit" of a drag into a single per-frame step.
+   *
+   * Dragging fires several mousemove events per animation frame. Reassigning
+   * reactive arrays (lines, secondLines, additionalPaths, shapes) inside the
+   * handler triggers a full reactive cascade — path-time recompute, scene
+   * rebuild, etc. — for *every* event. We mutate the model immediately (so the
+   * data is always current) but only reassign the arrays once per frame, which
+   * bounds the heavy work to at most one pass per frame instead of several.
+   */
+  let dragCommitScheduled = false;
+  let pendingDragCommit: (() => void) | null = null;
+  const dragCommitPerf = createPerfSampler("drag-commit");
+  // Save additional paths a short while after the last drag event, instead of
+  // writing the file on every mousemove (which is heavy: JSON.stringify + write).
+  const debouncedSaveAdditionalPath = debounce((pathIdx: number) => {
+    saveAdditionalPath(pathIdx).catch((err) =>
+      console.error("Failed to auto-save additional path:", err),
+    );
+  }, 400);
+  function scheduleDragCommit(commit: () => void) {
+    pendingDragCommit = commit;
+    if (dragCommitScheduled) {
+      return;
+    }
+    dragCommitScheduled = true;
+    requestAnimationFrame(() => {
+      dragCommitScheduled = false;
+      const fn = pendingDragCommit;
+      pendingDragCommit = null;
+      if (fn) {
+        const t0 = performance.now();
+        fn();
+        dragCommitPerf.sample(t0);
+      }
+    });
+  }
+
+  $: {
+    // Reference every piece of scene state so this block re-runs (and reschedules
+    // the coalesced render) whenever any of it changes.
+    const sceneDeps: unknown[] = [
+      two,
+      shapeElements,
+      ghostPathElement,
+      secondGhostPathElement,
+      additionalGhostPathElements,
+      onionLayerElements,
+      secondOnionLayerElements,
+      penGhostPath,
+      path,
+      secondPath,
+      additionalPathElements,
+      points,
+      $dualPathMode,
+      $activePaths,
+    ];
+    void sceneDeps;
+    if (two) {
+      scheduleSceneRender();
+    }
+  }
+
+  $: if (fieldPointsCanvas && width > 0 && height > 0) {
+    renderFieldPoints(fieldPointsCanvas, fieldPoints, x, y, width, height);
+  }
+
   async function saveFileAs() {
     const win: any = window as any;
-    const content = JSON.stringify(
-      {
-        startPoint,
-        lines,
-        shapes,
-        sequence,
-        settings,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
-      },
-      null,
-      2,
-    );
+    await saveAllAdditionalPaths();
+    const content = JSON.stringify(buildProjectData(), null, 2);
 
     // Prefer File System Access API if available: opens native Save dialog
     if (win.showSaveFilePicker) {
@@ -2001,7 +2838,7 @@
       console.error("Failed to save into app storage:", err);
       // As a last resort, download the file
       try {
-        downloadTrajectory(startPoint, lines, shapes, sequence);
+        downloadTrajectory(startPoint, lines, shapes, sequence, $activePaths);
       } catch (err2) {
         console.error("Save As fallback failed:", err2);
         alert(
@@ -2065,18 +2902,58 @@
     let currentElem: string | null = null;
     let isDown = false;
     let dragOffset = { x: 0, y: 0 }; // Store offset to prevent snapping to center
+    const getPathPointLockedState = (lineIdx: number, pointIdx: number): boolean => {
+      const line = lines[lineIdx];
+      if (!line) return false;
+      if (pointIdx === 0) {
+        return !!line.endPoint?.locked;
+      }
+      return !!line.controlPoints[pointIdx - 1]?.locked;
+    };
 
     const isLockedPathElem = (id: string | null): boolean => {
       if (!id || !id.startsWith("point")) return false;
       const parts = id.split("-");
       const lineIdx = Number(parts[1]) - 1;
+      const pointIdx = Number(parts[2]);
       if (Number.isNaN(lineIdx)) return false;
       if (lineIdx < 0) return false; // startPoint currently not lockable
-      return !!lines[lineIdx]?.locked;
+      if (Number.isNaN(pointIdx)) return !!lines[lineIdx]?.locked;
+      return !!lines[lineIdx]?.locked || getPathPointLockedState(lineIdx, pointIdx);
+    };
+
+    const getPreferredPointElemId = (clientX: number, clientY: number): string | null => {
+      const elements = Array.from(document.elementsFromPoint(clientX, clientY));
+      const pointIds = elements
+        .map((element) => (element as HTMLElement).id || "")
+        .filter((id) => /^point-\d+-\d+$/.test(id));
+
+      if (pointIds.length === 0) return null;
+
+      const selectedPrefix = `point-${selectedLineIndex + 1}-`;
+      const preferred = pointIds.find((id) => id.startsWith(selectedPrefix));
+      return preferred || pointIds[0];
     };
 
     two.renderer.domElement.addEventListener("mousemove", (evt: MouseEvent) => {
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
+      const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
+
+      if (penToolEnabled) {
+        two.renderer.domElement.style.cursor = "crosshair";
+
+        if (penIsDrawing) {
+          const mousePoint = getMouseFieldPoint(evt);
+          if (!mousePoint) return;
+
+          const lastPoint = penStroke[penStroke.length - 1];
+          if (!lastPoint || distanceBetweenPoints(lastPoint, mousePoint) >= 0.35) {
+            penStroke = [...penStroke, mousePoint];
+          }
+        }
+
+        return;
+      }
 
       if (isDown && currentElem) {
         const parts = currentElem.split("-");
@@ -2118,7 +2995,7 @@
         }
 
         // Handle path point dragging
-        if (currentElem.startsWith("obstacle-")) {
+        if (settings?.experimentalFeatures?.obstacles && currentElem.startsWith("obstacle-")) {
           // Handle obstacle vertex dragging
           const parts = currentElem.split("-");
           const shapeIdx = Number(parts[1]);
@@ -2126,7 +3003,10 @@
 
           shapes[shapeIdx].vertices[vertexIdx].x = inchX;
           shapes[shapeIdx].vertices[vertexIdx].y = inchY;
-          shapes = [...shapes];
+          // Coalesce the reactive commit to once per frame instead of per mousemove.
+          scheduleDragCommit(() => {
+            shapes = [...shapes];
+          });
         } else if (currentElem.startsWith("second-point-")) {
           // Handle second path point dragging
           const parts = currentElem.split("-");
@@ -2150,7 +3030,10 @@
               secondLines[line].controlPoints[point - 1].y = inchY;
             }
           }
-          secondLines = [...secondLines];
+          // Coalesce the reactive commit to once per frame instead of per mousemove.
+          scheduleDragCommit(() => {
+            secondLines = [...secondLines];
+          });
         } else if (currentElem.startsWith("additional-path-")) {
           // Handle additional path point dragging
           const parts = currentElem.split("-");
@@ -2165,9 +3048,6 @@
             if (additionalPaths[pathIdx].startPoint) {
               additionalPaths[pathIdx].startPoint.x = inchX;
               additionalPaths[pathIdx].startPoint.y = inchY;
-              additionalPaths = [...additionalPaths];
-              // Auto-save changes to additional path files
-              saveAdditionalPath(pathIdx).catch(err => console.error('Failed to auto-save additional path:', err));
             }
           } else if (additionalPaths[pathIdx].lines[line]) {
             if (point === 0 && additionalPaths[pathIdx].lines[line].endPoint) {
@@ -2177,10 +3057,14 @@
               additionalPaths[pathIdx].lines[line].controlPoints[point - 1].x = inchX;
               additionalPaths[pathIdx].lines[line].controlPoints[point - 1].y = inchY;
             }
-            additionalPaths = [...additionalPaths];
           }
-          // Auto-save changes to additional path files
-          saveAdditionalPath(pathIdx).catch(err => console.error('Failed to auto-save additional path:', err));
+          // Coalesce the reactive commit to once per frame instead of per mousemove.
+          scheduleDragCommit(() => {
+            additionalPaths = [...additionalPaths];
+          });
+          // Debounce the auto-save so it fires after the drag settles instead of
+          // writing the file on every mousemove.
+          debouncedSaveAdditionalPath(pathIdx);
         } else {
           // Handle path point dragging
           const line = Number(currentElem.split("-")[1]) - 1;
@@ -2201,16 +3085,23 @@
               lines[line].controlPoints[point - 1].y = inchY;
             }
           }
+          // Coalesce the reactive commit to once per frame so main-path points
+          // live-track the mouse while the (heavy) path/scene recompute happens
+          // only once per frame instead of on every mousemove.
+          scheduleDragCommit(() => {
+            lines = [...lines];
+          });
         }
       } else {
         if (
-          (elem?.id.startsWith("point") && !isLockedPathElem(elem.id)) ||
+          ((preferredPointElemId || elem?.id)?.startsWith("point") && !isLockedPathElem(preferredPointElemId || elem?.id || null)) ||
+          elem?.id.startsWith("line-") ||
           elem?.id.startsWith("second-point") ||
           elem?.id.startsWith("additional-path-") ||
-          elem?.id.startsWith("obstacle")
+          (settings?.experimentalFeatures?.obstacles && elem?.id.startsWith("obstacle"))
         ) {
           two.renderer.domElement.style.cursor = "pointer";
-          currentElem = elem.id;
+          currentElem = preferredPointElemId || elem.id;
         } else {
           two.renderer.domElement.style.cursor = "auto";
           currentElem = null;
@@ -2219,9 +3110,53 @@
     });
 
     two.renderer.domElement.addEventListener("mousedown", (evt: MouseEvent) => {
+      if (penToolEnabled) {
+        const mousePoint = getMouseFieldPoint(evt);
+        if (!mousePoint) return;
+
+        penStroke = [mousePoint];
+        penIsDrawing = true;
+        currentElem = null;
+        isDown = false;
+        return;
+      }
+
+      const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
+      if (preferredPointElemId) {
+        currentElem = preferredPointElemId;
+      }
+
       if (currentElem && isLockedPathElem(currentElem)) {
         isDown = false;
         return;
+      }
+
+      const mousePoint = getMouseFieldPoint(evt);
+      if (mousePoint && selectedLine && selectedPoint) {
+        const selectedPointX = x(selectedPoint.x);
+        const selectedPointY = y(selectedPoint.y);
+        const selectedPointRadius = x(POINT_RADIUS) * 1.45;
+        const dx = evt.clientX - (two.renderer.domElement.getBoundingClientRect().left + selectedPointX);
+        const dy = evt.clientY - (two.renderer.domElement.getBoundingClientRect().top + selectedPointY);
+        if (Math.hypot(dx, dy) <= selectedPointRadius) {
+          currentElem = `point-${selectedLineIndex + 1}-${selectedPointIndex}`;
+        }
+      }
+
+      if (currentElem?.startsWith("line-")) {
+        const match = currentElem.match(/^line-(\d+)/);
+        if (match) {
+          selectLinePoint(Number(match[1]) - 1, 0);
+        }
+        isDown = false;
+        return;
+      }
+
+      if (currentElem?.startsWith("point-")) {
+        const match = currentElem.match(/^point-(\d+)-(\d+)/);
+        if (match) {
+          selectLinePoint(Number(match[1]) - 1, Number(match[2]));
+        }
       }
 
       isDown = true;
@@ -2234,7 +3169,7 @@
         let objectX = 0;
         let objectY = 0;
 
-        if (currentElem.startsWith("obstacle-")) {
+        if (settings?.experimentalFeatures?.obstacles && currentElem.startsWith("obstacle-")) {
           const parts = currentElem.split("-");
           const shapeIdx = Number(parts[1]);
           const vertexIdx = Number(parts[2]);
@@ -2310,6 +3245,16 @@
     });
 
     two.renderer.domElement.addEventListener("mouseup", () => {
+      if (penToolEnabled) {
+        if (penIsDrawing) {
+          commitPenStroke();
+        }
+        two.renderer.domElement.style.cursor = "crosshair";
+        isDown = false;
+        dragOffset = { x: 0, y: 0 };
+        return;
+      }
+
       isDown = false;
       dragOffset = { x: 0, y: 0 };
       recordChange();
@@ -2317,12 +3262,16 @@
 
     // Double-click on the field to create a new path at that position
     two.renderer.domElement.addEventListener("dblclick", (evt: MouseEvent) => {
+      if (penToolEnabled) {
+        return;
+      }
+
       // Ignore dblclicks on existing points/lines
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
       if (
         elem?.id &&
         (elem.id.startsWith("point") ||
-          elem.id.startsWith("obstacle") ||
+          (settings?.experimentalFeatures?.obstacles && elem.id.startsWith("obstacle")) ||
           elem.id.startsWith("line"))
       ) {
         return;
@@ -2369,6 +3318,7 @@
 
       lines = [...lines, newLine];
       sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
+      selectedLineIndex = lines.length - 1;
       recordChange();
       two.update();
     });
@@ -2384,19 +3334,8 @@
   });
   async function saveFile() {
     try {
-      const content = JSON.stringify(
-        {
-          startPoint,
-          lines,
-          shapes,
-          sequence,
-          settings,
-          version: "1.2.1",
-          timestamp: new Date().toISOString(),
-        },
-        null,
-        2,
-      );
+      await saveAllAdditionalPaths();
+      const content = JSON.stringify(buildProjectData(), null, 2);
 
       if ($currentFilePath) {
         await browserFileStore.writeFile($currentFilePath, content);
@@ -2423,9 +3362,10 @@
 
     if (!file) return;
 
-    // Check if file is a .pp file
-    if (!file.name.endsWith(".pp")) {
-      alert("Please select a .pp file");
+    const lowerName = file.name.toLowerCase();
+    // Check if file is a .pp or .json file
+    if (!lowerName.endsWith(".pp") && !lowerName.endsWith(".json")) {
+      alert("Please select a .pp or .json file");
       // Reset the file input
       elem.value = "";
       return;
@@ -2454,16 +3394,17 @@
               lineId: ln.id!,
             }))
       ) as SequenceItem[];
-
       // Load shapes with defaults
       shapes = data.shapes || [];
-
+      fieldPoints = normalizeFieldPoints(data);
       // Load settings (including robot size) if present
       if (data.settings) {
         settings = { ...settings, ...data.settings };
         robotWidth = settings.rWidth;
         robotHeight = settings.rHeight;
       }
+
+      activePaths.set(Array.isArray(data.activePaths) ? data.activePaths : []);
 
       isUnsaved.set(false);
       recordChange();
@@ -2510,6 +3451,7 @@
 
     // Load shapes with defaults
     shapes = data.shapes || [];
+    fieldPoints = normalizeFieldPoints(data);
 
     // Load settings (including robot size) if present
     if (data.settings) {
@@ -2687,10 +3629,11 @@
   }
 
   function addNewLine() {
+    const newLineId = `line-${Math.random().toString(36).slice(2)}`;
     lines = [
       ...lines,
       {
-        id: `line-${Math.random().toString(36).slice(2)}`,
+        id: newLineId,
         endPoint: {
           x: _.random(36, 108),
           y: _.random(36, 108),
@@ -2708,30 +3651,109 @@
     ];
     sequence = [
       ...sequence,
-      { kind: "path", lineId: lines[lines.length - 1].id! },
+      { kind: "path", lineId: newLineId },
     ];
+    selectedLineIndex = lines.length - 1;
+    selectedPointIndex = 0;
     recordChange();
   }
 
   function addControlPoint() {
     if (lines.length > 0) {
-      const lastLine = lines[lines.length - 1];
-      lastLine.controlPoints.push({
+      const targetLine = lines[selectedLineIndex] || lines[lines.length - 1];
+      targetLine.controlPoints.push({
         x: _.random(36, 108),
         y: _.random(36, 108),
       });
+      lines = [...lines];
+      selectedPointIndex = targetLine.controlPoints.length;
       recordChange();
+      two?.update();
     }
   }
 
   function removeControlPoint() {
     if (lines.length > 0) {
-      const lastLine = lines[lines.length - 1];
-      if (lastLine.controlPoints.length > 0) {
-        lastLine.controlPoints.pop();
+      const targetLine = lines[selectedLineIndex] || lines[lines.length - 1];
+      if (targetLine.controlPoints.length > 0) {
+        targetLine.controlPoints.pop();
+        lines = [...lines];
+        selectedPointIndex = Math.min(selectedPointIndex, targetLine.controlPoints.length);
         recordChange();
+        two?.update();
       }
     }
+  }
+
+  function createPathBetweenSelectedPoints() {
+    const selected = lines[selectedLineIndex];
+    if (!selected?.id || sequence.length === 0) return;
+
+    const selectedSeqIndex = sequence.findIndex(
+      (item) => item.kind === "path" && item.lineId === selected.id,
+    );
+    if (selectedSeqIndex === -1) return;
+
+    let nextPathSeqIndex = -1;
+    for (let index = selectedSeqIndex + 1; index < sequence.length; index++) {
+      if (sequence[index].kind === "path") {
+        nextPathSeqIndex = index;
+        break;
+      }
+    }
+
+    const nextLine =
+      nextPathSeqIndex >= 0
+        ? lines.find((line) => line.id === (sequence[nextPathSeqIndex] as any).lineId)
+        : null;
+
+    const startPoint = selected.endPoint;
+    const endPoint = nextLine?.endPoint || {
+      x: startPoint.x,
+      y: startPoint.y,
+      heading: "tangential",
+      reverse: false,
+    };
+    const midpointX = (Number(startPoint.x) + Number(endPoint.x)) / 2;
+    const midpointY = (Number(startPoint.y) + Number(endPoint.y)) / 2;
+    const newLineId = `line-${Math.random().toString(36).slice(2)}`;
+
+    const newLine: Line = {
+      id: newLineId,
+      endPoint: {
+        x: midpointX,
+        y: midpointY,
+        heading: "tangential",
+        reverse: false,
+      },
+      controlPoints: [],
+      color: getRandomColor(),
+      locked: false,
+      waitBeforeMs: 0,
+      waitAfterMs: 0,
+      waitBeforeName: "",
+      waitAfterName: "",
+    };
+
+    const nextLines = [...lines];
+    nextLines.splice(selectedLineIndex + 1, 0, newLine);
+    lines = nextLines;
+
+    const nextSequence = [...sequence];
+    nextSequence.splice(selectedSeqIndex + 1, 0, { kind: "path", lineId: newLineId });
+    sequence = nextSequence;
+
+    selectedLineIndex = selectedLineIndex + 1;
+    selectedPointIndex = 0;
+    recordChange();
+  }
+
+  function selectLinePoint(lineIndex: number, pointIndex = 0) {
+    if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+    selectedLineIndex = lineIndex;
+    const maxPointIndex = Math.max(0, lines[lineIndex]?.controlPoints.length ?? 0);
+    selectedPointIndex = Math.max(0, Math.min(pointIndex, maxPointIndex));
   }
 
   // Keyboard shortcuts for quick path editing
@@ -2786,6 +3808,8 @@
   // Watch for system theme changes if auto mode is enabled
   let mediaQuery: MediaQueryList;
   onMount(() => {
+    if (isMobileBlocked) return;
+
     if (settings?.theme === "auto") {
       mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
       const handleSystemThemeChange = () => {
@@ -2803,6 +3827,8 @@
 
   // Auto-export for CI/testing: if the app is loaded with URL hash #export-gif-test, automatically run GIF export once mounted
   onMount(() => {
+    if (isMobileBlocked) return;
+
     if (
       typeof window !== "undefined" &&
       window.location &&
@@ -2828,13 +3854,7 @@
         const fullFileName = fileName.endsWith(".pp") ? fileName : fileName + ".pp";
         
         // Call the file manager's save function through the browser file store
-        const fileData = JSON.stringify({
-          startPoint,
-          lines,
-          shapes,
-          sequence,
-          settings,
-        });
+        const fileData = JSON.stringify(buildProjectData());
         
         await browserFileStore.writeFile(fullFileName, fileData);
         currentFilePath.set(fullFileName);
@@ -2857,54 +3877,33 @@
       const { target } = event.detail;
       isSaving = true;
       try {
+        await saveAllAdditionalPaths();
         if (target === "first" && $currentFilePath) {
-          const fileData = JSON.stringify({
-            startPoint,
-            lines,
-            shapes,
-            sequence,
-            settings,
-            version: "1.2.1",
-            timestamp: new Date().toISOString(),
-          });
+          const fileData = JSON.stringify(buildProjectData());
           await browserFileStore.writeFile($currentFilePath, fileData);
           isUnsaved.set(false);
         } else if (target === "second" && $secondFilePath) {
-          const fileData = JSON.stringify({
+          const fileData = JSON.stringify(buildProjectData({
             startPoint: secondStartPoint,
             lines: secondLines,
             shapes: secondShapes,
             sequence: secondSequence,
-            settings,
-            version: "1.2.1",
-            timestamp: new Date().toISOString(),
-          });
+          }));
           await browserFileStore.writeFile($secondFilePath, fileData);
         } else if (target === "both") {
           // Save first path
           if ($currentFilePath) {
-            const fileData1 = JSON.stringify({
-              startPoint,
-              lines,
-              shapes,
-              sequence,
-              settings,
-              version: "1.2.1",
-              timestamp: new Date().toISOString(),
-            });
+            const fileData1 = JSON.stringify(buildProjectData());
             await browserFileStore.writeFile($currentFilePath, fileData1);
           }
           // Save second path
           if ($secondFilePath) {
-            const fileData2 = JSON.stringify({
+            const fileData2 = JSON.stringify(buildProjectData({
               startPoint: secondStartPoint,
               lines: secondLines,
               shapes: secondShapes,
               sequence: secondSequence,
-              settings,
-              version: "1.2.1",
-              timestamp: new Date().toISOString(),
-            });
+            }));
             await browserFileStore.writeFile($secondFilePath, fileData2);
           }
           isUnsaved.set(false);
@@ -2928,11 +3927,23 @@
 </script>
 
 <svelte:window
-  on:mousemove={(e) => {
-    // (debug window dragging removed)
-  }}
-  on:mouseup={() => {}}
+  on:mousemove={handlePanelResize}
+  on:mouseup={endPanelResize}
+  on:blur={endPanelResize}
 />
+
+{#if isMobileBlocked}
+  <div class="flex min-h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-100">
+    <div class="max-w-lg rounded-3xl border border-white/10 bg-neutral-900/95 px-8 py-10 shadow-2xl shadow-black/40">
+      <div class="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Desktop Required</div>
+      <h1 class="mt-4 text-3xl font-semibold text-white">You need to be on a desktop for the website to function.</h1>
+      <p class="mt-4 text-sm leading-6 text-neutral-300">
+        This visualizer depends on mouse, keyboard, and a large workspace, so mobile devices are blocked from using it.
+      </p>
+      <p class="mt-3 text-xs text-neutral-500">Please reopen the site on a desktop browser.</p>
+    </div>
+  </div>
+{:else}
 
 <Navbar
   bind:lines
@@ -2943,6 +3954,7 @@
   bind:secondLines
   bind:secondShapes
   bind:secondSequence
+  bind:fieldPoints
   bind:settings
   bind:robotWidth
   bind:robotHeight
@@ -2983,35 +3995,117 @@
 />
 
 <!--   {saveFile} -->
-<div
-  class="w-screen h-screen pt-20 p-2 flex flex-row justify-center items-center gap-2"
->
-  <div class="flex h-full justify-center items-center">
-    <div
-      bind:this={twoElement}
-      bind:clientWidth={width}
-      bind:clientHeight={height}
-      class="h-full aspect-square rounded-lg shadow-md bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
-      role="application"
-      style="
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-    user-drag: none;
-    -webkit-user-drag: none;
-    -khtml-user-drag: none;
-    -moz-user-drag: none;
-    -ms-user-drag: none;
-    -o-user-drag: none;
-  "
-      on:contextmenu={(e) => e.preventDefault()}
+<div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
+  <div
+    class="desktop-grid h-full"
+    style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`}; --center-width: ${centerWidth}px;`}
+  >
+    <aside class="panel-box side-rail side-rail-left" class:side-rail--collapsed={leftPanelHidden}>
+      <section class="module-box">
+        <div class="module-header-row">
+          <h3 class="module-title">File</h3>
+          <div class="flex items-center gap-2">
+            <span class="module-chip">v1.2.1</span>
+            <button
+              class="panel-toggle-btn"
+              type="button"
+              on:click={toggleLeftPanelVisibility}
+              aria-label={leftPanelHidden ? "Show left panel" : "Hide left panel"}
+              title={leftPanelHidden ? "Show left panel" : "Hide left panel"}
+            >
+              {leftPanelHidden ? "›" : "‹"}
+            </button>
+          </div>
+        </div>
+        <p class="module-caption">Export name</p>
+        <div class="module-mono">
+          {$currentFilePath?.split(/[\\/]/).pop() || "untitled_path.pp"}
+        </div>
+      </section>
+
+      <section class="module-box module-fill">
+        <div class="module-header-row">
+          <h3 class="module-title">Path List</h3>
+          <span class="module-caption">{lines.length} path{lines.length === 1 ? "" : "s"}</span>
+        </div>
+        <div class="module-list">
+          {#each pathPreviewItems as item (item.index)}
+            <button
+              class="list-item-box compact text-left"
+              class:list-item-box--selected={selectedLineIndex === item.lineIndex}
+              on:click={() => selectLinePoint(item.lineIndex, 0)}
+            >
+              <div class="list-item-top">
+                <span class="list-item-index">{item.index}.</span>
+                <span class="list-item-name">{item.name}</span>
+              </div>
+              <div class="list-item-sub">{item.x}, {item.y}</div>
+            </button>
+          {/each}
+          {#if lines.length > pathPreviewItems.length}
+            <div class="list-empty">+ {lines.length - pathPreviewItems.length} more...</div>
+          {/if}
+        </div>
+      </section>
+    </aside>
+
+    <div class="panel-divider panel-divider--left">
+      <button
+        class="panel-divider-grip"
+        type="button"
+        aria-label="Resize left panel"
+        title={leftPanelHidden ? "Click to restore the left panel" : "Drag to resize the left panel"}
+        on:mousedown={(event) => beginPanelResize("left", event)}
+        on:click={() => {
+          if (leftPanelHidden) {
+            leftPanelHidden = false;
+          }
+        }}
+      >
+        {#if leftPanelHidden}
+          ›
+        {:else}
+          <span class="panel-divider-line"></span>
+        {/if}
+      </button>
+    </div>
+
+    <main class="panel-box center-stage">
+      <div class="module-header-row mb-2">
+        <h3 class="module-title">Field</h3>
+        <span class="module-caption">Click a line or point to select it</span>
+      </div>
+      <div class="center-toolbar">
+        <button class="toolbar-btn" on:click={addNewLine}>+ Add Path</button>
+        <button class="toolbar-btn" class:toolbar-btn--blue={penToolEnabled} on:click={togglePenTool}>
+          {penToolEnabled ? "Pen Tool On" : "Pen Tool"}
+        </button>
+        <button class="toolbar-btn" on:click={addControlPoint}>+ Point</button>
+        <button class="toolbar-btn" on:click={removeControlPoint}>- Point</button>
+        <button class="toolbar-btn toolbar-btn--blue" on:click={createPathBetweenSelectedPoints}>
+          Create Path Between Two Points
+        </button>
+        <div style="flex: 1;"></div>
+        <button class="toolbar-btn" on:click={() => (playing ? pause() : play())}>{playing ? "Pause" : "Play"}</button>
+      </div>
+
+      <div
+        class="field-stage flex h-full justify-center items-center"
+        bind:clientWidth={fieldStageWidth}
+        bind:clientHeight={fieldStageHeight}
+      >
+        <div
+          bind:this={twoElement}
+          bind:clientWidth={width}
+          bind:clientHeight={height}
+          class="bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
+          role="application"
+          style={`width: ${fieldPixelSize}px; height: ${fieldPixelSize}px; max-width: 100%; max-height: 100%; aspect-ratio: 1 / 1; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-drag: none; -webkit-user-drag: none; -khtml-user-drag: none; -moz-user-drag: none; -ms-user-drag: none; -o-user-drag: none;`}
+          on:contextmenu={(e) => e.preventDefault()}
       on:dragstart={(e) => e.preventDefault()}
       on:selectstart={(e) => e.preventDefault()}
       tabindex="-1"
-    >
+        >
       <img
         src={fieldMapSrc}
         alt="Field"
@@ -3032,13 +4126,20 @@
     -o-user-drag: none;
   "
         draggable="false"
+        on:load={() => (fieldMapLoaded = true)}
         on:error={(e) => {
           console.error("Failed to load field map:", settings.fieldMap);
+          fieldMapLoaded = true;
           e.target.src = "/fields/decode.webp"; // Fallback
         }}
         on:dragstart={(e) => e.preventDefault()}
         on:selectstart={(e) => e.preventDefault()}
       />
+      <canvas
+        bind:this={fieldPointsCanvas}
+        class="absolute top-0 left-0 w-full h-full z-[15] pointer-events-none"
+        aria-hidden="true"
+      ></canvas>
       <MathTools {x} {y} {twoElement} {robotXY} />
       <!-- Main robot: only show in normal mode -->
       {#if $activePaths.length === 0}
@@ -3049,13 +4150,23 @@
 left: ${robotXY.x}px; transform: translate(-50%, -50%) rotate(${robotHeading}deg); z-index: 20; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none;`}
           draggable="false"
+          on:load={() => (robotImageLoaded = true)}
           on:error={(e) => {
             console.error("Failed to load robot image:", settings.robotImage);
+            robotImageLoaded = true;
             e.target.src = "/robot.png"; // Fallback to default
           }}
           on:dragstart={(e) => e.preventDefault()}
           on:selectstart={(e) => e.preventDefault()}
         />
+        {#if settings.showCurrentTValue && robotT !== null}
+          <div
+            class="pointer-events-none absolute z-[22] rounded-full border border-white/20 bg-black/60 px-3.5 py-1.5 font-mono text-[22px] font-semibold leading-none tracking-wide text-white shadow-lg backdrop-blur-sm"
+            style={`left: ${robotXY.x}px; top: ${robotXY.y - x(robotHeight) / 2 - 14}px; transform: translate(-50%, -100%);`}
+          >
+            t {robotT.toFixed(3)}
+          </div>
+        {/if}
         <!-- Heading arrow for main robot -->
         {#if settings.showHeadingArrow}
           <svg
@@ -3099,8 +4210,10 @@ pointer-events: none;`}
 left: ${secondRobotXY.x}px; transform: translate(-50%, -50%) rotate(${secondRobotHeading}deg); z-index: 19; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none; opacity: 0.8;`}
           draggable="false"
+          on:load={() => (robotImageLoaded = true)}
           on:error={(e) => {
             console.error("Failed to load robot image:", settings.robotImage);
+            robotImageLoaded = true;
             e.target.src = "/robot.png";
           }}
           on:dragstart={(e) => e.preventDefault()}
@@ -3150,8 +4263,10 @@ pointer-events: none; opacity: 0.8;`}
 left: ${robotState.xy.x}px; transform: translate(-50%, -50%) rotate(${robotState.heading}deg); z-index: ${20 - idx}; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
             draggable="false"
+            on:load={() => (robotImageLoaded = true)}
             on:error={(e) => {
               console.error("Failed to load robot image:", settings.robotImage);
+              robotImageLoaded = true;
               e.target.src = "/robot.png";
             }}
             on:dragstart={(e) => e.preventDefault()}
@@ -3192,28 +4307,86 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
           {/if}
         {/each}
       {/if}
+      {#if !initialAssetsReady}
+        <div class="absolute inset-0 z-[60] flex items-center justify-center rounded-lg bg-neutral-950/80 backdrop-blur-sm">
+          <div class="flex flex-col items-center gap-3 rounded-2xl border border-neutral-700 bg-neutral-900/95 px-6 py-5 shadow-2xl">
+            <img src="/loading.svg" alt="Loading" class="size-20" draggable="false" />
+            <div class="text-center">
+              <div class="text-sm font-semibold text-neutral-100">Loading Visualizer</div>
+              <div class="text-xs text-neutral-400">Waiting for field assets to finish loading</div>
+            </div>
+          </div>
+        </div>
+      {/if}
+        </div>
+      </div>
+      <div class="module-footer">Field · 141.5&quot; x 141.5&quot;</div>
+    </main>
+
+    <div class="panel-divider panel-divider--right">
+      <button
+        class="panel-divider-grip"
+        type="button"
+        aria-label="Resize right panel"
+        title={rightPanelHidden ? "Click to restore the right panel" : "Drag to resize the right panel"}
+        on:mousedown={(event) => beginPanelResize("right", event)}
+        on:click={() => {
+          if (rightPanelHidden) {
+            rightPanelHidden = false;
+          }
+        }}
+      >
+        {#if rightPanelHidden}
+          ‹
+        {:else}
+          <span class="panel-divider-line"></span>
+        {/if}
+      </button>
     </div>
+
+    <aside class="panel-box side-rail side-rail-right" class:side-rail--collapsed={rightPanelHidden}>
+      <div class="module-box control-panel-header">
+        <div class="module-header-row">
+          <div>
+            <h3 class="module-title">Controls</h3>
+            <p class="module-caption">Edit playback, paths, and robot settings.</p>
+          </div>
+          <button
+            class="panel-toggle-btn"
+            type="button"
+            on:click={toggleRightPanelVisibility}
+            aria-label={rightPanelHidden ? "Show right panel" : "Hide right panel"}
+            title={rightPanelHidden ? "Show right panel" : "Hide right panel"}
+          >
+            {rightPanelHidden ? "‹" : "›"}
+          </button>
+        </div>
+      </div>
+      <ControlTab
+        bind:playing
+        {play}
+        {pause}
+        bind:startPoint
+        bind:lines
+        bind:sequence
+        bind:selectedLineIndex
+        bind:selectedPointIndex
+        bind:robotWidth
+        bind:robotHeight
+        bind:settings
+        bind:percent
+        bind:robotXY
+        bind:robotHeading
+        bind:shapes
+        {x}
+        {y}
+        {handleSeek}
+        bind:loopAnimation
+        {recordChange}
+        {optimizeLine}
+        {optimizingLineIds}
+      />
+    </aside>
   </div>
-  <ControlTab
-    bind:playing
-    {play}
-    {pause}
-    bind:startPoint
-    bind:lines
-    bind:sequence
-    bind:robotWidth
-    bind:robotHeight
-    bind:settings
-    bind:percent
-    bind:robotXY
-    bind:robotHeading
-    bind:shapes
-    {x}
-    {y}
-    {handleSeek}
-    bind:loopAnimation
-    {recordChange}
-    {optimizeLine}
-    {optimizingLineIds}
-  />
 </div>
+{/if}
