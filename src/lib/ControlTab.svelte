@@ -748,7 +748,7 @@
             <div class="font-medium text-gray-100">{selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}</div>
           </div>
           <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
-            <div class="text-gray-500">Points</div>
+            <div class="text-gray-500">Control Points</div>
             <div class="font-medium text-gray-100">{selectedLine.controlPoints.length}</div>
           </div>
           <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
@@ -775,7 +775,7 @@
                   class={`rounded border border-[#444444] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#2a2a2a] ${selectedPointIndex === pointIdx + 1 ? "bg-[#2f2f2f]" : ""}`}
                   on:click={() => (selectedPointIndex = pointIdx + 1)}
                 >
-                  P{pointIdx + 1}
+                  CP{pointIdx + 1}
                 </button>
               {/each}
             </div>
@@ -800,7 +800,7 @@
               </div>
             {/if}
 
-            <div class="mt-3 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+            <div class="mt-3 flex flex-wrap items-end gap-2 text-[11px]">
               <label class="flex flex-col gap-1">
                 <span class="text-gray-500">X</span>
                 <input
@@ -809,7 +809,7 @@
                   min="0"
                   max="141.5"
                   step={$snapToGrid && $showGrid ? $gridSize : 0.1}
-                  class="w-full rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                   on:change={commitSelectedPointChange}
                   disabled={selectedLine.locked || !!selectedPoint.locked}
                 />
@@ -822,7 +822,7 @@
                   min="0"
                   max="141.5"
                   step={$snapToGrid && $showGrid ? $gridSize : 0.1}
-                  class="w-full rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  class="w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                   on:change={commitSelectedPointChange}
                   disabled={selectedLine.locked || !!selectedPoint.locked}
                 />
@@ -857,7 +857,7 @@
                   disabled={selectedLine.locked || selectedPointIndex === 0 || selectedLine.controlPoints.length === 0}
                   title={selectedPointIndex === 0 ? "Endpoint cannot be deleted" : "Delete the selected control point"}
                 >
-                  Delete Point
+                  Delete Control Point
                 </button>
                 <button
                   class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"

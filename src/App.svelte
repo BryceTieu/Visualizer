@@ -24,6 +24,8 @@
   import ControlTab from "./lib/ControlTab.svelte";
   import Navbar from "./lib/Navbar.svelte";
   import MathTools from "./lib/MathTools.svelte";
+  import PlayIcon from "./lib/components/icons/PlayIcon.svelte";
+  import PauseIcon from "./lib/components/icons/PauseIcon.svelte";
   import SaveDialog from "./lib/components/SaveDialog.svelte";
   import DualPathSaveDialog from "./lib/components/DualPathSaveDialog.svelte";
   import ProgressDialog from "./lib/components/ProgressDialog.svelte";
@@ -3694,21 +3696,24 @@
     );
     if (selectedSeqIndex === -1) return;
 
-    let nextPathSeqIndex = -1;
-    for (let index = selectedSeqIndex + 1; index < sequence.length; index++) {
+    // Use the LAST path in the sequence as the second anchor, not the next one.
+    let lastPathSeqIndex = -1;
+    for (let index = sequence.length - 1; index >= 0; index--) {
       if (sequence[index].kind === "path") {
-        nextPathSeqIndex = index;
+        lastPathSeqIndex = index;
         break;
       }
     }
 
-    const nextLine =
-      nextPathSeqIndex >= 0
-        ? lines.find((line) => line.id === (sequence[nextPathSeqIndex] as any).lineId)
+    const lastLine =
+      lastPathSeqIndex >= 0
+        ? lines.find((line) => line.id === (sequence[lastPathSeqIndex] as any).lineId)
         : null;
 
-    const startPoint = selected.endPoint;
-    const endPoint = nextLine?.endPoint || {
+    // Start from the currently selected point (endpoint or control point) so
+    // the path is created between the selection and the last point.
+    const startPoint = selectedPoint || selected.endPoint;
+    const endPoint = lastLine?.endPoint || {
       x: startPoint.x,
       y: startPoint.y,
       heading: "tangential",
@@ -4036,7 +4041,6 @@
               on:click={() => selectLinePoint(item.lineIndex, 0)}
             >
               <div class="list-item-top">
-                <span class="list-item-index">{item.index}.</span>
                 <span class="list-item-name">{item.name}</span>
               </div>
               <div class="list-item-sub">{item.x}, {item.y}</div>
@@ -4080,13 +4084,24 @@
         <button class="toolbar-btn" class:toolbar-btn--blue={penToolEnabled} on:click={togglePenTool}>
           {penToolEnabled ? "Pen Tool On" : "Pen Tool"}
         </button>
-        <button class="toolbar-btn" on:click={addControlPoint}>+ Point</button>
-        <button class="toolbar-btn" on:click={removeControlPoint}>- Point</button>
+        <button class="toolbar-btn" on:click={addControlPoint}>+ Control Point</button>
+        <button class="toolbar-btn" on:click={removeControlPoint}>- Control Point</button>
         <button class="toolbar-btn toolbar-btn--blue" on:click={createPathBetweenSelectedPoints}>
-          Create Path Between Two Points
+          Create Path to Last Point
         </button>
         <div style="flex: 1;"></div>
-        <button class="toolbar-btn" on:click={() => (playing ? pause() : play())}>{playing ? "Pause" : "Play"}</button>
+        <button
+          class="toolbar-btn toolbar-btn--icon"
+          title={playing ? "Pause" : "Play"}
+          aria-label={playing ? "Pause" : "Play"}
+          on:click={() => (playing ? pause() : play())}
+        >
+          {#if playing}
+            <PauseIcon className="size-5" strokeWidth={2} />
+          {:else}
+            <PlayIcon className="size-5" strokeWidth={2} />
+          {/if}
+        </button>
       </div>
 
       <div
