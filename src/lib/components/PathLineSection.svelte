@@ -20,9 +20,6 @@
   export let canMoveDown: boolean = true;
   export let optimizeLine: (lineId: string, targetControlPointIndex?: number) => void;
   export let optimizing: boolean = false;
-  export let chainOptions: Array<{ id: string; name: string; color: string }> = [];
-  export let selectedChainId: string = "";
-  export let onChainChange: (chainId: string) => void;
 
 
   $: snapToGridTitle =
@@ -30,13 +27,6 @@
 
   function toggleCollapsed() {
     collapsed = !collapsed;
-  }
-
-  function handleChainSelect(event: Event) {
-    const target = event.currentTarget as HTMLSelectElement;
-    if (onChainChange) {
-      onChainChange(target.value);
-    }
   }
 
   $: optimizeLine;
@@ -87,22 +77,12 @@
         }}
       />
 
-      <select
-        value={selectedChainId}
-        on:change={handleChainSelect}
-        class="px-2 py-1 text-xs rounded border border-neutral-300 dark:border-neutral-600 bg-neutral-100 dark:bg-neutral-900"
-        title="Assign path chain"
-      >
-        {#each chainOptions as chain}
-          <option value={chain.id}>{chain.name}</option>
-        {/each}
-      </select>
 
       <div
         class="relative size-5 rounded-full overflow-hidden shadow-sm border border-neutral-300 dark:border-neutral-600 shrink-0"
         style="background-color: {line.color}"
       >
-        <div class="absolute inset-0" title="Color comes from assigned path chain" />
+        <div class="absolute inset-0" title="Path color" />
       </div>
 
       <!-- Lock/Unlock Button -->

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FieldPoint, Point, Line, Shape, Settings, SequenceItem, PathChain } from "../types";
+  import type { FieldPoint, Point, Line, Shape, Settings, SequenceItem } from "../types";
   import { onMount, onDestroy } from "svelte";
   import {
     showRuler,
@@ -13,7 +13,6 @@
     dualPathMode,
     activePaths,
   } from "../stores";
-  import { getRandomColor } from "../utils";
   import {
     getDefaultStartPoint,
     getDefaultLines,
@@ -32,7 +31,6 @@
   export let lines: Line[];
   export let shapes: Shape[];
   export let sequence: SequenceItem[];
-  export let pathChains: PathChain[] = [];
   export let fieldPoints: FieldPoint[] = [];
   export let secondStartPoint: Point | null = null;
   export let secondLines: Line[] = [];
@@ -179,14 +177,6 @@
       lineId: ln.id || `line-${Math.random().toString(36).slice(2)}`,
     }));
     shapes = getDefaultShapes();
-    pathChains = [
-      {
-        id: `chain-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-        name: "Main Chain",
-        color: getRandomColor(),
-        lineIds: lines.map((ln) => ln.id!).filter(Boolean),
-      },
-    ];
     activePaths.set([]);
     dualPathMode.set(false);
   }
@@ -262,7 +252,6 @@
     bind:lines
     bind:shapes
     bind:sequence
-    bind:pathChains
     bind:secondStartPoint
     bind:secondLines
     bind:secondShapes
@@ -277,7 +266,6 @@
   bind:startPoint
   bind:lines
   bind:sequence
-  bind:pathChains
 />
 
 <SettingsDialog bind:isOpen={settingsOpen} bind:settings />

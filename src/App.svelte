@@ -5,7 +5,6 @@
     Settings,
     Point,
     SequenceItem,
-    PathChain,
     Shape,
   } from "./types";
   import * as d3 from "d3";
@@ -189,23 +188,8 @@
     kind: "path",
     lineId: ln.id!,
   }));
-  const makeChainId = () =>
-    `chain-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const makeId = () =>
     `line-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const defaultPathChainName = "Main Chain";
-  const createDefaultPathChain = (sourceLines: Line[]): PathChain => ({
-    id: makeChainId(),
-    name: defaultPathChainName,
-    color: getRandomColor(),
-    lineIds: sourceLines.map((ln) => ln.id!).filter(Boolean),
-  });
-  let pathChains: PathChain[] = [createDefaultPathChain(lines)];
-  let selectedChainId = pathChains[0]?.id || "";
-  let chainNameDraft = pathChains[0]?.name || defaultPathChainName;
-  let chainColorDraft = pathChains[0]?.color || "#22c55e";
-  let previousSelectedChainId = "";
-  let previousSelectedLineId = "";
   let selectedLineIndex = 0;
   let selectedPointIndex = 0;
   let selectedLine: Line | null = null;
@@ -214,13 +198,20 @@
   let penStroke: BasePoint[] = [];
   let penIsDrawing = false;
   let penGhostPath: (Path | PathLine)[] = [];
-  let selectedLineChainId = "";
   let fieldMapLoaded = false;
   let robotImageLoaded = false;
   let lastFieldMapSrc = "";
   let lastRobotImageSrc = "";
   let isMobileBlocked = false;
   let effectiveSize = FIELD_SIZE;
+  let fieldStageWidth = FIELD_SIZE;
+  let fieldStageHeight = FIELD_SIZE;
+  $: fieldPixelSize = Math.max(
+    1,
+    Math.floor(
+      Math.min(fieldStageWidth || FIELD_SIZE, fieldStageHeight || FIELD_SIZE) - 16,
+    ),
+  );
 
   if (typeof window !== "undefined") {
     // Initial detection
@@ -237,9 +228,6 @@
     window.addEventListener("resize", _updateMobile);
     window.addEventListener("orientationchange", _updateMobile);
   }
-  $: selectedChain =
-    pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
-
   $: if (fieldMapSrc !== lastFieldMapSrc) {
     fieldMapLoaded = false;
     lastFieldMapSrc = fieldMapSrc;
@@ -262,117 +250,6 @@
         ? selectedLine.endPoint
         : selectedLine.controlPoints[selectedPointIndex - 1] || null
       : null;
-  $: selectedLineChainId = selectedLine?.id ? getLinePrimaryChainId(selectedLine.id) : "";
-
-  function getLinePrimaryChainId(lineId: string): string {
-    for (const chain of pathChains) {
-      if ((chain.lineIds || []).includes(lineId)) return chain.id;
-    }
-    return pathChains[0]?.id || "";
-  }
-
-  function syncLineColorsToChains() {
-    const chainColorById = new Map(
-      pathChains.map((chain) => [chain.id, chain.color || "#22c55e"]),
-    );
-    let changed = false;
-
-    const nextLines = lines.map((line) => {
-      const ownerId = getLinePrimaryChainId(line.id || "");
-      const targetColor = chainColorById.get(ownerId) || line.color;
-      if (line.color !== targetColor) {
-        changed = true;
-        return { ...line, color: targetColor };
-      }
-      return line;
-    });
-
-    if (changed) {
-      lines = nextLines;
-    }
-  }
-
-  function assignLineToChain(lineId: string, chainId: string) {
-    if (!lineId || !chainId) return;
-    pathChains = pathChains.map((chain) => ({
-      ...chain,
-      lineIds: chain.lineIds.filter((id) => id !== lineId),
-    }));
-
-    pathChains = pathChains.map((chain) => {
-      if (chain.id !== chainId) return chain;
-      return {
-        ...chain,
-        lineIds: Array.from(new Set([...(chain.lineIds || []), lineId])),
-      };
-    });
-
-    syncLineColorsToChains();
-  }
-
-  function addPathChain() {
-    const newChain: PathChain = {
-      id: makeChainId(),
-      name: `Chain ${pathChains.length + 1}`,
-      color: getRandomColor(),
-      lineIds: [],
-    };
-    pathChains = [...pathChains, newChain];
-    selectedChainId = newChain.id;
-    recordChange();
-  }
-
-  function removeSelectedPathChain() {
-    if (!selectedChain || pathChains.length <= 1) return;
-    const fallbackChainId = pathChains.find((chain) => chain.id !== selectedChain.id)?.id;
-    const orphanedLines = [...(selectedChain.lineIds || [])];
-    pathChains = pathChains.filter((chain) => chain.id !== selectedChain.id);
-
-    if (fallbackChainId) {
-      orphanedLines.forEach((lineId) => assignLineToChain(lineId, fallbackChainId));
-    }
-
-    selectedChainId = fallbackChainId || pathChains[0]?.id || "";
-    recordChange();
-  }
-
-  function updateSelectedChainName() {
-    if (!selectedChain) return;
-    const nextName = chainNameDraft.trim();
-    if (!nextName) return;
-    pathChains = pathChains.map((chain) =>
-      chain.id === selectedChain.id ? { ...chain, name: nextName } : chain,
-    );
-    recordChange();
-  }
-
-  function updateSelectedChainColor() {
-    if (!selectedChain) return;
-    pathChains = pathChains.map((chain) =>
-      chain.id === selectedChain.id ? { ...chain, color: chainColorDraft } : chain,
-    );
-    syncLineColorsToChains();
-    recordChange();
-  }
-
-  $: if (!selectedChainId || !pathChains.some((chain) => chain.id === selectedChainId)) {
-    selectedChainId = pathChains[0]?.id || "";
-  }
-
-  $: if (selectedLine?.id && selectedLine.id !== previousSelectedLineId) {
-    if (selectedLineChainId && selectedLineChainId !== selectedChainId) {
-      selectedChainId = selectedLineChainId;
-    }
-    previousSelectedLineId = selectedLine.id;
-  }
-
-  $: if (selectedChainId !== previousSelectedChainId) {
-    chainNameDraft = selectedChain?.name || defaultPathChainName;
-    chainColorDraft = selectedChain?.color || "#22c55e";
-    previousSelectedChainId = selectedChainId;
-  }
-
-  $: syncLineColorsToChains();
   let shapes: Shape[] = getDefaultShapes();
   let optimizingLineIds: Record<string, boolean> = {};
   let optimizingAll = false;
@@ -404,7 +281,6 @@
     startPoint: Point;
     lines: Line[];
     sequence: SequenceItem[];
-    pathChains: PathChain[];
     shapes: Shape[];
     settings: Settings;
     currentFilePath: string | null;
@@ -565,7 +441,6 @@
         : strokePoints;
       const controlPoints = sampleStrokeControlPoints(controlPointsSource, maxControlPoints);
 
-    const fittedColor = selectedChain?.color || getRandomColor();
       const fittedLines: Line[] = [
         {
           id: makeId(),
@@ -577,7 +452,7 @@
             reverse: false,
           },
           controlPoints,
-          color: fittedColor,
+          color: getRandomColor(),
           waitBeforeMs: 0,
           waitAfterMs: 0,
           waitBeforeName: "",
@@ -619,29 +494,12 @@
         nextSequence.splice(seqIndex >= 0 ? seqIndex + 1 : nextSequence.length, 0, { kind: "path", lineId: newLine.id! });
         sequence = nextSequence;
 
-        const chainId = selectedChainId || getLinePrimaryChainId(selectedLine.id) || pathChains[0]?.id || "";
-        if (chainId) {
-          assignLineToChain(newLine.id!, chainId);
-          selectedChainId = chainId;
-        }
-
         selectedLineIndex = insertAt >= 0 ? insertAt + 1 : lines.length - 1;
         selectedPointIndex = 0;
       } else {
         startPoint = fitted.startPoint;
         lines = normalizeLines(fitted.lines);
         sequence = lines.map((line) => ({ kind: "path", lineId: line.id! }));
-
-        const chainId = makeChainId();
-        pathChains = [
-          {
-            id: chainId,
-            name: selectedChain?.name || defaultPathChainName,
-            color: fitted.lines[0]?.color || selectedChain?.color || getRandomColor(),
-            lineIds: lines.map((line) => line.id!).filter(Boolean),
-          },
-        ];
-        selectedChainId = chainId;
         selectedLineIndex = 0;
         selectedPointIndex = 0;
       }
@@ -670,27 +528,64 @@
       Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
     );
     const minWidth = side === "right" ? rightPanelMinWidth : SIDE_PANEL_MIN_WIDTH;
-    const maxWidth = Math.max(
-      minWidth,
-      availableWidth - otherPanelWidth - CENTER_MIN_WIDTH - PANEL_DIVIDER_WIDTH * 2,
+    // Calculate the minimum center width needed to make the field square or wider.
+    // The field height is determined by the center-stage layout, roughly:
+    // window height - navbar (~80px) - ui-shell padding (~24px) - center-stage padding (~20px) - field-stage padding (~16px)
+    const estimatedFieldHeight = Math.max(
+      300,
+      window.innerHeight - 80 - 24 - 20 - 16 - PANEL_DIVIDER_WIDTH * 2
     );
-    return clamp(desiredWidth, minWidth, Math.max(minWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxWidth)));
+    // Center must be at least as wide as the field height to avoid a tall rectangle
+    const minCenterWidthForSquare = estimatedFieldHeight;
+    // Maximum panel width is constrained so center is at least minCenterWidthForSquare
+    const maxPanelWidth = availableWidth - otherPanelWidth - minCenterWidthForSquare - PANEL_DIVIDER_WIDTH * 2;
+    // Panel cannot exceed maxPanelWidth, but must be at least minWidth
+    // If maxPanelWidth < minWidth, the panel will be shrunk to fit (making center bigger)
+    const effectiveMax = Math.max(minWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxPanelWidth));
+    return clamp(desiredWidth, minWidth, effectiveMax);
   }
 
-  $: leftPanelWidth = leftPanelHidden
-    ? 0
-    : clamp(
-        Number(settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 240),
-        SIDE_PANEL_MIN_WIDTH,
-        SIDE_PANEL_MAX_WIDTH,
-      );
-  $: rightPanelWidth = rightPanelHidden
-    ? 0
-    : clamp(
-        Number(settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 360),
-        Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth)),
-        SIDE_PANEL_MAX_WIDTH,
-      );
+  // Calculate the minimum center width needed for a square-or-wider field
+  function getMinCenterWidthForSquare(): number {
+    // Estimate field height: window height minus navbar, padding, and dividers
+    const estimatedFieldHeight = Math.max(
+      300,
+      window.innerHeight - 80 - 24 - 20 - 16 - PANEL_DIVIDER_WIDTH * 2
+    );
+    return estimatedFieldHeight;
+  }
+
+  // Reactive center width calculation for the field constraint
+  $: centerWidth = Math.max(
+    300,
+    window.innerWidth - 24 - (leftPanelHidden ? 0 : leftPanelWidth) - (rightPanelHidden ? 0 : rightPanelWidth) - PANEL_DIVIDER_WIDTH * 2
+  );
+
+  // Calculate available width for panels after ensuring center is at least square
+  // If default panel sizes would make center too small, panels auto-shrink
+  $: {
+    const minCenterWidth = getMinCenterWidthForSquare();
+    const totalAvailable = window.innerWidth - 24 - PANEL_DIVIDER_WIDTH * 2;
+    const availableForPanels = totalAvailable - minCenterWidth;
+    
+    // Auto-shrink left panel if needed to fit
+    if (!leftPanelHidden) {
+      const rightMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
+      const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
+      const desiredLeft = Number(settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 240);
+      leftPanelWidth = clamp(desiredLeft, SIDE_PANEL_MIN_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, maxLeft));
+    }
+    
+    // Auto-shrink right panel if needed to fit
+    if (!rightPanelHidden) {
+      const leftWidth = leftPanelHidden ? 0 : leftPanelWidth;
+      const rightMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const maxRight = Math.max(rightMinWidth, availableForPanels - leftWidth);
+      const desiredRight = Number(settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 360);
+      rightPanelWidth = clamp(desiredRight, rightMinWidth, Math.max(rightMinWidth, maxRight));
+    }
+  }
 
   function beginPanelResize(side: "left" | "right", event: MouseEvent) {
     event.preventDefault();
@@ -760,7 +655,6 @@
       lines,
       shapes,
       sequence,
-      pathChains,
       fieldPoints,
       activePaths: $activePaths,
       settings,
@@ -777,7 +671,6 @@
       shapes,
       sequence,
       settings,
-      pathChains,
       fieldPoints,
     };
   }
@@ -798,7 +691,6 @@
       shapes = prev.shapes;
       sequence = prev.sequence;
       settings = prev.settings;
-      pathChains = prev.pathChains;
       fieldPoints = prev.fieldPoints;
       isUnsaved.set(true);
       two && two.update();
@@ -815,40 +707,9 @@
       shapes = next.shapes;
       sequence = next.sequence;
       settings = next.settings;
-      pathChains = next.pathChains;
       fieldPoints = next.fieldPoints;
       isUnsaved.set(true);
       two && two.update();
-    }
-  }
-
-  function normalizePathChains(
-    sourceChains: PathChain[] | undefined,
-    sourceLines: Line[],
-  ): PathChain[] {
-    const validLineIds = new Set(sourceLines.map((ln) => ln.id!).filter(Boolean));
-    const cleaned = (sourceChains || [])
-      .map((chain) => ({
-        ...chain,
-        id: chain.id || makeChainId(),
-        name: (chain.name || "").trim() || defaultPathChainName,
-        color: chain.color || getRandomColor(),
-        lineIds: (chain.lineIds || []).filter((id) => validLineIds.has(id)),
-      }));
-
-    if (cleaned.length === 0) {
-      return [createDefaultPathChain(sourceLines)];
-    }
-
-    return cleaned;
-  }
-
-  $: {
-    const normalized = normalizePathChains(pathChains, lines);
-    const current = JSON.stringify(pathChains);
-    const next = JSON.stringify(normalized);
-    if (current !== next) {
-      pathChains = normalized;
     }
   }
 
@@ -911,13 +772,10 @@
     return getAnimationDuration(maxTime / 1000);
   })();
 
-  $: primaryPathChain = pathChains[0] || null;
   $: pathPreviewItems = lines.slice(0, 14).map((line, idx) => ({
     index: idx + 1,
     lineIndex: idx,
     name: line.name || `Path ${idx + 1}`,
-    chainName: pathChains.find((chain) => chain.id === getLinePrimaryChainId(line.id || ""))?.name || "Unassigned",
-    chainColor: pathChains.find((chain) => chain.id === getLinePrimaryChainId(line.id || ""))?.color || line.color || "#10b981",
     x: formatPathPoint(line.endPoint.x),
     y: formatPathPoint(line.endPoint.y),
   }));
@@ -976,7 +834,6 @@
       startPoint,
       lines,
       sequence,
-      pathChains,
       shapes,
       settings,
       currentFilePath: $currentFilePath,
@@ -1013,7 +870,6 @@
               lineId: ln.id!,
             }));
 
-      pathChains = normalizePathChains(parsed.pathChains || [], restoredLines);
       shapes = parsed.shapes || [];
       settings = normalizeLegacyFieldMap({
         ...DEFAULT_SETTINGS,
@@ -1689,7 +1545,7 @@
 
     const ghost = new Two.Path(anchors);
     ghost.automatic = false;
-    ghost.stroke = selectedChain?.color || "#facc15";
+    ghost.stroke = "#facc15";
     ghost.fill = "transparent";
     ghost.linewidth = x(LINE_WIDTH * 0.9);
     ghost.opacity = 0.35;
@@ -2982,7 +2838,7 @@
       console.error("Failed to save into app storage:", err);
       // As a last resort, download the file
       try {
-        downloadTrajectory(startPoint, lines, shapes, sequence, pathChains, $activePaths, []);
+        downloadTrajectory(startPoint, lines, shapes, sequence, $activePaths);
       } catch (err2) {
         console.error("Save As fallback failed:", err2);
         alert(
@@ -3463,13 +3319,6 @@
       lines = [...lines, newLine];
       sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
       selectedLineIndex = lines.length - 1;
-      const targetChainId = pathChains.some((chain) => chain.id === selectedChainId)
-        ? selectedChainId
-        : pathChains[0]?.id || "";
-      if (targetChainId) {
-        selectedChainId = targetChainId;
-        assignLineToChain(newLine.id!, targetChainId);
-      }
       recordChange();
       two.update();
     });
@@ -3545,8 +3394,6 @@
               lineId: ln.id!,
             }))
       ) as SequenceItem[];
-      pathChains = normalizePathChains(data.pathChains, normalizedLines);
-
       // Load shapes with defaults
       shapes = data.shapes || [];
       fieldPoints = normalizeFieldPoints(data);
@@ -3601,7 +3448,6 @@
             lineId: ln.id!,
           }))
     ) as SequenceItem[];
-    pathChains = normalizePathChains(data.pathChains, normalizedLines);
 
     // Load shapes with defaults
     shapes = data.shapes || [];
@@ -3807,29 +3653,8 @@
       ...sequence,
       { kind: "path", lineId: newLineId },
     ];
-    const targetChainId = pathChains.some((chain) => chain.id === selectedChainId)
-      ? selectedChainId
-      : pathChains[0]?.id || "";
-    if (targetChainId) {
-      selectedChainId = targetChainId;
-      assignLineToChain(newLineId, targetChainId);
-    }
     selectedLineIndex = lines.length - 1;
     selectedPointIndex = 0;
-    recordChange();
-  }
-
-  function moveSelectedLineToChain(chainId: string) {
-    const selectedLine = lines[selectedLineIndex];
-    if (!selectedLine?.id || !chainId) return;
-
-    if (getLinePrimaryChainId(selectedLine.id) === chainId) {
-      selectedChainId = chainId;
-      return;
-    }
-
-    assignLineToChain(selectedLine.id, chainId);
-    selectedChainId = chainId;
     recordChange();
   }
 
@@ -3917,12 +3742,6 @@
     const nextSequence = [...sequence];
     nextSequence.splice(selectedSeqIndex + 1, 0, { kind: "path", lineId: newLineId });
     sequence = nextSequence;
-
-    const chainId = getLinePrimaryChainId(selected.id) || selectedChainId || pathChains[0]?.id || "";
-    if (chainId) {
-      assignLineToChain(newLineId, chainId);
-      selectedChainId = chainId;
-    }
 
     selectedLineIndex = selectedLineIndex + 1;
     selectedPointIndex = 0;
@@ -4131,7 +3950,6 @@
   bind:startPoint
   bind:shapes
   bind:sequence
-  bind:pathChains
   bind:secondStartPoint
   bind:secondLines
   bind:secondShapes
@@ -4180,7 +3998,7 @@
 <div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
   <div
     class="desktop-grid h-full"
-    style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`};`}
+    style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`}; --center-width: ${centerWidth}px;`}
   >
     <aside class="panel-box side-rail side-rail-left" class:side-rail--collapsed={leftPanelHidden}>
       <section class="module-box">
@@ -4206,108 +4024,20 @@
       </section>
 
       <section class="module-box module-fill">
-        <div class="chain-panel">
-          <div class="module-header-row">
-            <div>
-              <h3 class="module-title">Path Chains</h3>
-              <p class="module-caption">Create and rename chain groups.</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <button class="console-action px-2 py-1 text-xs" on:click={addPathChain}>New</button>
-              <button class="console-action px-2 py-1 text-xs" on:click={removeSelectedPathChain} disabled={pathChains.length <= 1}>Remove</button>
-            </div>
-          </div>
-
-          <div class="chain-list">
-            {#each pathChains as chain (chain.id)}
-              <div class="flex items-stretch gap-2">
-                <button
-                  class="chain-card flex-1"
-                  class:chain-card--selected={selectedChainId === chain.id}
-                  aria-pressed={selectedChainId === chain.id}
-                  on:click={() => (selectedChainId = chain.id)}
-                >
-                  <span class="chain-swatch" style={`background:${chain.color || "#10b981"}`}></span>
-                  <span class="chain-card-copy">
-                    <span class="chain-card-title">{chain.name}</span>
-                    <span class="chain-card-meta">{(chain.lineIds || []).length} segment{(chain.lineIds || []).length === 1 ? "" : "s"}</span>
-                  </span>
-                  {#if selectedChainId === chain.id}
-                    <span class="chain-selected-tag ml-auto">Active</span>
-                  {/if}
-                </button>
-
-                <button
-                  class="console-action px-3 py-1.5 text-xs whitespace-nowrap shrink-0"
-                  on:click={() => moveSelectedLineToChain(chain.id)}
-                  disabled={!selectedLine?.id || selectedLineChainId === chain.id}
-                  title={
-                    !selectedLine?.id
-                      ? "Select a path first"
-                      : selectedLineChainId === chain.id
-                        ? "This path is already in this chain"
-                        : `Move ${selectedLine.name || `Path ${selectedLineIndex + 1}`} here`
-                  }
-                >
-                  Move Here
-                </button>
-              </div>
-            {/each}
-
-            {#if pathChains.length === 0}
-              <div class="list-empty">No chains yet</div>
-            {/if}
-          </div>
-
-          {#if selectedChain}
-            <div class="chain-editor">
-              <label class="chain-field">
-                <span class="chain-field-label">Name</span>
-                <input
-                  type="text"
-                  bind:value={chainNameDraft}
-                  on:input={updateSelectedChainName}
-                  class="console-input px-2 py-1 text-xs"
-                  placeholder="Chain name"
-                />
-              </label>
-
-              <label class="chain-field chain-field--swatch">
-                <span class="chain-field-label">Color</span>
-                <input
-                  type="color"
-                  bind:value={chainColorDraft}
-                  on:input={updateSelectedChainColor}
-                  class="chain-color-input"
-                  title="Path chain color"
-                />
-              </label>
-            </div>
-          {/if}
-        </div>
-      </section>
-
-      <section class="module-box module-fill">
         <div class="module-header-row">
           <h3 class="module-title">Path List</h3>
-          <span class="module-caption">{lines.length} paths</span>
+          <span class="module-caption">{lines.length} path{lines.length === 1 ? "" : "s"}</span>
         </div>
         <div class="module-list">
           {#each pathPreviewItems as item (item.index)}
             <button
               class="list-item-box compact text-left"
-              class:chain-card--selected={selectedLineIndex === item.lineIndex}
+              class:list-item-box--selected={selectedLineIndex === item.lineIndex}
               on:click={() => selectLinePoint(item.lineIndex, 0)}
             >
               <div class="list-item-top">
                 <span class="list-item-index">{item.index}.</span>
                 <span class="list-item-name">{item.name}</span>
-                  <span
-                    class="ml-auto rounded border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                    style={`border-color:${item.chainColor}; background:${item.chainColor}1f; color:${item.chainColor};`}
-                  >
-                    {item.chainName}
-                  </span>
               </div>
               <div class="list-item-sub">{item.x}, {item.y}</div>
             </button>
@@ -4359,28 +4089,19 @@
         <button class="toolbar-btn" on:click={() => (playing ? pause() : play())}>{playing ? "Pause" : "Play"}</button>
       </div>
 
-      <div class="field-stage flex h-full justify-center items-center">
+      <div
+        class="field-stage flex h-full justify-center items-center"
+        bind:clientWidth={fieldStageWidth}
+        bind:clientHeight={fieldStageHeight}
+      >
         <div
           bind:this={twoElement}
           bind:clientWidth={width}
           bind:clientHeight={height}
-          class="h-full aspect-square bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
-      role="application"
-      style="
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-    user-drag: none;
-    -webkit-user-drag: none;
-    -khtml-user-drag: none;
-    -moz-user-drag: none;
-    -ms-user-drag: none;
-    -o-user-drag: none;
-  "
-      on:contextmenu={(e) => e.preventDefault()}
+          class="bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
+          role="application"
+          style={`width: ${fieldPixelSize}px; height: ${fieldPixelSize}px; max-width: 100%; max-height: 100%; aspect-ratio: 1 / 1; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-drag: none; -webkit-user-drag: none; -khtml-user-drag: none; -moz-user-drag: none; -ms-user-drag: none; -o-user-drag: none;`}
+          on:contextmenu={(e) => e.preventDefault()}
       on:dragstart={(e) => e.preventDefault()}
       on:selectstart={(e) => e.preventDefault()}
       tabindex="-1"
@@ -4648,8 +4369,6 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         bind:startPoint
         bind:lines
         bind:sequence
-        bind:pathChains
-        bind:selectedChainId
         bind:selectedLineIndex
         bind:selectedPointIndex
         bind:robotWidth

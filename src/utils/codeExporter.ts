@@ -3,20 +3,20 @@ import type {
   Point,
   Line,
   BasePoint,
-  PathChain,
-  PiecewiseHeadingInterpolation,
-  PiecewiseHeadingSegment,
   SequenceItem,
 } from "../types";
-import {
-  normalizePiecewiseHeadingInterpolation,
-  segmentSupportsReverse,
-} from "./headingInterpolation";
 
 const FIELD_WIDTH_INCHES = 141.5;
 
 interface ExportTransformOptions {
   mirrorHorizontally?: boolean;
+}
+
+interface ExportPathGroup {
+  id: string;
+  name: string;
+  color: string;
+  lineIds: string[];
 }
 
 function transformX(x: number, options: ExportTransformOptions): number {
@@ -82,31 +82,18 @@ function formatNumber(value: number): string {
   return Number.isInteger(rounded) ? rounded.toString() : rounded.toString();
 }
 
-function normalizeChains(
+function normalizeCompoundPaths(
   lines: (Line & { id: string })[],
-  pathChains: PathChain[],
-  lineById: Map<string, Line & { id: string }>,
-): PathChain[] {
-  const inputChains: PathChain[] =
-    pathChains.length > 0
-      ? pathChains
-      : lines.map((line, idx) => ({
-          id: line.id,
-          name: line.name || `Path${idx + 1}`,
-          color: "#22c55e",
-          lineIds: [line.id],
-        }));
-
-  return inputChains
-    .map((chain, idx) => ({
-      ...chain,
-      id: chain.id || `chain-${idx + 1}`,
-      name: chain.name || `PathChain${idx + 1}`,
-      lineIds: (chain.lineIds || []).filter((id) => lineById.has(id)),
+): ExportPathGroup[] {
+  return lines
+    .map((line, idx) => ({
+      id: line.id,
+      name: line.name || `Path${idx + 1}`,
+      color: line.color || "#22c55e",
+      lineIds: [line.id],
     }))
-    .filter((chain) => chain.lineIds.length > 0);
+    .filter((compoundPath) => compoundPath.lineIds.length > 0);
 }
-
 function getStartVarName(
   lineIdx: number,
   linesWithIds: (Line & { id: string })[],
@@ -196,23 +183,30 @@ function buildPathExpression(
 function javaPoseFieldsInline(
   startPoint: Point,
   linesWithIds: (Line & { id: string })[],
-  normalizedChains: PathChain[],
+  compoundPaths: ExportPathGroup[],
   options: ExportTransformOptions,
   mirrorHorizontally: boolean,
 ): string {
   const lines: string[] = [];
-  const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
+  const usedLineIds = new Set(compoundPaths.flatMap((c) => c.lineIds));
   const mirrorCall = mirrorHorizontally
     ? `.mirrorX(${FIELD_WIDTH_INCHES / 2})`
     : "";
 
-  lines.push(`    private final PoseFactory p = PoseFactory.degrees()${mirrorCall};`);
+  lines.push(
+    `    private final PoseFactory p = PoseFactory.degrees()${mirrorCall};`,
+  );
   lines.push("");
 
   const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
-  const startHeading = getStartPoseHeading(0, linesWithIds, startPoint, options);
+  const startHeading = getStartPoseHeading(
+    0,
+    linesWithIds,
+    startPoint,
+    options,
+  );
   lines.push(
-    `    private final Pose ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)});`
+    `    private final Pose ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)});`,
   );
 
   linesWithIds.forEach((line, lineIdx) => {
@@ -223,13 +217,13 @@ function javaPoseFieldsInline(
     const heading = getPoseHeading(ep, options);
 
     lines.push(
-      `    private final Pose ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)});`
+      `    private final Pose ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)});`,
     );
 
     line.controlPoints.forEach((cp, cpIdx) => {
       const cpName = `${endName}Control${cpIdx + 1}`;
       lines.push(
-        `    private final Pose ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0);`
+        `    private final Pose ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0);`,
       );
     });
   });
@@ -241,12 +235,12 @@ function javaPoseFieldsInline(
 function kotlinPoseFieldsInline(
   startPoint: Point,
   linesWithIds: (Line & { id: string })[],
-  normalizedChains: PathChain[],
+  compoundPaths: ExportPathGroup[],
   options: ExportTransformOptions,
   mirrorHorizontally: boolean,
 ): string {
   const lines: string[] = [];
-  const usedLineIds = new Set(normalizedChains.flatMap((c) => c.lineIds));
+  const usedLineIds = new Set(compoundPaths.flatMap((c) => c.lineIds));
   const mirrorCall = mirrorHorizontally
     ? `.mirrorX(${FIELD_WIDTH_INCHES / 2})`
     : "";
@@ -255,9 +249,14 @@ function kotlinPoseFieldsInline(
   lines.push("");
 
   const startName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
-  const startHeading = getStartPoseHeading(0, linesWithIds, startPoint, options);
+  const startHeading = getStartPoseHeading(
+    0,
+    linesWithIds,
+    startPoint,
+    options,
+  );
   lines.push(
-    `    private val ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)})`
+    `    private val ${startName} = p.of(${formatNumber(transformX(startPoint.x, options))}, ${formatNumber(startPoint.y)}, ${formatNumber(startHeading)})`,
   );
 
   linesWithIds.forEach((line, lineIdx) => {
@@ -268,13 +267,13 @@ function kotlinPoseFieldsInline(
     const heading = getPoseHeading(ep, options);
 
     lines.push(
-      `    private val ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)})`
+      `    private val ${endName} = p.of(${formatNumber(transformX(ep.x, options))}, ${formatNumber(ep.y)}, ${formatNumber(heading)})`,
     );
 
     line.controlPoints.forEach((cp, cpIdx) => {
       const cpName = `${endName}Control${cpIdx + 1}`;
       lines.push(
-        `    private val ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0.0)`
+        `    private val ${cpName} = p.of(${formatNumber(transformX(cp.x, options))}, ${formatNumber(cp.y)}, 0.0)`,
       );
     });
   });
@@ -282,29 +281,36 @@ function kotlinPoseFieldsInline(
   return lines.join("\n");
 }
 
-// Java path methods
+// Java path methods - each compound path becomes a method
 function javaPathMethods(
-  normalizedChains: PathChain[],
+  compoundPaths: ExportPathGroup[],
   linesWithIds: (Line & { id: string })[],
-  options: ExportTransformOptions,
+  _options: ExportTransformOptions,
   startPoint?: Point,
 ): string {
-  return normalizedChains
-    .map((chain, chainIdx) => {
+  return compoundPaths
+    .map((compound, compoundIdx) => {
       const methodName = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${chainIdx + 1}`),
+        sanitizeIdentifier(compound.name, `path${compoundIdx + 1}`),
       );
 
-      if (chain.lineIds.length === 1) {
-        const lineId = chain.lineIds[0];
+      if (compound.lineIds.length === 1) {
+        // Atomic path (single line/curve)
+        const lineId = compound.lineIds[0];
         const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
         const line = linesWithIds[lineIdx];
         if (!line) return "";
-        const expr = buildPathExpression(line, lineIdx, linesWithIds, startPoint);
+        const expr = buildPathExpression(
+          line,
+          lineIdx,
+          linesWithIds,
+          startPoint,
+        );
         return `    public Path ${methodName}() {\n        return ${expr};\n    }`;
       }
 
-      const pathExprs = chain.lineIds
+      // Compound path (multiple paths grouped together)
+      const pathExprs = compound.lineIds
         .map((lineId) => {
           const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
           const line = linesWithIds[lineIdx];
@@ -320,27 +326,32 @@ function javaPathMethods(
 
 // Kotlin path methods
 function kotlinPathMethods(
-  normalizedChains: PathChain[],
+  compoundPaths: ExportPathGroup[],
   linesWithIds: (Line & { id: string })[],
-  options: ExportTransformOptions,
+  _options: ExportTransformOptions,
   startPoint?: Point,
 ): string {
-  return normalizedChains
-    .map((chain, chainIdx) => {
+  return compoundPaths
+    .map((compoundPath, compoundIdx) => {
       const fnName = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${chainIdx + 1}`),
+        sanitizeIdentifier(compoundPath.name, `path${compoundIdx + 1}`),
       );
 
-      if (chain.lineIds.length === 1) {
-        const lineId = chain.lineIds[0];
+      if (compoundPath.lineIds.length === 1) {
+        const lineId = compoundPath.lineIds[0];
         const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
         const line = linesWithIds[lineIdx];
         if (!line) return "";
-        const expr = buildPathExpression(line, lineIdx, linesWithIds, startPoint);
+        const expr = buildPathExpression(
+          line,
+          lineIdx,
+          linesWithIds,
+          startPoint,
+        );
         return `    fun ${fnName}(): Path = ${expr}`;
       }
 
-      const pathExprs = chain.lineIds
+      const pathExprs = compoundPath.lineIds
         .map((lineId) => {
           const lineIdx = linesWithIds.findIndex((ln) => ln.id === lineId);
           const line = linesWithIds[lineIdx];
@@ -358,7 +369,6 @@ export async function generateJavaCode(
   startPoint: Point,
   lines: Line[],
   exportMode: "full" | "class" | "coordinates" = "class",
-  pathChains: PathChain[] = [],
   mirrorHorizontally = false,
 ): Promise<string> {
   const options: ExportTransformOptions = { mirrorHorizontally };
@@ -368,12 +378,22 @@ export async function generateJavaCode(
     id: line.id || `line-${idx + 1}`,
   })) as (Line & { id: string })[];
 
-  const lineById = new Map(linesWithIds.map((l) => [l.id, l]));
-  const chains = normalizeChains(linesWithIds, pathChains, lineById);
+  const compoundPaths = normalizeCompoundPaths(linesWithIds);
   const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
-  const fields = javaPoseFieldsInline(startPoint, linesWithIds, chains, options, mirrorHorizontally);
-  const methods = javaPathMethods(chains, linesWithIds, options, startPoint);
+  const fields = javaPoseFieldsInline(
+    startPoint,
+    linesWithIds,
+    compoundPaths,
+    options,
+    mirrorHorizontally,
+  );
+  const methods = javaPathMethods(
+    compoundPaths,
+    linesWithIds,
+    options,
+    startPoint,
+  );
 
   if (exportMode === "coordinates") {
     return `${fields}\n\n${methods}`;
@@ -404,11 +424,11 @@ ${methods}
     }
   }
 
-  // Full OpMode mode (Super cleaned up, no useless telemetry, no double initialization)
-  const chainFollows = chains
-    .map((chain, idx) => {
+  // Full OpMode mode following Pedro Pathing Ivy autonomous structure
+  const pathFollows = compoundPaths
+    .map((compoundPath, idx) => {
       const name = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${idx + 1}`),
+        sanitizeIdentifier(compoundPath.name, `path${idx + 1}`),
       );
       return `            follow(follower, ${name}())`;
     })
@@ -441,7 +461,7 @@ ${fields}
     // Autonomous routine
     public Command autoRoutine() {
         return sequential(
-${chainFollows}
+${pathFollows}
         );
     }
 
@@ -458,6 +478,17 @@ ${chainFollows}
         while (opModeIsActive()) {
             follower.update();
             Scheduler.execute();
+
+            telemetry.addData("x", follower.pose().x());
+            telemetry.addData("y", follower.pose().y());
+            telemetry.addData("heading", follower.pose().heading());
+
+            if (follower.currentPath() != null) {
+                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint());
+                telemetry.addData("Path number", follower.pathIndex());
+            }
+
+            telemetry.update();
         }
     }
 
@@ -481,7 +512,6 @@ export async function generateKotlinCode(
   startPoint: Point,
   lines: Line[],
   exportMode: "full" | "class" | "coordinates" = "class",
-  pathChains: PathChain[] = [],
   mirrorHorizontally = false,
 ): Promise<string> {
   const options: ExportTransformOptions = { mirrorHorizontally };
@@ -491,12 +521,22 @@ export async function generateKotlinCode(
     id: line.id || `line-${idx + 1}`,
   })) as (Line & { id: string })[];
 
-  const lineById = new Map(linesWithIds.map((l) => [l.id, l]));
-  const chains = normalizeChains(linesWithIds, pathChains, lineById);
+  const compoundPaths = normalizeCompoundPaths(linesWithIds);
   const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
-  const fields = kotlinPoseFieldsInline(startPoint, linesWithIds, chains, options, mirrorHorizontally);
-  const methods = kotlinPathMethods(chains, linesWithIds, options, startPoint);
+  const fields = kotlinPoseFieldsInline(
+    startPoint,
+    linesWithIds,
+    compoundPaths,
+    options,
+    mirrorHorizontally,
+  );
+  const methods = kotlinPathMethods(
+    compoundPaths,
+    linesWithIds,
+    options,
+    startPoint,
+  );
 
   if (exportMode === "coordinates") {
     return `${fields}\n\n${methods}`;
@@ -528,10 +568,10 @@ ${methods}
   }
 
   // Full OpMode mode (Kotlin)
-  const chainFollows = chains
-    .map((chain, idx) => {
+  const pathFollows = compoundPaths
+    .map((compoundPath, idx) => {
       const name = camelCase(
-        sanitizeIdentifier(chain.name, `pathChain${idx + 1}`),
+        sanitizeIdentifier(compoundPath.name, `path${idx + 1}`),
       );
       return `            follow(follower, ${name}())`;
     })
@@ -562,7 +602,7 @@ ${fields}
 
     // Autonomous routine
     fun autoRoutine(): Command = sequential(
-${chainFollows}
+${pathFollows}
     )
 
     override fun runOpMode() {
@@ -577,6 +617,17 @@ ${chainFollows}
         while (opModeIsActive()) {
             follower.update()
             Scheduler.execute()
+
+            telemetry.addData("x", follower.pose().x())
+            telemetry.addData("y", follower.pose().y())
+            telemetry.addData("heading", follower.pose().heading())
+
+            if (follower.currentPath() != null) {
+                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint())
+                telemetry.addData("Path number", follower.pathIndex())
+            }
+
+            telemetry.update()
         }
     }
 
@@ -640,18 +691,20 @@ export async function generateSequentialCommandCode(
     id: line.id || `line-${idx + 1}`,
   })) as (Line & { id: string })[];
 
-  const lineById = new Map(linesWithIds.map((l) => [l.id, l]));
-
-  const chains: PathChain[] = linesWithIds.map((line, idx) => ({
-    id: line.id,
-    name: line.name || `Path${idx + 1}`,
-    color: "#22c55e",
-    lineIds: [line.id],
-  }));
-
-  const normalized = normalizeChains(linesWithIds, chains, lineById);
-  const fields = javaPoseFieldsInline(startPoint, linesWithIds, normalized, options, false);
-  const methods = javaPathMethods(normalized, linesWithIds, options, startPoint);
+  const compoundPaths = normalizeCompoundPaths(linesWithIds);
+  const fields = javaPoseFieldsInline(
+    startPoint,
+    linesWithIds,
+    compoundPaths,
+    options,
+    false,
+  );
+  const methods = javaPathMethods(
+    compoundPaths,
+    linesWithIds,
+    options,
+    startPoint,
+  );
   const startVarName = camelCase(sanitizeIdentifier(startPoint.name, "start"));
 
   const defaultSeq: SequenceItem[] = lines.map((ln, idx) => ({
@@ -720,6 +773,17 @@ ${commands.join(",\n")}
         while (opModeIsActive()) {
             follower.update();
             Scheduler.execute();
+
+            telemetry.addData("x", follower.pose().x());
+            telemetry.addData("y", follower.pose().y());
+            telemetry.addData("heading", follower.pose().heading());
+
+            if (follower.currentPath() != null) {
+                telemetry.addData("Current path distance remaining", follower.distanceToEndpoint());
+                telemetry.addData("Path number", follower.pathIndex());
+            }
+
+            telemetry.update();
         }
     }
 

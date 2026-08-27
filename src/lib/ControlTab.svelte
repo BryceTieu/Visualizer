@@ -6,7 +6,6 @@
     Settings,
     Shape,
     SequenceItem,
-    PathChain,
   } from "../types";
   import _ from "lodash";
   import { getRandomColor } from "../utils";
@@ -43,8 +42,6 @@
   export let startPoint: Point;
   export let lines: Line[];
   export let sequence: SequenceItem[];
-  export let pathChains: PathChain[] = [];
-  export let selectedChainId: string = "";
   export let selectedLineIndex: number = 0;
   export let selectedPointIndex: number = 0;
   export let robotWidth: number = 16;
@@ -62,271 +59,18 @@
   export let shapes: Shape[];
   export let recordChange: () => void;
 
-  const makeChainId = () =>
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const defaultChainName = "Main Chain";
-
-  let chainNameDraft = "";
-  let chainColorDraft = "#22c55e";
-  let selectedChain: PathChain | null = null;
-  let previousSelectedChainId = "";
-  let previousSelectedLineId = "";
   let selectedLine: Line | null = null;
   let selectedLinePathIndex = -1;
-  let selectedLineChain: PathChain | null = null;
   let selectedPoint: BasePoint | null = null;
   let selectedPointLabel = "Endpoint";
-  let chainOptions: Array<{ id: string; name: string; color: string }> = [];
   let curveTension = 1.0;
   let obstaclesOpen = true;
 
   $: optimizeLine;
   $: optimizingLineIds;
 
-  const getChainById = (chainId: string): PathChain | null =>
-    pathChains.find((chain) => chain.id === chainId) || null;
-
-  function getLinePrimaryChainId(lineId: string): string {
-    for (const chain of pathChains) {
-      if ((chain.lineIds || []).includes(lineId)) return chain.id;
-    }
-    return pathChains[0]?.id || "";
-  }
-
-  function syncLineColorsToChains() {
-    const chainColorById = new Map(pathChains.map((chain) => [chain.id, chain.color || "#22c55e"]));
-    let changed = false;
-    const nextLines = lines.map((line) => {
-      const ownerId = getLinePrimaryChainId(line.id || "");
-      const targetColor = chainColorById.get(ownerId) || line.color;
-      if (line.color !== targetColor) {
-        changed = true;
-        return { ...line, color: targetColor };
-      }
-      return line;
-    });
-    if (changed) {
-      lines = nextLines;
-    }
-  }
-
-  function ensureDefaultChain() {
-    if (pathChains.length === 0) {
-      pathChains = [
-        {
-          id: makeChainId(),
-          name: defaultChainName,
-          color: getRandomColor(),
-          lineIds: lines.map((ln) => ln.id!).filter(Boolean),
-        },
-      ];
-      selectedChainId = pathChains[0]?.id || "";
-      return;
-    }
-
-    if (!selectedChainId || !pathChains.some((c) => c.id === selectedChainId)) {
-      selectedChainId = pathChains[0]?.id || "";
-    }
-  }
-
-  $: {
-    const normalized = pathChains.map((chain) => ({
-      ...chain,
-      color: chain.color || getRandomColor(),
-      lineIds: chain.lineIds || [],
-    }));
-    if (JSON.stringify(normalized) !== JSON.stringify(pathChains)) {
-      pathChains = normalized;
-    }
-  }
-
-  $: ensureDefaultChain();
-
-  $: selectedChain =
-    pathChains.find((chain) => chain.id === selectedChainId) || pathChains[0] || null;
-
-  $: if (selectedChainId !== previousSelectedChainId) {
-    chainNameDraft = selectedChain?.name || "";
-    chainColorDraft = selectedChain?.color || "#22c55e";
-    previousSelectedChainId = selectedChainId;
-  }
-
-  function ensureLineInActiveChain(lineId: string) {
-    if (!lineId || !pathChains.length) return;
-    const targetChainId = selectedChainId && pathChains.some((chain) => chain.id === selectedChainId)
-      ? selectedChainId
-      : pathChains[0].id;
-    assignLineToChain(lineId, targetChainId);
-  }
-
-  function removeLineFromChains(lineId: string) {
-    if (!lineId) return;
-    const updated = pathChains.map((chain) => ({
-        ...chain,
-        lineIds: chain.lineIds.filter((id) => id !== lineId),
-      }));
-    pathChains = updated;
-    ensureDefaultChain();
-    syncLineColorsToChains();
-  }
-
-  function assignLineToChain(lineId: string, chainId: string) {
-    if (!lineId || !chainId) return;
-    pathChains = pathChains.map((chain) => ({
-      ...chain,
-      lineIds: chain.lineIds.filter((id) => id !== lineId),
-    }));
-
-    const target = getChainById(chainId);
-    if (!target) return;
-
-    pathChains = pathChains.map((chain) => {
-      if (chain.id !== chainId) return chain;
-      return {
-        ...chain,
-        lineIds: Array.from(new Set([...(chain.lineIds || []), lineId])),
-      };
-    });
-
-    syncLineColorsToChains();
-    recordChange?.();
-  }
-
-  function addPathChain() {
-    const newChain: PathChain = {
-      id: makeChainId(),
-      name: `Chain ${pathChains.length + 1}`,
-      color: getRandomColor(),
-      lineIds: [],
-    };
-    pathChains = [...pathChains, newChain];
-    selectedChainId = newChain.id;
-    recordChange?.();
-  }
-
-  function duplicateSelectedPathChain() {
-    if (!selectedChain) return;
-
-    const sourceLineIds = selectedChain.lineIds || [];
-    const selectedLineSet = new Set(sourceLineIds);
-    const lineLookup = new Map(lines.map((line) => [line.id, line]));
-    const idMap = new Map<string, string>();
-    const clonedLines: Line[] = [];
-
-    // Keep duplication order aligned with timeline, then append any non-sequenced lines.
-    const orderedSourceIds: string[] = [];
-    sequence.forEach((item) => {
-      if (item.kind === "path" && selectedLineSet.has(item.lineId)) {
-        orderedSourceIds.push(item.lineId);
-      }
-    });
-    sourceLineIds.forEach((lineId) => {
-      if (!orderedSourceIds.includes(lineId)) {
-        orderedSourceIds.push(lineId);
-      }
-    });
-
-    orderedSourceIds.forEach((sourceId, index) => {
-      const sourceLine = lineLookup.get(sourceId);
-      if (!sourceLine) return;
-      const clone = JSON.parse(JSON.stringify(sourceLine)) as Line;
-      const newLineId = makeId();
-      clone.id = newLineId;
-      clone.name = `${sourceLine.name || `Path ${lines.length + index + 1}`} Copy`;
-      idMap.set(sourceId, newLineId);
-      clonedLines.push(clone);
-    });
-
-    const newSequence: SequenceItem[] = [];
-    sequence.forEach((item) => {
-      newSequence.push(item);
-      if (item.kind === "path") {
-        const clonedId = idMap.get(item.lineId);
-        if (clonedId) {
-          newSequence.push({ kind: "path", lineId: clonedId });
-        }
-      }
-    });
-
-    // If chain contains lines currently not present in the timeline, append their clones.
-    orderedSourceIds.forEach((sourceId) => {
-      const inSequence = sequence.some((item) => item.kind === "path" && item.lineId === sourceId);
-      const clonedId = idMap.get(sourceId);
-      if (!inSequence && clonedId) {
-        newSequence.push({ kind: "path", lineId: clonedId });
-      }
-    });
-
-    lines = [...lines, ...clonedLines];
-    sequence = newSequence;
-    syncLinesToSequence(newSequence);
-
-    const duplicateChain: PathChain = {
-      id: makeChainId(),
-      name: `${selectedChain.name} Copy`,
-      color: getRandomColor(),
-      lineIds: orderedSourceIds.map((sourceId) => idMap.get(sourceId)).filter(Boolean) as string[],
-    };
-
-    const selectedIndex = pathChains.findIndex((chain) => chain.id === selectedChain.id);
-    if (selectedIndex >= 0) {
-      pathChains = [
-        ...pathChains.slice(0, selectedIndex + 1),
-        duplicateChain,
-        ...pathChains.slice(selectedIndex + 1),
-      ];
-    } else {
-      pathChains = [...pathChains, duplicateChain];
-    }
-
-    selectedChainId = duplicateChain.id;
-    syncLineColorsToChains();
-    recordChange?.();
-  }
-
-  function removeSelectedPathChain() {
-    if (!selectedChain || pathChains.length <= 1) return;
-    const fallbackChainId = pathChains.find((chain) => chain.id !== selectedChain.id)?.id;
-    const orphanedLines = [...(selectedChain.lineIds || [])];
-    pathChains = pathChains.filter((chain) => chain.id !== selectedChain.id);
-
-    if (fallbackChainId) {
-      orphanedLines.forEach((lineId) => assignLineToChain(lineId, fallbackChainId));
-    }
-
-    selectedChainId = pathChains[0]?.id || "";
-    syncLineColorsToChains();
-    recordChange?.();
-  }
-
-  function updateSelectedChainName() {
-    if (!selectedChain) return;
-    const nextName = chainNameDraft.trim();
-    if (!nextName) return;
-    pathChains = pathChains.map((chain) =>
-      chain.id === selectedChain.id ? { ...chain, name: nextName } : chain,
-    );
-    recordChange?.();
-  }
-
-  function updateSelectedChainColor() {
-    if (!selectedChain) return;
-    pathChains = pathChains.map((chain) =>
-      chain.id === selectedChain.id ? { ...chain, color: chainColorDraft } : chain,
-    );
-    syncLineColorsToChains();
-    recordChange?.();
-  }
-
-  $: chainOptions = pathChains.map((chain) => ({
-    id: chain.id,
-    name: chain.name,
-    color: chain.color || "#22c55e",
-  }));
-
   $: selectedLine = lines[selectedLineIndex] || lines[0] || null;
   $: selectedLinePathIndex = selectedLine ? lines.findIndex((line) => line.id === selectedLine.id) : -1;
-  $: selectedLineChain = selectedLine ? getChainById(getLinePrimaryChainId(selectedLine.id || "")) : null;
   $: selectedPoint =
     selectedLine
       ? selectedPointIndex === 0
@@ -357,16 +101,6 @@
     lines = [...lines];
     recordChange?.();
   }
-
-  $: if (selectedLine?.id && selectedLine.id !== previousSelectedLineId) {
-    const chainId = selectedLineChain?.id || getLinePrimaryChainId(selectedLine.id || "");
-    if (chainId && chainId !== selectedChainId) {
-      selectedChainId = chainId;
-    }
-    previousSelectedLineId = selectedLine.id;
-  }
-
-  $: syncLineColorsToChains();
 
   // Reference exported but unused props to silence Svelte unused-export warnings
 
@@ -515,7 +249,6 @@
     const newSeq = [...sequence];
     newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
     sequence = newSeq;
-    ensureLineInActiveChain(newLine.id!);
 
     collapsedSections.lines.splice(lineIndex + 1, 0, false);
     collapsedSections.controlPoints.splice(lineIndex + 1, 0, true);
@@ -580,7 +313,6 @@
     const newSeq = [...sequence];
     newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
     sequence = newSeq;
-    ensureLineInActiveChain(newLine.id!);
 
     collapsedSections.lines.splice(lineIndex + 1, 0, false);
     collapsedSections.controlPoints.splice(lineIndex + 1, 0, true);
@@ -598,72 +330,33 @@
     insertMidpointAfter(seqIndex);
   }
 
-  // Convert all lines in the selected chain to cubic Bezier curves using a
-  // Catmull-Rom through-points approach. This will replace the controlPoints
-  // of each line in the chain with two control points (cubic) computed from
-  // the chain's endpoints.
-  function curveThroughSelectedChain(tension = 1.0) {
-    if (!selectedChain || !selectedChain.lineIds || selectedChain.lineIds.length === 0) return;
-
-    // Respect timeline/sequence ordering: gather path sequence items that belong to this chain
-    const chainIdSet = new Set(selectedChain.lineIds || []);
-    const orderedLineIds: string[] = sequence
-      .filter((it) => it.kind === "path" && chainIdSet.has((it as any).lineId))
-      .map((it) => (it as any).lineId as string);
-
-    const lineIndexMap = new Map(lines.map((ln, idx) => [ln.id, idx]));
-    const indices: number[] = orderedLineIds.map((id) => lineIndexMap.get(id)).filter((v) => typeof v === 'number') as number[];
-    if (indices.length === 0) return;
-
-    // Build poses list starting with the point before the first segment
-    const firstIdx = indices[0];
-    const prevPoint = firstIdx > 0 ? lines[firstIdx - 1].endPoint : startPoint;
-    const startPt = lines[firstIdx].endPoint;
-    const poses = [prevPoint, startPt, ...indices.slice(1).map((i) => lines[i].endPoint)];
-
-    const segments = curveThroughPoints(tension, poses);
-    if (!segments || segments.length === 0) {
-      alert("Curve generation produced no segments — need at least two path points.");
-      return;
-    }
-
-    const nextLines = [...lines];
-    for (let s = 0; s < segments.length && s < indices.length; s++) {
-      const idx = indices[s];
-      const seg = segments[s];
-      const existing = nextLines[idx];
-      nextLines[idx] = {
-        ...existing,
-        controlPoints: [ { x: seg.cp1.x, y: seg.cp1.y }, { x: seg.cp2.x, y: seg.cp2.y } ],
-        endPoint: { x: seg.end.x, y: seg.end.y, heading: existing.endPoint.heading as any },
-      };
-    }
-
-    lines = normalizeLines(nextLines);
-    recordChange();
-    alert(`Curved ${Math.min(segments.length, indices.length)} segment(s) with tension ${tension}`);
-  }
-
+  // Convert selected line to cubic Bezier curve using a Catmull-Rom through-points approach.
+  // This replaces controlPoints with two control points (cubic) computed from adjacent points.
   function curveFromSelected(tension = 1.0) {
-    if (selectedLineIndex == null || !selectedChain) return;
-    // Slice ordered sequence from selected line to end of chain
-    const chainIdSet = new Set(selectedChain.lineIds || []);
-    const orderedItems = sequence.filter((it) => it.kind === "path" && chainIdSet.has((it as any).lineId));
-    const startPos = orderedItems.findIndex((it) => (it as any).lineId === lines[selectedLineIndex]?.id);
-    if (startPos === -1) {
-      alert("Selected path is not in the active chain.");
-      return;
-    }
-    const orderedLineIds = orderedItems.slice(startPos).map((it) => (it as any).lineId as string);
-    const lineIndexMap = new Map(lines.map((ln, idx) => [ln.id, idx]));
-    const indices: number[] = orderedLineIds.map((id) => lineIndexMap.get(id)).filter((v) => typeof v === 'number') as number[];
-    if (indices.length === 0) return;
+    if (!selectedLine || selectedLineIndex == null) return;
 
-    // Build poses starting from point before first
-    const firstIdx = indices[0];
-    const prevPoint = firstIdx > 0 ? lines[firstIdx - 1].endPoint : startPoint;
-    const startPt = lines[firstIdx].endPoint;
-    const poses = [prevPoint, startPt, ...indices.slice(1).map((i) => lines[i].endPoint)];
+    // Find the index of this line in the sequence
+    const seqIndex = sequence.findIndex((item) => item.kind === "path" && item.lineId === selectedLine.id);
+    if (seqIndex === -1) return;
+
+    // Get previous point (startPoint for first line, or previous line's endPoint)
+    const prevPoint = selectedLineIndex > 0 ? lines[selectedLineIndex - 1].endPoint : startPoint;
+    const startPt = selectedLine.endPoint;
+
+    // Find next line in sequence
+    let nextLineId: string | null = null;
+    for (let i = seqIndex + 1; i < sequence.length; i++) {
+      if (sequence[i].kind === "path") {
+        nextLineId = (sequence[i] as any).lineId;
+        break;
+      }
+    }
+
+    const nextLine = nextLineId ? lines.find((l) => l.id === nextLineId) : null;
+    const endPt = nextLine?.endPoint || startPt;
+
+    // Build poses: prevPoint -> startPt -> endPt
+    const poses = [prevPoint, startPt, endPt];
 
     const segments = curveThroughPoints(tension, poses);
     if (!segments || segments.length === 0) {
@@ -672,11 +365,10 @@
     }
 
     const nextLines = [...lines];
-    for (let s = 0; s < segments.length && s < indices.length; s++) {
-      const idx = indices[s];
-      const seg = segments[s];
-      const existing = nextLines[idx];
-      nextLines[idx] = {
+    const seg = segments[0];
+    const existing = nextLines[selectedLineIndex];
+    if (existing) {
+      nextLines[selectedLineIndex] = {
         ...existing,
         controlPoints: [ { x: seg.cp1.x, y: seg.cp1.y }, { x: seg.cp2.x, y: seg.cp2.y } ],
         endPoint: { x: seg.end.x, y: seg.end.y, heading: existing.endPoint.heading as any },
@@ -685,7 +377,7 @@
 
     lines = normalizeLines(nextLines);
     recordChange();
-    alert(`Curved ${Math.min(segments.length, indices.length)} segment(s) from selected with tension ${tension}`);
+    alert(`Curved path with tension ${tension}`);
   }
 
   function removeLine(idx: number) {
@@ -697,7 +389,6 @@
       sequence = sequence.filter(
         (s) => s.kind === "wait" || s.lineId !== removedId,
       );
-      removeLineFromChains(removedId);
     }
     collapsedSections.lines.splice(idx, 1);
     collapsedSections.controlPoints.splice(idx, 1);
@@ -745,7 +436,6 @@
     };
     lines = [...lines, newLine];
     sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
-    ensureLineInActiveChain(newLine.id!);
     collapsedSections.lines.push(false);
     collapsedSections.controlPoints.push(true);
     recordChange();
@@ -846,7 +536,6 @@
     };
     lines = [newLine, ...lines];
     sequence = [{ kind: "path", lineId: newLine.id! }, ...sequence];
-    ensureLineInActiveChain(newLine.id!);
     collapsedSections.lines = [false, ...collapsedSections.lines];
     collapsedSections.controlPoints = [
       true,
@@ -893,7 +582,6 @@
     const newSeq = [...sequence];
     newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
     sequence = newSeq;
-    ensureLineInActiveChain(newLine.id!);
 
     // Add UI state for the new line
     collapsedSections.lines.push(false);
@@ -1003,11 +691,11 @@
       <div class="flex items-start justify-between gap-3 border-b border-[#333333] pb-2">
         <div>
           <div class="font-semibold text-gray-100">Selected Path</div>
-          <div class="text-[11px] text-gray-500">Pick a path in the list to inspect its chain and details.</div>
+          <div class="text-[11px] text-gray-500">Pick a path in the list to inspect it.</div>
         </div>
         <div class="flex items-center gap-2">
           <div class="text-[11px] text-gray-400">{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
-          {#if settings.experimentalFeatures?.curveThrough}
+          {#if settings.experimentalFeatures?.curveThrough && selectedLine}
             <input
               type="number"
               min="0.1"
@@ -1019,19 +707,11 @@
             />
             <button
               class="rounded border border-[#444444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-              on:click={() => curveThroughSelectedChain(curveTension)}
-              disabled={!selectedChain || (selectedChain.lineIds || []).length <= 1}
-              title="Convert entire chain to smooth cubic Beziers"
-            >
-              Curve Chain
-            </button>
-            <button
-              class="rounded border border-[#444444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
               on:click={() => curveFromSelected(curveTension)}
-              disabled={!selectedChain || (selectedChain.lineIds || []).length <= 1}
-              title="Convert from the selected path to the end of the chain"
+              disabled={selectedLine.controlPoints.length === 0}
+              title="Convert this path to a smooth cubic Bezier"
             >
-              Curve From Selected
+              Curve Path
             </button>
           {/if}
           <button
@@ -1193,18 +873,17 @@
 
         <div class="grid gap-2 text-[11px] sm:grid-cols-2">
           <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
-            <div class="text-gray-500">Belongs To</div>
+            <div class="text-gray-500">Color</div>
             <div class="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug">
-              <span class="size-2.5 rounded-full" style={`background:${selectedLineChain?.color || "#666666"}`}></span>
-              <span>{selectedLineChain?.name || "Unassigned"}</span>
+              <span class="size-2.5 rounded-full" style={`background:${selectedLine?.color || "#666666"}`}></span>
+              <span>{selectedLine?.color || "Default"}</span>
             </div>
           </div>
 
           <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
-            <div class="text-gray-500">Active Chain</div>
-            <div class="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug">
-              <span class="size-2.5 rounded-full" style={`background:${selectedChain?.color || "#666666"}`}></span>
-              <span>{selectedChain?.name || "None"}</span>
+            <div class="text-gray-500">Status</div>
+            <div class="mt-1 font-medium text-gray-100 leading-snug">
+              {selectedLine?.locked ? "Locked" : "Editable"}
             </div>
           </div>
         </div>

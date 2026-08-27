@@ -7,10 +7,9 @@
 
   import { cubicInOut } from "svelte/easing";
   import { fade, fly } from "svelte/transition";
-  import type { FileInfo, FieldPoint, Point, Line, Shape, SequenceItem, PathChain } from "../types";
+  import type { FileInfo, FieldPoint, Point, Line, Shape, SequenceItem } from "../types";
   import * as browserFileStore from "../utils/browserFileStore";
   import { currentFilePath, isUnsaved, dualPathMode, secondFilePath } from "../stores";
-  import { getRandomColor } from "../utils";
   import { normalizeFieldPoints } from "../utils/fieldPoints";
   import {
     saveAutoPathsDirectory,
@@ -23,7 +22,6 @@
   export let lines: Line[];
   export let shapes: Shape[];
   export let sequence: SequenceItem[];
-  export let pathChains: PathChain[] = [];
   export let secondStartPoint: Point | null = null;
   export let secondLines: Line[] = [];
   export let secondShapes: Shape[] = [];
@@ -266,7 +264,6 @@
       lines = normalizedLines;
       shapes = data.shapes || [];
       sequence = deriveSequence(data, normalizedLines);
-      pathChains = data.pathChains || [];
       fieldPoints = hydrateFieldPoints(data);
 
       // Update Global Store State
@@ -339,7 +336,6 @@
         lines,
         shapes,
         sequence,
-        pathChains,
         fieldPoints,
         version: "1.2.1", // Add version for compatibility
         timestamp: new Date().toISOString(),
@@ -364,7 +360,6 @@
         lines,
         shapes,
         sequence,
-        pathChains,
         fieldPoints,
         version: "1.2.1",
         timestamp: new Date().toISOString(),
@@ -418,7 +413,6 @@
         lines,
         shapes,
         sequence,
-        pathChains,
         fieldPoints,
         version: "1.2.1",
         timestamp: new Date().toISOString(),
@@ -468,7 +462,6 @@
         lines: normalizedLines,
         shapes,
         sequence,
-        pathChains,
         fieldPoints,
         version: "1.2.1",
         timestamp: new Date().toISOString(),

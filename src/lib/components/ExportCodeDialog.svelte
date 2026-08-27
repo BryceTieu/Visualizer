@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Point, Line, SequenceItem, PathChain } from "../../types";
+  import type { Point, Line, SequenceItem } from "../../types";
   import Highlight from "svelte-highlight";
   import { java, kotlin, plaintext } from "svelte-highlight/languages";
   import codeStyle from "svelte-highlight/styles/androidstudio";
@@ -17,7 +17,6 @@
   export let startPoint: Point;
   export let lines: Line[];
   export let sequence: SequenceItem[];
-  export let pathChains: PathChain[] = [];
 
   let exportMode: "full" | "class" | "coordinates" = "class";
   let exportFormat: "java" | "kotlin" | "points" | "sequential" = "java";
@@ -54,7 +53,6 @@
           startPoint,
           lines,
           exportMode,
-          pathChains,
           mirrorHorizontally,
         );
         currentLanguage = java;
@@ -63,7 +61,6 @@
           startPoint,
           lines,
           exportMode,
-          pathChains,
           mirrorHorizontally,
         );
         currentLanguage = kotlin;
@@ -124,7 +121,6 @@
         startPoint,
         lines,
         exportMode,
-        pathChains,
         mirrorHorizontally,
       );
     } else if (exportFormat === "kotlin") {
@@ -132,7 +128,6 @@
         startPoint,
         lines,
         exportMode,
-        pathChains,
         mirrorHorizontally,
       );
     }
@@ -146,7 +141,6 @@
         startPoint,
         lines,
         exportMode,
-        pathChains,
         mirrorHorizontally,
       );
       return;
@@ -157,7 +151,6 @@
         startPoint,
         lines,
         exportMode,
-        pathChains,
         mirrorHorizontally,
       );
     }

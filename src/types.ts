@@ -112,12 +112,14 @@ export type SequenceWaitItem = {
 
 export type SequenceItem = SequencePathItem | SequenceWaitItem;
 
+// PathChain is kept only for backward compatibility with older saved files.
+// The visualizer and code export now treat timeline entries as Pedro Path objects.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export interface PathChain {
   id: string;
   name: string;
   color: string;
   lineIds: string[];
-  globalHeadingInterpolation?: PiecewiseHeadingInterpolation;
 }
 
 export interface Settings {

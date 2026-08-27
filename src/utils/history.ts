@@ -1,4 +1,11 @@
-import type { FieldPoint, Point, Line, Shape, SequenceItem, Settings, PathChain } from "../types";
+import type {
+  FieldPoint,
+  Point,
+  Line,
+  Shape,
+  SequenceItem,
+  Settings,
+} from "../types";
 import { writable } from "svelte/store";
 
 export type AppState = {
@@ -7,7 +14,6 @@ export type AppState = {
   shapes: Shape[];
   sequence: SequenceItem[];
   settings: Settings;
-  pathChains: PathChain[];
   fieldPoints: FieldPoint[];
 };
 

@@ -33,7 +33,13 @@
 
   function ensureConfig() {
     if (!config || !Array.isArray(config.segments) || config.segments.length === 0) {
-      config = createDefaultPiecewiseHeadingInterpolation(config?.scope || "path");
+      config = createDefaultPiecewiseHeadingInterpolation("path");
+      dispatch("change");
+      return;
+    }
+
+    if (config.scope === "chain") {
+      config = normalizePiecewiseHeadingInterpolation({ ...config, scope: "path" });
       dispatch("change");
     }
   }
@@ -93,7 +99,7 @@
     if (locked) return;
     const normalized = normalizePiecewiseHeadingInterpolation(config);
     if (normalized.segments.length <= 1) {
-      config = createDefaultPiecewiseHeadingInterpolation(config?.scope || "path");
+      config = createDefaultPiecewiseHeadingInterpolation("path");
       notifyChange();
       return;
     }
@@ -201,10 +207,6 @@
     });
   }
 
-  function setScope(scope: "path" | "chain") {
-    config = normalizePiecewiseHeadingInterpolation({ ...config, scope });
-    notifyChange();
-  }
 </script>
 
 <div class="space-y-3 rounded border border-neutral-700 bg-neutral-950/60 p-3 text-xs text-neutral-200">
@@ -219,17 +221,6 @@
     </label>
   </div>
 
-  <div class="flex items-center gap-3 text-[11px] text-neutral-300">
-    <span>Applies to:</span>
-    <label class="flex items-center gap-1">
-      <input type="radio" name="piecewise-scope" value="path" checked={config?.scope !== "chain"} disabled={locked} on:change={() => setScope("path")} />
-      Selected path
-    </label>
-    <label class="flex items-center gap-1">
-      <input type="radio" name="piecewise-scope" value="chain" checked={config?.scope === "chain"} disabled={locked} on:change={() => setScope("chain")} />
-      Entire chain
-    </label>
-  </div>
 
   <div
     class="relative h-4 rounded-full border border-neutral-700 bg-neutral-800/80"
@@ -414,7 +405,7 @@
     <button class="rounded border border-neutral-700 px-3 py-1 text-[11px] text-neutral-100 hover:bg-neutral-800 disabled:opacity-40" on:click={() => {
       if (locked) return;
       const normalized = normalizePiecewiseHeadingInterpolation(config);
-      const last = normalized.segments[normalized.segments.length - 1] || createDefaultPiecewiseHeadingInterpolation(config?.scope || "path").segments[0];
+      const last = normalized.segments[normalized.segments.length - 1] || createDefaultPiecewiseHeadingInterpolation("path").segments[0];
       const newSegment = segmentTemplate(last, last.endProgress, 1);
       normalized.segments[normalized.segments.length - 1].endProgress = Math.max(0.5, normalized.segments[normalized.segments.length - 1].endProgress);
       normalized.segments.push({
