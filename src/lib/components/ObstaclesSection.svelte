@@ -64,7 +64,7 @@
     </button>
   </div>
 
-  {#each shapes as shape, shapeIdx}
+  {#each shapes as shape, shapeIdx (shapeIdx)}
     <div
       class={`flex flex-col w-full justify-start items-start gap-1 border border-neutral-300 dark:border-neutral-600 ${compact ? "p-1 mt-1" : "p-2 mt-2"}`}
     >
@@ -103,7 +103,7 @@
             bind:value={shape.color}
             onchange={(e) => setPresetColor(shape, e.currentTarget.value)}
           >
-            {#each colorChoices as c}
+            {#each colorChoices as c (c.color)}
               <option value={c.color}>{c.label}</option>
             {/each}
           </select>
@@ -159,7 +159,7 @@
       </div>
 
       {#if !collapsedObstacles[shapeIdx]}
-        {#each shape.vertices as vertex, vertexIdx}
+        {#each shape.vertices as vertex, vertexIdx (vertexIdx)}
           <div class={`flex flex-row justify-start items-center ${compact ? "gap-1" : "gap-2"}`}>
             <div class={`font-bold ${compact ? "text-xs" : "text-sm"}`}>{vertexIdx + 1}:</div>
             <div class={`font-extralight ${compact ? "text-xs" : "text-sm"}`}>X:</div>

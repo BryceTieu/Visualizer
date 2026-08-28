@@ -101,7 +101,7 @@
 
   <div class="w-full relative">
     <!-- markers: small colored dots positioned by percent -->
-    {#each markers as m, i}
+    {#each markers as m, i (i)}
       <div
         class="absolute"
         role="button"

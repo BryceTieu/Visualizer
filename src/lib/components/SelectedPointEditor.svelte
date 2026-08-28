@@ -52,7 +52,7 @@
       >
         Endpoint
       </button>
-      {#each selectedLine.controlPoints as _, pointIdx}
+      {#each selectedLine.controlPoints as _, pointIdx (pointIdx)}
         <button
           class="{CHIP_CLASS} {selectedPointIndex === pointIdx + 1 ? 'bg-[#2f2f2f]' : ''}"
           onclick={() => (selectedPointIndex = pointIdx + 1)}

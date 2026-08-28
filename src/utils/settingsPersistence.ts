@@ -54,7 +54,7 @@ function migrateSettings(stored: Partial<StoredSettings>): Settings {
   // Copy only the properties that exist in both objects
   Object.keys(stored.settings).forEach((key) => {
     if (key in migrated) {
-      // @ts-ignore - We know the key exists in Settings
+      // @ts-expect-error - We know the key exists in Settings
       migrated[key] = stored.settings[key];
     }
   });

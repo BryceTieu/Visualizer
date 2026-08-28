@@ -123,8 +123,8 @@ export function getCurvePoint(
   points: { x: number; y: number }[],
 ): { x: number; y: number } {
   if (points.length === 1) return points[0];
-  var newpoints = [];
-  for (var i = 0, j = 1; j < points.length; i++, j++) {
+  const newpoints = [];
+  for (let i = 0, j = 1; j < points.length; i++, j++) {
     newpoints[i] = lerp2d(t, points[i], points[j]);
   }
   return getCurvePoint(t, newpoints);

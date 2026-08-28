@@ -22,7 +22,7 @@ function deepClone<T>(obj: T): T {
 }
 
 export function createHistory(maxSize = 200) {
-  let undoStack: AppState[] = [];
+  const undoStack: AppState[] = [];
   let redoStack: AppState[] = [];
   let lastHash = "";
 

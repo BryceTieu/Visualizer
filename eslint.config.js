@@ -31,6 +31,14 @@ export default ts.config(
     },
   },
   {
+    files: ["**/*.svelte"],
+    rules: {
+      // Misreads `prop = $bindable(default)` in `$props()` destructuring as a
+      // dead assignment. The default is part of the prop contract, not dead code.
+      "no-useless-assignment": "off",
+    },
+  },
+  {
     rules: {
       // The codebase leans on `any` for Two.js scene objects and parsed
       // project JSON; surface those as warnings rather than errors.

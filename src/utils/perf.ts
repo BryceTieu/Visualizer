@@ -33,7 +33,7 @@ export function createPerfSampler(tag: string, reportIntervalMs = 2000): PerfSam
   function maybeReport(now: number) {
     if (now - lastReport < reportIntervalMs) return;
     const avg = count > 0 ? totalMs / count : 0;
-    // eslint-disable-next-line no-console
+     
     console.log(
       `[perf:${tag}] ${count} samples | avg ${avg.toFixed(2)}ms | max ${maxMs.toFixed(2)}ms | total ${totalMs.toFixed(1)}ms`,
     );
@@ -57,7 +57,7 @@ export function createPerfSampler(tag: string, reportIntervalMs = 2000): PerfSam
 }
 
 /** Track DOM node counts over time so an unbounded scene (a memory leak) is obvious. */
-let nodeSampleAccum = 0;
+const nodeSampleAccum = 0;
 let lastNodeLog = 0;
 export function sampleNodeCounts(label: string, root: ParentNode | null | undefined): void {
   if (!perfEnabled()) return;
@@ -70,6 +70,6 @@ export function sampleNodeCounts(label: string, root: ParentNode | null | undefi
   } catch {
     nodes = -1;
   }
-  // eslint-disable-next-line no-console
+   
   console.log(`[perf:${label}] DOM nodes under root: ${nodes}`);
 }

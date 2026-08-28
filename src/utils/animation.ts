@@ -165,7 +165,7 @@ export function calculateRobotState(
       const accDist = 0.5 * maxA * accTime * accTime;
       const decDist = 0.5 * maxD * decTime * decTime;
 
-      let constTime = 0;
+      let constTime: number;
       let constDist = 0;
       let totalTime = 0;
 
@@ -274,7 +274,7 @@ export function calculateRobotState(
         case "constant":
           robotHeading = -currentLine.endPoint.degrees;
           break;
-        case "tangential":
+        case "tangential": {
           const nextPointInches = getCurvePoint(
             linePercent + (currentLine.endPoint.reverse ? -0.01 : 0.01),
             curvePoints,
@@ -293,6 +293,7 @@ export function calculateRobotState(
             robotHeading = radiansToDegrees(angle);
           }
           break;
+        }
       }
     }
 

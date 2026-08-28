@@ -158,7 +158,7 @@ export function calculatePathTime(
     const curvePoints = [prevPoint, ...line.controlPoints, line.endPoint];
     const length = approximateCurveLength(curvePoints);
     segmentLengths.push(length);
-    let segmentTime = 0;
+    let segmentTime: number;
     const sampledPoints: Array<{ x: number; y: number }> = [];
     const sampleCount = Math.max(12, Math.ceil(length / 6));
     for (let sampleIndex = 0; sampleIndex <= sampleCount; sampleIndex += 1) {

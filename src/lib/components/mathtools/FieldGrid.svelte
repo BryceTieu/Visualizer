@@ -44,7 +44,7 @@
 
 <svg class="absolute top-0 left-0 w-full h-full pointer-events-none z-20">
   <!-- Vertical grid lines -->
-  {#each gridPositions as position, i}
+  {#each gridPositions as position, i (position)}
     <line
       x1={x(position)}
       y1={y(0)}
@@ -67,7 +67,7 @@
   {/each}
 
   <!-- Horizontal grid lines -->
-  {#each gridPositions as position, i}
+  {#each gridPositions as position, i (position)}
     <line
       x1={x(0)}
       y1={y(position)}

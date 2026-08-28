@@ -171,6 +171,8 @@
 </script>
 
 <svelte:head>
+  <!-- codeStyle is a static stylesheet imported from svelte-highlight, not user input. -->
+  <!-- eslint-disable-next-line svelte/no-at-html-tags -->
   {@html codeStyle}
 </svelte:head>
 

@@ -557,7 +557,7 @@
                 <span class="console-menu-item-title">Save</span>
                 <span class="console-menu-item-subtitle">
                   {#if $currentFilePath}
-                    Overwrite the current project file in app storage ({$currentFilePath.split(/[\/]/).pop()})
+                    Overwrite the current project file in app storage ({basename($currentFilePath)})
                   {:else}
                     No project file selected — this will download the path as a new file to your computer
                   {/if}

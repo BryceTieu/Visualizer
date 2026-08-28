@@ -115,7 +115,7 @@
     />
 
     <!-- Degree marks every 10 degrees -->
-    {#each Array(36) as _, i}
+    {#each Array(36) as _, i (i)}
       {@const angle = (i * 10 * Math.PI) / 180}
       {@const r1 = radius - 10}
       {@const x1 = Math.cos(angle) * r1}

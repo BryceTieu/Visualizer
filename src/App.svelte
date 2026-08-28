@@ -182,13 +182,6 @@
       : false;
 
     // Only treat a device as mobile when the user agent itself reports it.
-    //
-    // Previously this also used pointer/touch heuristics (coarse pointer,
-    // maxTouchPoints, any-hover). Those are unreliable on modern desktops and
-    // laptops, which often ship with built-in touchscreens (and embedded preview
-    // iframes can report touch capability) — so they flagged real desktops as
-    // mobile. Real phones/tablets always present a mobile user agent, so this
-    // conservative check is sufficient and avoids false positives.
     const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk/i.test(userAgent);
 
     return mobileHint || uaMobile;
@@ -444,7 +437,7 @@
       settings = prev.settings;
       fieldPoints = prev.fieldPoints;
       isUnsaved.set(true);
-      two && two.update();
+      two?.update();
     }
 
     // undoAction completes; no file-picker behavior here
@@ -460,7 +453,7 @@
       settings = next.settings;
       fieldPoints = next.fieldPoints;
       isUnsaved.set(true);
-      two && two.update();
+      two?.update();
     }
   }
 
@@ -1024,9 +1017,7 @@
     if (win.showSaveFilePicker) {
       try {
         const opts = {
-          suggestedName: $currentFilePath
-            ? $currentFilePath.split(/[\/]/).pop()
-            : "path.pp",
+          suggestedName: basename($currentFilePath) || "path.pp",
           types: [
             {
               description: "Path files",
@@ -1081,7 +1072,9 @@
           await writable.close();
           try {
             currentFilePath.set(handle.name || null);
-          } catch (e) {}
+          } catch {
+            // Name is cosmetic; the write already succeeded.
+          }
           isUnsaved.set(false);
           alert(`Saved to local file: ${handle.name || "selected file"}`);
           return;
@@ -2247,6 +2240,9 @@
   run(() => {
     if (additionalPathCacheKey !== additionalPaths) {
       additionalPathCacheKey = additionalPaths;
+      // Built fresh and assigned wholesale below, so reactivity comes from the
+      // assignment — a SvelteMap would only add proxy overhead.
+      // eslint-disable-next-line svelte/prefer-svelte-reactivity
       const cache = new Map<AdditionalPathData, AdditionalPathEntry | null>();
       additionalPaths.forEach((pathData) => {
         if (!pathData.startPoint) {
@@ -2500,7 +2496,7 @@
       {/if}
       <!-- Additional robots: only show in multi-path mode -->
       {#if isMultiPathMode}
-        {#each additionalRobotStates as robotState, idx}
+        {#each additionalRobotStates as robotState, idx (idx)}
           <RobotSprite
             xy={robotState.xy}
             heading={robotState.heading}

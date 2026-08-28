@@ -239,7 +239,7 @@
     aria-label="Piecewise progress timeline"
     onpointerdown={handleTimelineClick}
   >
-    {#each normalizePiecewiseHeadingInterpolation(config).segments as segment, index}
+    {#each normalizePiecewiseHeadingInterpolation(config).segments as segment, index (index)}
       <div
         class="absolute top-0 h-full rounded-full opacity-80"
         style={`left:${segment.startProgress * 100}%; width:${Math.max((segment.endProgress - segment.startProgress) * 100, 0.2)}%; background: linear-gradient(90deg, rgba(59,130,246,0.6), rgba(16,185,129,0.6));`}
@@ -264,7 +264,7 @@
   {/if}
 
   <div class="space-y-2">
-    {#each normalizePiecewiseHeadingInterpolation(config).segments as segment, index}
+    {#each normalizePiecewiseHeadingInterpolation(config).segments as segment, index (index)}
       <div class="rounded border border-neutral-700 bg-neutral-900/80 p-2">
         <div class="flex items-center justify-between gap-2">
           <div class="text-[11px] font-semibold text-neutral-100">Segment {index + 1}</div>
@@ -313,7 +313,7 @@
               disabled={locked}
               onchange={(event) => setInterpolationType(index, (event.currentTarget as HTMLSelectElement).value as PiecewiseHeadingInterpolationType)}
             >
-              {#each interpolationOptions as option}
+              {#each interpolationOptions as option (option.value)}
                 <option value={option.value}>{option.label}</option>
               {/each}
             </select>

@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { BasePoint } from "../../types";
+  import type * as d3 from "d3";
+
   interface Props {
     robotXY: BasePoint;
     robotHeading: number;
