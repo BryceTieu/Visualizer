@@ -91,8 +91,3 @@ export async function resetSettings(): Promise<Settings> {
   await saveSettings(defaults);
   return defaults;
 }
-
-// Check if settings exist in localStorage
-export async function settingsFileExists(): Promise<boolean> {
-  return !!localStorage.getItem(SETTINGS_STORAGE_KEY);
-}

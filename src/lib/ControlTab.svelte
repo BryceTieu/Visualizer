@@ -7,8 +7,6 @@
     Shape,
     SequenceItem,
   } from "../types";
-  import _ from "lodash";
-  import { getRandomColor } from "../utils";
   // Local normalizeLines helper (keeps behavior consistent with FileManager/App)
   function normalizeLines(input: Line[] = []): Line[] {
     return (input || []).map((line) => ({
@@ -44,8 +42,6 @@
   export let sequence: SequenceItem[];
   export let selectedLineIndex: number = 0;
   export let selectedPointIndex: number = 0;
-  export let robotWidth: number = 16;
-  export let robotHeight: number = 16;
   export let robotXY: BasePoint;
   export let robotHeading: number;
   export let x: d3.ScaleLinear<number, number>;
@@ -53,8 +49,6 @@
   export let settings: Settings;
   export let handleSeek: (percent: number) => void;
   export let loopAnimation: boolean;
-  export let optimizeLine: (lineId: string, targetControlPointIndex?: number) => void;
-  export let optimizingLineIds: Record<string, boolean> = {};
 
   export let shapes: Shape[];
   export let recordChange: () => void;
@@ -66,8 +60,6 @@
   let curveTension = 1.0;
   let obstaclesOpen = true;
 
-  $: optimizeLine;
-  $: optimizingLineIds;
 
   $: selectedLine = lines[selectedLineIndex] || lines[0] || null;
   $: selectedLinePathIndex = selectedLine ? lines.findIndex((line) => line.id === selectedLine.id) : -1;
@@ -104,8 +96,6 @@
 
   // Reference exported but unused props to silence Svelte unused-export warnings
 
-  $: robotWidth;
-  $: robotHeight;
 
   // Compute timeline markers for the UI (start of each travel segment)
   $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
@@ -163,171 +153,6 @@
       ...collapsedSections,
       obstacles: shapes.map(() => true),
     };
-  }
-
-  const makeId = () =>
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  function getWait(i: any) {
-    return i as any;
-  }
-
-  function insertLineAfter(seqIndex: number) {
-    const seqItem = sequence[seqIndex];
-    if (!seqItem || seqItem.kind !== "path") return;
-    const lineIndex = lines.findIndex((l) => l.id === seqItem.lineId);
-    const currentLine = lines[lineIndex];
-
-    // Find the next path item in the sequence after seqIndex
-    let nextPathSeqIndex = -1;
-    for (let i = seqIndex + 1; i < sequence.length; i++) {
-      if (sequence[i].kind === "path") {
-        nextPathSeqIndex = i;
-        break;
-      }
-    }
-
-    // If there is no next path in sequence, fall back to addLine behavior (append new randomized point)
-    let newPoint: Point | null = null;
-    if (nextPathSeqIndex !== -1) {
-      const nextLineId = (sequence[nextPathSeqIndex] as any).lineId;
-      const nextLine = lines.find((l) => l.id === nextLineId);
-      if (
-        nextLine &&
-        nextLine.endPoint &&
-        currentLine &&
-        currentLine.endPoint
-      ) {
-        const a = currentLine.endPoint;
-        const b = nextLine.endPoint;
-        const midX = (Number(a.x) + Number(b.x)) / 2;
-        const midY = (Number(a.y) + Number(b.y)) / 2;
-        newPoint = {
-          x: midX,
-          y: midY,
-          heading: "tangential",
-          reverse: false,
-        };
-      }
-    }
-
-    if (!newPoint) {
-      // fallback: random nearby point from current end
-      if (currentLine && currentLine.endPoint) {
-        newPoint = {
-          x: (currentLine.endPoint.x ?? 72) + _.random(-12, 12),
-          y: (currentLine.endPoint.y ?? 72) + _.random(-12, 12),
-          heading: "tangential",
-          reverse: false,
-        };
-      } else {
-        newPoint = {
-          x: _.random(0, 141.5),
-          y: _.random(0, 141.5),
-          heading: "tangential",
-          reverse: false,
-        };
-      }
-    }
-
-    const newLine = {
-      id: makeId(),
-      endPoint: newPoint,
-      controlPoints: [],
-      color: getRandomColor(),
-      name: `Path ${lines.length + 1}`,
-      waitBeforeMs: 0,
-      waitAfterMs: 0,
-      waitBeforeName: "",
-      waitAfterName: "",
-    };
-
-    // Insert the new line after the current one and a sequence item after current seq index
-    const newLines = [...lines];
-    newLines.splice(lineIndex + 1, 0, newLine);
-    lines = newLines;
-
-    const newSeq = [...sequence];
-    newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
-    sequence = newSeq;
-
-    collapsedSections.lines.splice(lineIndex + 1, 0, false);
-    collapsedSections.controlPoints.splice(lineIndex + 1, 0, true);
-
-    // Force reactivity
-    collapsedSections = { ...collapsedSections };
-  }
-
-  // Insert a midpoint between this path and the next path in sequence
-  function insertMidpointAfter(seqIndex: number) {
-    const seqItem = sequence[seqIndex];
-    if (!seqItem || seqItem.kind !== "path") return;
-    const lineIndex = lines.findIndex((l) => l.id === seqItem.lineId);
-    const currentLine = lines[lineIndex];
-
-    // Find the next path in sequence
-    let nextPathSeqIndex = -1;
-    for (let i = seqIndex + 1; i < sequence.length; i++) {
-      if (sequence[i].kind === "path") {
-        nextPathSeqIndex = i;
-        break;
-      }
-    }
-
-    if (nextPathSeqIndex === -1) {
-      // no next path -> do nothing or fallback
-      return;
-    }
-
-    const nextLineId = (sequence[nextPathSeqIndex] as any).lineId;
-    const nextLine = lines.find((l) => l.id === nextLineId);
-    if (!currentLine || !nextLine) return;
-
-    const a = currentLine.endPoint;
-    const b = nextLine.endPoint;
-    const midX = (Number(a.x) + Number(b.x)) / 2;
-    const midY = (Number(a.y) + Number(b.y)) / 2;
-
-    const newLine: Line = {
-      id: makeId(),
-      endPoint: {
-        x: midX,
-        y: midY,
-        heading: "tangential",
-        reverse: false,
-      },
-      controlPoints: [],
-      color: getRandomColor(),
-      name: `Path ${lines.length + 1}`,
-      waitBeforeMs: 0,
-      waitAfterMs: 0,
-      waitBeforeName: "",
-      waitAfterName: "",
-    };
-
-    // Insert into lines right after current line index
-    const newLines = [...lines];
-    newLines.splice(lineIndex + 1, 0, newLine);
-    lines = newLines;
-
-    // Insert into sequence right after seqIndex
-    const newSeq = [...sequence];
-    newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
-    sequence = newSeq;
-
-    collapsedSections.lines.splice(lineIndex + 1, 0, false);
-    collapsedSections.controlPoints.splice(lineIndex + 1, 0, true);
-
-    collapsedSections = { ...collapsedSections };
-    recordChange();
-  }
-
-  function createPathBetweenSelectedPoints() {
-    if (!selectedLine?.id) return;
-    const seqIndex = sequence.findIndex(
-      (item) => item.kind === "path" && item.lineId === selectedLine.id,
-    );
-    if (seqIndex === -1) return;
-    insertMidpointAfter(seqIndex);
   }
 
   // Convert selected line to cubic Bezier curve using a Catmull-Rom through-points approach.
@@ -417,245 +242,6 @@
     recordChange();
   }
 
-  function addLine() {
-    const newLine: Line = {
-      id: makeId(),
-      name: `Path ${lines.length + 1}`,
-      endPoint: {
-        x: _.random(0, 141.5),
-        y: _.random(0, 141.5),
-        heading: "tangential",
-        reverse: false,
-      },
-      controlPoints: [],
-      color: getRandomColor(),
-      waitBeforeMs: 0,
-      waitAfterMs: 0,
-      waitBeforeName: "",
-      waitAfterName: "",
-    };
-    lines = [...lines, newLine];
-    sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
-    collapsedSections.lines.push(false);
-    collapsedSections.controlPoints.push(true);
-    recordChange();
-  }
-
-  // Add a control point to the line represented by `seqIndex` in the sequence
-  function addControlPointToLine(seqIndex: number) {
-    const seqItem = sequence[seqIndex];
-    if (!seqItem || seqItem.kind !== "path") return;
-    const lineIndex = lines.findIndex((l) => l.id === seqItem.lineId);
-    if (lineIndex === -1) return;
-    const line = lines[lineIndex];
-    line.controlPoints = line.controlPoints || [];
-    const prevPt = lineIndex === 0 ? startPoint : lines[lineIndex - 1].endPoint;
-    const endPt = line.endPoint || { x: 72, y: 72 };
-    const mx = ((prevPt?.x ?? 72) + (endPt?.x ?? 72)) / 2;
-    const my = ((prevPt?.y ?? 72) + (endPt?.y ?? 72)) / 2;
-    line.controlPoints.push({
-      x: mx + _.random(-4, 4),
-      y: my + _.random(-4, 4),
-    });
-    collapsedSections.controlPoints[lineIndex] = false;
-    lines = [...lines];
-    collapsedSections = { ...collapsedSections };
-    recordChange?.();
-  }
-
-  // Add a control point to the last path in `lines` (fallback: create a new line)
-  function addControlPointToLastLine() {
-    if (!lines || lines.length === 0) {
-      // No lines exist: create a new line instead
-      addLine();
-      return;
-    }
-
-    // Prefer adding to the first line whose control points are expanded (user is focusing it)
-    let targetIdx = collapsedSections.controlPoints.findIndex(
-      (v) => v === false,
-    );
-    if (targetIdx === -1) targetIdx = lines.length - 1;
-
-    const line = lines[targetIdx];
-    line.controlPoints = line.controlPoints || [];
-    // Insert a control point near the line midpoint for convenience
-    const prevPt = targetIdx === 0 ? startPoint : lines[targetIdx - 1].endPoint;
-    const endPt = line.endPoint || { x: 72, y: 72 };
-    const mx = ((prevPt?.x ?? 72) + (endPt?.x ?? 72)) / 2;
-    const my = ((prevPt?.y ?? 72) + (endPt?.y ?? 72)) / 2;
-    line.controlPoints.push({
-      x: mx + _.random(-4, 4),
-      y: my + _.random(-4, 4),
-    });
-    // Ensure control points UI is expanded for this line
-    collapsedSections.controlPoints[targetIdx] = false;
-    lines = [...lines];
-    collapsedSections = { ...collapsedSections };
-    recordChange?.();
-  }
-
-  function addWait() {
-    const wait = {
-      kind: "wait",
-      id: makeId(),
-      name: "Wait",
-      durationMs: 0,
-      locked: false,
-    } as SequenceItem;
-    sequence = [...sequence, wait];
-  }
-
-  function addWaitAtStart() {
-    const wait = {
-      kind: "wait",
-      id: makeId(),
-      name: "Wait",
-      durationMs: 0,
-      locked: false,
-    } as SequenceItem;
-    sequence = [wait, ...sequence];
-  }
-
-  function addPathAtStart() {
-    const newLine: Line = {
-      id: makeId(),
-      name: `Path ${lines.length + 1}`,
-      endPoint: {
-        x: _.random(0, 141.5),
-        y: _.random(0, 141.5),
-        heading: "tangential",
-        reverse: false,
-      },
-      controlPoints: [],
-      color: getRandomColor(),
-      waitBeforeMs: 0,
-      waitAfterMs: 0,
-      waitBeforeName: "",
-      waitAfterName: "",
-    };
-    lines = [newLine, ...lines];
-    sequence = [{ kind: "path", lineId: newLine.id! }, ...sequence];
-    collapsedSections.lines = [false, ...collapsedSections.lines];
-    collapsedSections.controlPoints = [
-      true,
-      ...collapsedSections.controlPoints,
-    ];
-    recordChange();
-  }
-
-  function insertWaitAfter(seqIndex: number) {
-    const newSeq = [...sequence];
-    newSeq.splice(seqIndex + 1, 0, {
-      kind: "wait",
-      id: makeId(),
-      name: "Wait",
-      durationMs: 0,
-      locked: false,
-    });
-    sequence = newSeq;
-  }
-
-  function insertPathAfter(seqIndex: number) {
-    // Create a new line with default settings
-    const newLine: Line = {
-      id: makeId(),
-      name: `Path ${lines.length + 1}`,
-      endPoint: {
-        x: _.random(36, 108),
-        y: _.random(36, 108),
-        heading: "tangential",
-        reverse: false,
-      },
-      controlPoints: [],
-      color: getRandomColor(),
-      waitBeforeMs: 0,
-      waitAfterMs: 0,
-      waitBeforeName: "",
-      waitAfterName: "",
-    };
-
-    // Add the new line to the lines array
-    lines = [...lines, newLine];
-
-    // Insert the new path in the sequence after the wait
-    const newSeq = [...sequence];
-    newSeq.splice(seqIndex + 1, 0, { kind: "path", lineId: newLine.id! });
-    sequence = newSeq;
-
-    // Add UI state for the new line
-    collapsedSections.lines.push(false);
-    collapsedSections.controlPoints.push(true);
-
-    // Force reactivity
-    collapsedSections = { ...collapsedSections };
-    recordChange();
-  }
-
-  function syncLinesToSequence(newSeq: SequenceItem[]) {
-    const pathOrder = newSeq
-      .filter((item) => item.kind === "path")
-      .map((item) => item.lineId);
-
-    const indexedLines = lines.map((line, idx) => ({
-      line,
-      collapsed: collapsedSections.lines[idx],
-      control: collapsedSections.controlPoints[idx],
-    }));
-
-    const byId = new Map(indexedLines.map((entry) => [entry.line.id, entry]));
-    const reordered: typeof indexedLines = [];
-
-    pathOrder.forEach((id) => {
-      const entry = byId.get(id);
-      if (entry) {
-        reordered.push(entry);
-        byId.delete(id);
-      }
-    });
-
-    // Append any lines that are not currently in the sequence to preserve data
-    reordered.push(...byId.values());
-
-    lines = reordered.map((entry) => entry.line);
-    collapsedSections = {
-      ...collapsedSections,
-      lines: reordered.map((entry) => entry.collapsed ?? false),
-      controlPoints: reordered.map((entry) => entry.control ?? true),
-    };
-    // No collapsedEventMarkers to update
-  }
-
-  function moveSequenceItem(seqIndex: number, delta: number) {
-    const targetIndex = seqIndex + delta;
-    if (targetIndex < 0 || targetIndex >= sequence.length) return;
-
-    // Prevent moving if either the source or target is a locked path or a locked wait
-    const isLockedSequenceItem = (index: number) => {
-      const it = sequence[index];
-      if (!it) return false;
-      if (it.kind === "path") {
-        const ln = lines.find((l) => l.id === it.lineId);
-        return ln?.locked ?? false;
-      }
-      // wait
-      if (it.kind === "wait") {
-        return (it as any).locked ?? false;
-      }
-      return false;
-    };
-
-    if (isLockedSequenceItem(seqIndex) || isLockedSequenceItem(targetIndex))
-      return;
-
-    const newSeq = [...sequence];
-    const [item] = newSeq.splice(seqIndex, 1);
-    newSeq.splice(targetIndex, 0, item);
-    sequence = newSeq;
-
-    syncLinesToSequence(newSeq);
-    recordChange?.();
-  }
 </script>
 
 <div class="flex-1 flex flex-col justify-start items-center gap-2 h-full">

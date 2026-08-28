@@ -7,7 +7,6 @@ export * from "./gifExporter";
 export * from "./math";
 export * from "./shapes";
 export * from "./timeCalculator";
-export * from "./directorySettings";
 
 export {
   segmentSupportsReverse,

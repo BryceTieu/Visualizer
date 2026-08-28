@@ -11,10 +11,6 @@
   import * as browserFileStore from "../utils/browserFileStore";
   import { currentFilePath, isUnsaved, dualPathMode, secondFilePath } from "../stores";
   import { normalizeFieldPoints } from "../utils/fieldPoints";
-  import {
-    saveAutoPathsDirectory,
-    getSavedAutoPathsDirectory,
-  } from "../utils/directorySettings";
   import NameDialog from "./components/NameDialog.svelte";
 
   export let isOpen = false;

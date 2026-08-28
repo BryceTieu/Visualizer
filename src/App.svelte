@@ -33,25 +33,19 @@
   import hotkeys from "hotkeys-js";
   import { createAnimationController } from "./utils/animation";
   import { createPerfSampler, sampleNodeCounts } from "./utils/perf";
-  import { calculatePathTime, getAnimationDuration } from "./utils";
   import { exportAsGif, downloadBlob } from "./utils/gifExporter";
-
+  import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
   import {
+    calculatePathTime,
+    getAnimationDuration,
     calculateRobotState,
     generateGhostPathPoints,
     generateOnionLayers,
-  } from "./utils";
-  import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
-  import {
-    easeInOutQuad,
     getCurvePoint,
     getRandomColor,
     quadraticToCubic,
-    radiansToDegrees,
-    shortestRotation,
     downloadTrajectory,
     loadTrajectoryFromFile,
-    loadRobotImage,
     updateRobotImageDisplay,
   } from "./utils";
   import {
@@ -120,9 +114,6 @@
   // Animation state
   let percent: number = 0;
   let playing = false;
-  let animationFrame: number;
-  let startTime: number | null = null;
-  let previousTime: number | null = null;
   // Save dialog state
   let showSaveDialog = false;
   let showDualPathSaveDialog = false;
@@ -722,12 +713,6 @@
   }
 
   // Two.js groups
-  let lineGroup = new Two.Group();
-  lineGroup.id = "line-group";
-  let pointGroup = new Two.Group();
-  pointGroup.id = "point-group";
-  let shapeGroup = new Two.Group();
-  shapeGroup.id = "shape-group";
   // Coordinate converters
   let x: d3.ScaleLinear<number, number>;
 
@@ -2119,21 +2104,6 @@
     settings.rightPanelWidth = rightPanelWidth;
   }
 
-  function maximizePanelsToAllowed() {
-    if (typeof window === "undefined") return;
-    const availableWidth = Math.max(0, window.innerWidth - 24);
-    const rightPanelMinWidth = Math.max(
-      0,
-      Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
-    );
-    const maxEach = Math.floor((availableWidth - CENTER_MIN_WIDTH - PANEL_DIVIDER_WIDTH * 2) / 2);
-    const leftTarget = Math.max(SIDE_PANEL_MIN_WIDTH, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
-    const rightTarget = Math.max(rightPanelMinWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxEach));
-    leftPanelWidth = leftTarget;
-    rightPanelWidth = rightTarget;
-    settings.leftPanelWidth = leftPanelWidth;
-    settings.rightPanelWidth = rightPanelWidth;
-  }
 
   const debouncedSaveSession = debounce((snapshot: SessionSnapshot) => {
     try {
@@ -2845,26 +2815,6 @@
     }
   }
 
-  function animate(timestamp: number) {
-    if (!startTime) {
-      startTime = timestamp;
-    }
-
-    if (previousTime !== null) {
-      const deltaTime = timestamp - previousTime;
-      if (percent >= 100) {
-        percent = 0;
-      } else {
-        percent += (0.65 / lines.length) * (deltaTime * 0.1);
-      }
-    }
-
-    previousTime = timestamp;
-
-    if (playing) {
-      requestAnimationFrame(animate);
-    }
-  }
 
   function play() {
     animationController.play();
@@ -2876,10 +2826,6 @@
     playing = false;
   }
 
-  function resetAnimation() {
-    animationController.reset();
-    playing = false;
-  }
 
   // Handle slider changes
   function handleSeek(newPercent: number) {
@@ -3423,43 +3369,6 @@
   // Electron file-copying logic removed — browser store and upload are used instead.
 
   // Helper function to load data into app state
-  function loadData(data: any) {
-    // Ensure startPoint has all required fields
-    startPoint = data.startPoint || {
-      x: 72,
-      y: 72,
-      heading: "tangential",
-      reverse: false,
-    };
-
-    // Normalize lines with all required fields
-    const normalizedLines = normalizeLines(data.lines || []);
-    lines = normalizedLines;
-
-    // Derive sequence from data or create default
-    sequence = (
-      data.sequence && data.sequence.length
-        ? data.sequence
-        : normalizedLines.map((ln) => ({
-            kind: "path",
-            lineId: ln.id!,
-          }))
-    ) as SequenceItem[];
-
-    // Load shapes with defaults
-    shapes = data.shapes || [];
-    fieldPoints = normalizeFieldPoints(data);
-
-    // Load settings (including robot size) if present
-    if (data.settings) {
-      settings = { ...settings, ...data.settings };
-      robotWidth = settings.rWidth;
-      robotHeight = settings.rHeight;
-    }
-
-    isUnsaved.set(false);
-    recordChange();
-  }
 
   function toHeadingDegrees(point: Point, position: "start" | "end"): number {
     if (!point) return 0;
@@ -3506,9 +3415,6 @@
     };
   }
 
-  function sleep(ms: number) {
-    return new Promise((res) => setTimeout(res, ms));
-  }
 
   async function runOptimization(payload: any) {
     const response = await fetch(`${OPTIMIZER_BASE_URL}`, {
@@ -3621,11 +3527,6 @@
     }
   }
 
-  function loadRobot(evt: Event) {
-    const file = (evt.currentTarget as HTMLInputElement | null)?.files?.[0];
-    if (!file) return;
-    loadRobotImage(file, () => updateRobotImageDisplay());
-  }
 
   function addNewLine() {
     const newLineId = `line-${Math.random().toString(36).slice(2)}`;
@@ -4383,8 +4284,6 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         bind:sequence
         bind:selectedLineIndex
         bind:selectedPointIndex
-        bind:robotWidth
-        bind:robotHeight
         bind:settings
         bind:percent
         bind:robotXY
@@ -4395,8 +4294,6 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         {handleSeek}
         bind:loopAnimation
         {recordChange}
-        {optimizeLine}
-        {optimizingLineIds}
       />
     </aside>
   </div>

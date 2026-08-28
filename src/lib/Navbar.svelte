@@ -72,6 +72,8 @@
   let saveDropdownOpen = false;
   let saveDropdownRef: HTMLElement;
   let saveButtonRef: HTMLElement;
+  let exportMenuRef: HTMLElement;
+  let exportButtonRef: HTMLElement;
 
   let selectedGridSize = 12;
   const gridSizeOptions = [0, 1, 3, 6, 12];
@@ -214,23 +216,24 @@
     settings.rWidth = robotWidth;
   }
 
+  function isOutside(event: MouseEvent, ...refs: (HTMLElement | undefined)[]) {
+    return refs.every((ref) => ref && !ref.contains(event.target as Node));
+  }
+
   function handleClickOutside(event: MouseEvent) {
-    if (
-      saveDropdownOpen &&
-      saveDropdownRef &&
-      !saveDropdownRef.contains(event.target as Node) &&
-      saveButtonRef &&
-      !saveButtonRef.contains(event.target as Node)
-    ) {
+    if (saveDropdownOpen && isOutside(event, saveDropdownRef, saveButtonRef)) {
       saveDropdownOpen = false;
+    }
+    if (exportMenuOpen && isOutside(event, exportMenuRef, exportButtonRef)) {
+      exportMenuOpen = false;
     }
   }
 
   // Handle Escape key to close dropdown
   function handleKeyDown(event: KeyboardEvent) {
-    if (saveDropdownOpen && event.key === "Escape") {
-      saveDropdownOpen = false;
-    }
+    if (event.key !== "Escape") return;
+    saveDropdownOpen = false;
+    exportMenuOpen = false;
   }
 
   onMount(() => {
@@ -450,8 +453,7 @@
 
           <!-- If the snap is disabled, turn the icon grey, not white -->
           {#if !$snapToGrid}
-            <line x1="23" y1="23" x2="1" y2="1"></line>
-            class="opacity-50"
+            <line x1="23" y1="23" x2="1" y2="1" class="opacity-50"></line>
           {/if}
         </svg>
       </button>
@@ -762,6 +764,7 @@
 
       <div class="relative">
         <button
+          bind:this={exportButtonRef}
           title="Export path"
           on:click={() => (exportMenuOpen = !exportMenuOpen)}
           class="console-icon-button"
@@ -784,6 +787,7 @@
 
         {#if exportMenuOpen}
           <div
+            bind:this={exportMenuRef}
             class="console-panel console-menu absolute right-0 mt-2 w-48 z-50"
           >
             <button
