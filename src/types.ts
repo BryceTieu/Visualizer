@@ -138,7 +138,6 @@ export interface Settings {
   fieldMap: string;
   customFieldImage?: string; // Base64 data URL for custom field image
   robotImage?: string;
-  theme: "light" | "dark" | "auto";
   showGhostPaths?: boolean; // Show collision overlays via ghost paths
   showOnionLayers?: boolean; // Show robot body at intervals along the path
   onionLayerSpacing?: number; // Distance in inches between onion layers

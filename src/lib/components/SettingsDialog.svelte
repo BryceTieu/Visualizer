@@ -13,7 +13,7 @@
     robot: true,
     motion: true,
     advanced: true,
-    theme: true,
+    interface: true,
   };
 
   // Get version from package. json
@@ -727,9 +727,9 @@
         <div class="mb-4">
           <button
             on:click={() =>
-              (collapsedSections.theme = !collapsedSections.theme)}
+              (collapsedSections.interface = !collapsedSections.interface)}
             class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
-            aria-expanded={!collapsedSections.theme}
+            aria-expanded={!collapsedSections.interface}
           >
             <div class="flex items-center gap-2">
               <svg
@@ -755,7 +755,7 @@
               stroke-width={2}
               stroke="currentColor"
               class="size-5 transition-transform duration-200"
-              class:rotate-180={collapsedSections.theme}
+              class:rotate-180={collapsedSections.interface}
             >
               <path
                 stroke-linecap="round"
@@ -765,44 +765,10 @@
             </svg>
           </button>
 
-          {#if !collapsedSections.theme}
+          {#if !collapsedSections.interface}
             <div
               class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
             >
-              <div>
-                <label
-                  for="theme-select"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Theme
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Interface color scheme
-                  </div>
-                </label>
-                <select
-                  id="theme-select"
-                  bind:value={settings.theme}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="auto">Auto (System Preference)</option>
-                  <option value="light">Light Mode</option>
-                  <option value="dark">Dark Mode</option>
-                </select>
-                <div
-                  class="mt-2 text-xs text-neutral-500 dark:text-neutral-400"
-                >
-                  {#if settings.theme === "auto"}
-                    {#if window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches}
-                      Currently using: Dark (from system)
-                    {:else}
-                      Currently using: Light (from system)
-                    {/if}
-                  {:else}
-                    Currently using: {settings.theme}
-                  {/if}
-                </div>
-              </div>
-
               <div>
                 <label class="flex items-center gap-2 cursor-pointer">
                   <input
