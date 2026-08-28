@@ -2377,9 +2377,6 @@
   {optimizeAllLines}
   {optimizingAll}
   {twoElement}
-  bind:playing
-  {play}
-  {pause}
   {exportPathAsGif}
 />
 

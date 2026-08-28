@@ -7,15 +7,13 @@
     Shape,
     SequenceItem,
   } from "../types";
-  import { snapToGrid, showGrid, gridSize } from "../stores";
+  import type * as d3 from "d3";
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
-  import HeadingControls from "./components/HeadingControls.svelte";
   import RobotPositionDisplay from "./components/RobotPositionDisplay.svelte";
   import StartingPointSection from "./components/StartingPointSection.svelte";
   import PlaybackControls from "./components/PlaybackControls.svelte";
   import { calculatePathTime, normalizeLines } from "../utils";
-  import { FIELD_SIZE } from "../config";
-  import StatCell from "./components/ui/StatCell.svelte";
+  import SelectedPathInspector from "./components/SelectedPathInspector.svelte";
   import { curveThroughPoints } from "../utils/math";
 
   export let percent: number;
@@ -79,9 +77,6 @@
     recordChange?.();
   }
 
-  // Reference exported but unused props to silence Svelte unused-export warnings
-
-
   // Compute timeline markers for the UI (start of each travel segment)
   $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
   $: markers = (() => {
@@ -109,35 +104,12 @@
   })();
 
 
-  // State for collapsed sections
-  let collapsedSections = {
-    obstacles: shapes.map(() => true),
-    lines: lines.map(() => false),
-    controlPoints: lines.map(() => true), // Start with control points collapsed
-  };
-
   // Collapsed state for obstacles (default collapsed)
   let collapsedObstacles = shapes.map(() => true);
-
-  // Reactive statements to update UI state when lines or shapes change from file load
-  $: if (lines.length !== collapsedSections.lines.length) {
-    collapsedSections = {
-      obstacles: collapsedSections.obstacles ?? shapes.map(() => true),
-      lines: lines.map(() => false),
-      controlPoints: lines.map(() => true),
-    };
-  }
 
   // Keep obstacle collapse state aligned with shapes list
   $: if (shapes.length !== collapsedObstacles.length) {
     collapsedObstacles = shapes.map(() => true);
-  }
-
-  $: if (!collapsedSections.obstacles || shapes.length !== collapsedSections.obstacles.length) {
-    collapsedSections = {
-      ...collapsedSections,
-      obstacles: shapes.map(() => true),
-    };
   }
 
   // Convert selected line to cubic Bezier curve using a Catmull-Rom through-points approach.
@@ -200,8 +172,6 @@
         (s) => s.kind === "wait" || s.lineId !== removedId,
       );
     }
-    collapsedSections.lines.splice(idx, 1);
-    collapsedSections.controlPoints.splice(idx, 1);
     recordChange();
   }
 
@@ -258,209 +228,27 @@
       </div>
     </div>
 
-    <div class="w-full border border-[#333333] bg-[#222222] p-3 text-xs text-gray-400 space-y-3">
-      <div class="flex items-start justify-between gap-3 border-b border-[#333333] pb-2">
-        <div>
-          <div class="font-semibold text-gray-100">Selected Path</div>
-          <div class="text-[11px] text-gray-500">Pick a path in the list to inspect it.</div>
-        </div>
-        <div class="flex items-center gap-2">
-          <div class="text-[11px] text-gray-400">{selectedLine ? `#${selectedLinePathIndex + 1}` : "None"}</div>
-          {#if settings.experimentalFeatures?.curveThrough && selectedLine}
-            <input
-              type="number"
-              min="0.1"
-              max="3"
-              step="0.1"
-              bind:value={curveTension}
-              class="w-20 px-2 py-1 rounded border bg-[#111111] text-sm text-gray-200"
-              title="Curve tension (smaller = looser)"
-            />
-            <button
-              class="rounded border border-[#444444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-              on:click={() => curveFromSelected(curveTension)}
-              disabled={selectedLine.controlPoints.length === 0}
-              title="Convert this path to a smooth cubic Bezier"
-            >
-              Curve Path
-            </button>
-          {/if}
-          <button
-            class="rounded border border-red-700 bg-red-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
-            on:click={deleteSelectedLine}
-            disabled={!selectedLine || lines.length <= 1}
-            title={lines.length <= 1 ? "At least one path must remain" : "Delete the selected path"}
-          >
-            <span class="font-bold">✕</span>
-            <span>Delete Path</span>
-          </button>
-        </div>
-      </div>
-
-    {#if selectedLine}
-      <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
-        <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
-          <div class="text-gray-500">Name</div>
-          <input
-            value={selectedLine.name || ""}
-            placeholder={`Path ${selectedLinePathIndex + 1}`}
-            type="text"
-            class="w-full bg-transparent font-medium text-gray-100 border-none outline-none focus:ring-1 focus:ring-green-500 rounded px-0 py-0.5"
-            disabled={selectedLine.locked}
-            on:input={(e) => {
-              selectedLine.name = e.currentTarget.value;
-              lines = [...lines];
-            }}
-            on:change={() => recordChange?.()}
-          />
-        </div>
-          <StatCell label="Endpoint">
-            {selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}
-          </StatCell>
-          <StatCell label="Control Points">
-            {selectedLine.controlPoints.length}
-          </StatCell>
-          <StatCell label="Locked">
-            {selectedLine.locked ? "Yes" : "No"}
-          </StatCell>
-        </div>
-
-        <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
-          <div class="flex items-center justify-between gap-2">
-            <div>
-              <div class="text-gray-500">Selected Point</div>
-              <div class="font-medium text-gray-100">{selectedPointLabel}</div>
-            </div>
-            <div class="flex flex-wrap gap-1">
-              <button
-                class={`rounded border border-[#444444] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#2a2a2a] ${selectedPointIndex === 0 ? "bg-[#2f2f2f]" : ""}`}
-                on:click={() => (selectedPointIndex = 0)}
-              >
-                Endpoint
-              </button>
-              {#each selectedLine.controlPoints as _, pointIdx}
-                <button
-                  class={`rounded border border-[#444444] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#2a2a2a] ${selectedPointIndex === pointIdx + 1 ? "bg-[#2f2f2f]" : ""}`}
-                  on:click={() => (selectedPointIndex = pointIdx + 1)}
-                >
-                  CP{pointIdx + 1}
-                </button>
-              {/each}
-            </div>
-          </div>
-
-          {#if selectedPoint}
-            {#if selectedPointIndex === 0}
-              <div class="mt-3 flex flex-col gap-1 text-[11px]">
-                <span class="text-gray-500">Name</span>
-                <input
-                  value={selectedLine.name || ""}
-                  placeholder={`Path ${selectedLinePathIndex + 1}`}
-                  type="text"
-                  class="w-full rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  disabled={selectedLine.locked || !!selectedPoint.locked}
-                  on:input={(e) => {
-                    selectedLine.name = e.currentTarget.value;
-                    lines = [...lines];
-                  }}
-                  on:change={() => recordChange?.()}
-                />
-              </div>
-            {/if}
-
-            <div class="mt-3 flex flex-wrap items-end gap-2 text-[11px]">
-              <label class="flex flex-col gap-1">
-                <span class="text-gray-500">X</span>
-                <input
-                  bind:value={selectedPoint.x}
-                  type="number"
-                  min="0"
-                  max={FIELD_SIZE}
-                  step={$snapToGrid && $showGrid ? $gridSize : 0.1}
-                  class="w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  on:change={commitSelectedPointChange}
-                  disabled={selectedLine.locked || !!selectedPoint.locked}
-                />
-              </label>
-              <label class="flex flex-col gap-1">
-                <span class="text-gray-500">Y</span>
-                <input
-                  bind:value={selectedPoint.y}
-                  type="number"
-                  min="0"
-                  max={FIELD_SIZE}
-                  step={$snapToGrid && $showGrid ? $gridSize : 0.1}
-                  class="w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  on:change={commitSelectedPointChange}
-                  disabled={selectedLine.locked || !!selectedPoint.locked}
-                />
-              </label>
-            </div>
-
-            {#if selectedPointIndex === 0}
-              <div class="mt-3 flex items-center gap-2 text-[11px] text-gray-300 flex-wrap">
-                <div class="text-gray-500">Heading</div>
-                <HeadingControls
-                  endPoint={selectedLine.endPoint}
-                  locked={selectedLine.locked || !!selectedPoint.locked}
-                  on:change={() => {
-                    lines = [...lines];
-                  }}
-                  on:commit={() => {
-                    lines = [...lines];
-                    recordChange?.();
-                  }}
-                />
-              </div>
-            {/if}
-
-            <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-300">
-              <div>
-                Locked: <span class="font-medium text-gray-100">{selectedPoint.locked ? "Yes" : "No"}</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <button
-                  class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-                  on:click={deleteSelectedControlPoint}
-                  disabled={selectedLine.locked || selectedPointIndex === 0 || selectedLine.controlPoints.length === 0}
-                  title={selectedPointIndex === 0 ? "Endpoint cannot be deleted" : "Delete the selected control point"}
-                >
-                  Delete Control Point
-                </button>
-                <button
-                  class="rounded border border-[#444444] px-2 py-1 font-semibold text-gray-100 hover:bg-[#2a2a2a] disabled:cursor-not-allowed disabled:opacity-50"
-                  on:click={toggleSelectedPointLock}
-                  disabled={selectedLine.locked}
-                >
-                  {selectedPoint.locked ? "Unlock Point" : "Lock Point"}
-                </button>
-              </div>
-            </div>
-          {/if}
-        </div>
-
-        <div class="grid gap-2 text-[11px] sm:grid-cols-2">
-          <StatCell
-            label="Color"
-            roomy
-            valueClass="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug"
-          >
-            <span class="size-2.5 rounded-full" style={`background:${selectedLine?.color || "#666666"}`}></span>
-            <span>{selectedLine?.color || "Default"}</span>
-          </StatCell>
-
-          <StatCell
-            label="Status"
-            roomy
-            valueClass="mt-1 font-medium text-gray-100 leading-snug"
-          >
-            {selectedLine?.locked ? "Locked" : "Editable"}
-          </StatCell>
-        </div>
-      {:else}
-        <div class="text-[11px] text-gray-500">Select a path from the left list to inspect it here.</div>
-      {/if}
-    </div>
+    <SelectedPathInspector
+      {selectedLine}
+      {selectedLinePathIndex}
+      {selectedPoint}
+      bind:selectedPointIndex
+      {selectedPointLabel}
+      lineCount={lines.length}
+      {settings}
+      bind:curveTension
+      onNameInput={(name) => {
+        if (selectedLine) selectedLine.name = name;
+        lines = [...lines];
+      }}
+      onLinesChanged={() => (lines = [...lines])}
+      onRecordChange={() => recordChange?.()}
+      onCurveFromSelected={curveFromSelected}
+      onDeleteSelectedLine={deleteSelectedLine}
+      onDeleteControlPoint={deleteSelectedControlPoint}
+      onToggleLock={toggleSelectedPointLock}
+      onCommitPointChange={commitSelectedPointChange}
+    />
   </div>
 
   <PlaybackControls
