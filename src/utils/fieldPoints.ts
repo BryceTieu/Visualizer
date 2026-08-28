@@ -31,7 +31,8 @@ function toFieldPoint(value: unknown): FieldPoint | null {
     const point: FieldPoint = { x: candidate.x, y: candidate.y };
     if (typeof candidate.color === "string") point.color = candidate.color;
     if (typeof candidate.radius === "number") point.radius = candidate.radius;
-    if (typeof candidate.opacity === "number") point.opacity = candidate.opacity;
+    if (typeof candidate.opacity === "number")
+      point.opacity = candidate.opacity;
     return point;
   }
 
@@ -42,11 +43,16 @@ export function normalizeFieldPoints(input: unknown): FieldPoint[] {
   const rawPoints = Array.isArray(input)
     ? input
     : input && typeof input === "object"
-      ? ((input as any).fieldPoints ?? (input as any).points ?? (input as any).dots ?? [])
+      ? ((input as any).fieldPoints ??
+        (input as any).points ??
+        (input as any).dots ??
+        [])
       : [];
 
   if (!Array.isArray(rawPoints)) return [];
-  return rawPoints.map(toFieldPoint).filter((point): point is FieldPoint => Boolean(point));
+  return rawPoints
+    .map(toFieldPoint)
+    .filter((point): point is FieldPoint => Boolean(point));
 }
 
 export function renderFieldPoints(

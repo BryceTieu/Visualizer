@@ -69,13 +69,13 @@ export async function exportAsGif(options: GifExportOptions): Promise<Blob> {
   onProgress?.(0);
 
   // Create a temporary canvas for scaling
-  const tempCanvas = document.createElement('canvas');
+  const tempCanvas = document.createElement("canvas");
   tempCanvas.width = width;
   tempCanvas.height = height;
-  const tempCtx = tempCanvas.getContext('2d');
-  
+  const tempCtx = tempCanvas.getContext("2d");
+
   if (!tempCtx) {
-    throw new Error('Failed to get canvas context');
+    throw new Error("Failed to get canvas context");
   }
   const ctx = tempCtx;
 
@@ -87,7 +87,9 @@ export async function exportAsGif(options: GifExportOptions): Promise<Blob> {
 
     const serializer = new XMLSerializer();
     const svgString = serializer.serializeToString(source);
-    const svgBlob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const svgBlob = new Blob([svgString], {
+      type: "image/svg+xml;charset=utf-8",
+    });
     const svgUrl = URL.createObjectURL(svgBlob);
 
     try {
@@ -108,7 +110,7 @@ export async function exportAsGif(options: GifExportOptions): Promise<Blob> {
   for (let i = 0; i < frameCount; i++) {
     // Check for cancellation
     if (shouldCancel?.()) {
-      throw new Error('Export cancelled by user');
+      throw new Error("Export cancelled by user");
     }
 
     // Advance animation to this frame if callback provided
@@ -149,10 +151,10 @@ export async function exportAsGif(options: GifExportOptions): Promise<Blob> {
     gif.on("progress", (progress: number) => {
       // Check for cancellation during encoding
       if (shouldCancel?.()) {
-        reject(new Error('Export cancelled by user'));
+        reject(new Error("Export cancelled by user"));
         return;
       }
-      
+
       // Second half of progress (encoding)
       const encodingProgress = 0.5 + progress * 0.5;
       onProgress?.(encodingProgress);
@@ -164,13 +166,4 @@ export async function exportAsGif(options: GifExportOptions): Promise<Blob> {
 
     gif.render();
   });
-}
-
-export function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }

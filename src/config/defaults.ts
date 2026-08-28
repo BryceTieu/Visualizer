@@ -1,5 +1,5 @@
 import type { Point, Line, Shape, Settings } from "../types";
-import { getRandomColor } from "../utils";
+import { getRandomColor } from "../utils/color";
 
 /**
  * Default robot dimensions
@@ -40,7 +40,6 @@ export const DEFAULT_SETTINGS: Settings = {
   maxDeceleration: 30,
   fieldMap: "decode.webp",
   robotImage: "/robot.png",
-  theme: "auto",
   showGhostPaths: false,
   showOnionLayers: false,
   onionLayerSpacing: 3, // inches between each robot body trace

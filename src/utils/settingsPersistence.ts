@@ -10,10 +10,32 @@ interface StoredSettings {
   lastUpdated: string;
 }
 
-
-
-
 const SETTINGS_STORAGE_KEY = "pedro_settings";
+
+/**
+ * Legacy support: older builds stored the custom field as "custom||<data-url>",
+ * and some payloads omit fieldMap entirely.
+ */
+export function normalizeLegacyFieldMap(input: Settings): Settings {
+  const next = { ...input };
+
+  if (
+    typeof next.fieldMap === "string" &&
+    next.fieldMap.startsWith("custom||")
+  ) {
+    const [, embeddedImage = ""] = next.fieldMap.split("||");
+    next.fieldMap = "custom";
+    if (embeddedImage && !next.customFieldImage) {
+      next.customFieldImage = embeddedImage;
+    }
+  }
+
+  if (!next.fieldMap) {
+    next.fieldMap = DEFAULT_SETTINGS.fieldMap;
+  }
+
+  return next;
+}
 
 function migrateSettings(stored: Partial<StoredSettings>): Settings {
   const defaults = { ...DEFAULT_SETTINGS };
@@ -29,28 +51,12 @@ function migrateSettings(stored: Partial<StoredSettings>): Settings {
   // Copy only the properties that exist in both objects
   Object.keys(stored.settings).forEach((key) => {
     if (key in migrated) {
-      // @ts-ignore - We know the key exists in Settings
+      // @ts-expect-error - We know the key exists in Settings
       migrated[key] = stored.settings[key];
     }
   });
 
-  // Legacy support: older builds stored custom field as "custom||<data-url>".
-  if (
-    typeof migrated.fieldMap === "string" &&
-    migrated.fieldMap.startsWith("custom||")
-  ) {
-    const [, embeddedImage = ""] = migrated.fieldMap.split("||");
-    migrated.fieldMap = "custom";
-    if (embeddedImage && !migrated.customFieldImage) {
-      migrated.customFieldImage = embeddedImage;
-    }
-  }
-
-  if (!migrated.fieldMap) {
-    migrated.fieldMap = defaults.fieldMap;
-  }
-
-  return migrated;
+  return normalizeLegacyFieldMap(migrated);
 }
 
 // Load settings from localStorage
@@ -90,9 +96,4 @@ export async function resetSettings(): Promise<Settings> {
   const defaults = { ...DEFAULT_SETTINGS };
   await saveSettings(defaults);
   return defaults;
-}
-
-// Check if settings exist in localStorage
-export async function settingsFileExists(): Promise<boolean> {
-  return !!localStorage.getItem(SETTINGS_STORAGE_KEY);
 }

@@ -7,10 +7,7 @@ export interface BasePoint {
 }
 
 export type PiecewiseHeadingInterpolationType =
-  | "linear"
-  | "constant"
-  | "tangential"
-  | "facing-point";
+  "linear" | "constant" | "tangential" | "facing-point";
 
 export interface PiecewiseHeadingSegment {
   startProgress: number;
@@ -75,7 +72,6 @@ export type Point = BasePoint &
 
 export type ControlPoint = BasePoint;
 
-
 export interface WaitSegment {
   name?: string;
   durationMs: number;
@@ -114,12 +110,14 @@ export type SequenceItem = SequencePathItem | SequenceWaitItem;
 
 // PathChain is kept only for backward compatibility with older saved files.
 // The visualizer and code export now treat timeline entries as Pedro Path objects.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+
 export interface PathChain {
   id: string;
   name: string;
   color: string;
   lineIds: string[];
+  // Only present in older saved files; never written by current code.
+  globalHeadingInterpolation?: PiecewiseHeadingInterpolation;
 }
 
 export interface Settings {
@@ -136,7 +134,6 @@ export interface Settings {
   fieldMap: string;
   customFieldImage?: string; // Base64 data URL for custom field image
   robotImage?: string;
-  theme: "light" | "dark" | "auto";
   showGhostPaths?: boolean; // Show collision overlays via ghost paths
   showOnionLayers?: boolean; // Show robot body at intervals along the path
   onionLayerSpacing?: number; // Distance in inches between onion layers

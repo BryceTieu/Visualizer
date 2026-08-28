@@ -1,12 +1,7 @@
-import prettier from "prettier";
-import type {
-  Point,
-  Line,
-  BasePoint,
-  SequenceItem,
-} from "../types";
+import * as prettier from "prettier/standalone";
+import type { Point, Line, BasePoint, SequenceItem } from "../types";
 
-const FIELD_WIDTH_INCHES = 141.5;
+import { FIELD_SIZE as FIELD_WIDTH_INCHES } from "../config/defaults";
 
 interface ExportTransformOptions {
   mirrorHorizontally?: boolean;
@@ -42,7 +37,9 @@ async function loadJavaPlugin() {
       const mod = await import(/* @vite-ignore */ path);
       cachedJavaPlugin = (mod as any).default ?? mod;
       return cachedJavaPlugin;
-    } catch {}
+    } catch {
+      // Try the next candidate specifier.
+    }
   }
   cachedJavaPlugin = null;
   return null;
@@ -55,7 +52,9 @@ async function loadKotlinPlugin() {
       const mod = await import(/* @vite-ignore */ path);
       cachedKotlinPlugin = (mod as any).default ?? mod;
       return cachedKotlinPlugin;
-    } catch {}
+    } catch {
+      // Try the next candidate specifier.
+    }
   }
   cachedKotlinPlugin = null;
   return null;
@@ -679,7 +678,7 @@ export async function generateSequentialCommandCode(
 ): Promise<string> {
   let className = "AutoPath";
   if (fileName) {
-    const baseName = fileName.split(/[\/]/).pop() || "";
+    const baseName = fileName.split(/[/]/).pop() || "";
     className =
       baseName.replace(".pp", "").replace(/[^a-zA-Z0-9]/g, "_") || "AutoPath";
   }

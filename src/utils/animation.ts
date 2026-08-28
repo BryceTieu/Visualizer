@@ -97,7 +97,12 @@ export function calculateRobotState(
   pathChains: PathChain[] = [],
 ): RobotState {
   if (!timeline || timeline.length === 0) {
-    return { x: xScale(startPoint.x), y: yScale(startPoint.y), heading: 0, t: null };
+    return {
+      x: xScale(startPoint.x),
+      y: yScale(startPoint.y),
+      heading: 0,
+      t: null,
+    };
   }
 
   // Calculate current time in seconds based on percent (0-100)
@@ -165,7 +170,7 @@ export function calculateRobotState(
       const accDist = 0.5 * maxA * accTime * accTime;
       const decDist = 0.5 * maxD * decTime * decTime;
 
-      let constTime = 0;
+      let constTime: number;
       let constDist = 0;
       let totalTime = 0;
 
@@ -206,7 +211,8 @@ export function calculateRobotState(
           dist = 0.5 * maxA * t * t;
         } else {
           const rem = t - accT;
-          dist = 0.5 * maxA * accT * accT + vPeak * rem - 0.5 * maxD * rem * rem;
+          dist =
+            0.5 * maxA * accT * accT + vPeak * rem - 0.5 * maxD * rem * rem;
         }
       }
 
@@ -223,8 +229,14 @@ export function calculateRobotState(
     const robotXY = { x: xScale(robotInchesXY.x), y: yScale(robotInchesXY.y) };
     let robotHeading = 0;
 
-    const lineChain = pathChains.find((chain) => (chain.lineIds || []).includes(currentLine.id || ""));
-    const lineTraversal = getPointAndTangentAtProgress(curvePoints as BasePoint[], linePercent, currentLine.endPoint.reverse);
+    const lineChain = pathChains.find((chain) =>
+      (chain.lineIds || []).includes(currentLine.id || ""),
+    );
+    const lineTraversal = getPointAndTangentAtProgress(
+      curvePoints as BasePoint[],
+      linePercent,
+      currentLine.endPoint.reverse,
+    );
     const globalPiecewise =
       currentLine.endPoint.heading === "piecewise" &&
       (currentLine.endPoint.piecewiseHeading.scope || "path") === "path"
@@ -237,31 +249,58 @@ export function calculateRobotState(
             const chainLines = (lineChain.lineIds || [])
               .map((lineId) => lines.find((line) => line.id === lineId))
               .filter((line): line is Line => Boolean(line));
-            const currentChainIndex = chainLines.findIndex((line) => line.id === currentLine.id);
+            const currentChainIndex = chainLines.findIndex(
+              (line) => line.id === currentLine.id,
+            );
             if (currentChainIndex < 0) return null;
 
             const chainLengths = chainLines.map((line, index) => {
-              const start = index === 0 ? startPoint : chainLines[index - 1].endPoint;
-              return approximateCurveLength(lineCurvePoints(start, line) as BasePoint[]);
+              const start =
+                index === 0 ? startPoint : chainLines[index - 1].endPoint;
+              return approximateCurveLength(
+                lineCurvePoints(start, line) as BasePoint[],
+              );
             });
-            const totalLength = chainLengths.reduce((sum, value) => sum + value, 0);
+            const totalLength = chainLengths.reduce(
+              (sum, value) => sum + value,
+              0,
+            );
             if (totalLength <= 1e-9) return null;
 
-            const priorLength = chainLengths.slice(0, currentChainIndex).reduce((sum, value) => sum + value, 0);
+            const priorLength = chainLengths
+              .slice(0, currentChainIndex)
+              .reduce((sum, value) => sum + value, 0);
             const currentLength = chainLengths[currentChainIndex] || 0;
-            const chainProgress = (priorLength + currentLength * linePercent) / totalLength;
-            return getChainTraversalState(lineChain, lines, startPoint, chainProgress);
+            const chainProgress =
+              (priorLength + currentLength * linePercent) / totalLength;
+            return getChainTraversalState(
+              lineChain,
+              lines,
+              startPoint,
+              chainProgress,
+            );
           })()
         : null;
 
     // Calculate Heading based on Line Type
     if (globalPiecewise) {
-      robotHeading = -evaluatePiecewiseHeading(globalPiecewise, chainTraversal ? (lineChain ? (chainTraversal ? 0 : 0) : 0) : linePercent, {
-        points: curvePoints as BasePoint[],
-        currentPoint: chainTraversal?.point || lineTraversal.point,
-        tangentDegrees: chainTraversal?.tangentDegrees ?? lineTraversal.tangentDegrees,
-        chainState: chainTraversal || undefined,
-      });
+      robotHeading = -evaluatePiecewiseHeading(
+        globalPiecewise,
+        chainTraversal
+          ? lineChain
+            ? chainTraversal
+              ? 0
+              : 0
+            : 0
+          : linePercent,
+        {
+          points: curvePoints as BasePoint[],
+          currentPoint: chainTraversal?.point || lineTraversal.point,
+          tangentDegrees:
+            chainTraversal?.tangentDegrees ?? lineTraversal.tangentDegrees,
+          chainState: chainTraversal || undefined,
+        },
+      );
     } else {
       switch (currentLine.endPoint.heading) {
         case "linear":
@@ -274,7 +313,7 @@ export function calculateRobotState(
         case "constant":
           robotHeading = -currentLine.endPoint.degrees;
           break;
-        case "tangential":
+        case "tangential": {
           const nextPointInches = getCurvePoint(
             linePercent + (currentLine.endPoint.reverse ? -0.01 : 0.01),
             curvePoints,
@@ -293,6 +332,7 @@ export function calculateRobotState(
             robotHeading = radiansToDegrees(angle);
           }
           break;
+        }
       }
     }
 
@@ -680,7 +720,13 @@ export function generateOnionLayers(
   robotWidth: number,
   robotHeight: number,
   spacing: number = 6,
-): Array<{ x: number; y: number; heading: number; corners: BasePoint[]; lineIndex: number }> {
+): Array<{
+  x: number;
+  y: number;
+  heading: number;
+  corners: BasePoint[];
+  lineIndex: number;
+}> {
   if (lines.length === 0) return [];
 
   const layers: Array<{
@@ -688,6 +734,7 @@ export function generateOnionLayers(
     y: number;
     heading: number;
     corners: BasePoint[];
+    lineIndex: number;
   }> = [];
 
   // Calculate total path length

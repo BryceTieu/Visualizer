@@ -1,4 +1,17 @@
-import type { Line, Point } from "../types";
+import type { BasePoint, Line, Point } from "../types";
+import { FIELD_SIZE } from "../config/defaults";
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function clampFieldCoordinate(value: number): number {
+  return clamp(value, 0, FIELD_SIZE);
+}
+
+export function distanceBetweenPoints(a: BasePoint, b: BasePoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 
 export function quadraticToCubic(
   P0: { x: number; y: number },
@@ -18,18 +31,6 @@ export function quadraticToCubic(
 
 export function easeInOutQuad(x: number): number {
   return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
-}
-
-export function getMousePos(evt: MouseEvent, canvas: any) {
-  let rect = canvas.getBoundingClientRect();
-  return {
-    x:
-      ((evt.clientX - rect.left) / (rect.right - rect.left)) *
-      canvas.width.baseVal.value,
-    y:
-      ((evt.clientY - rect.top) / (rect.bottom - rect.top)) *
-      canvas.height.baseVal.value,
-  };
 }
 
 export function transformAngle(angle: number) {
@@ -122,8 +123,8 @@ export function getCurvePoint(
   points: { x: number; y: number }[],
 ): { x: number; y: number } {
   if (points.length === 1) return points[0];
-  var newpoints = [];
-  for (var i = 0, j = 1; j < points.length; i++, j++) {
+  const newpoints = [];
+  for (let i = 0, j = 1; j < points.length; i++, j++) {
     newpoints[i] = lerp2d(t, points[i], points[j]);
   }
   return getCurvePoint(t, newpoints);
@@ -177,22 +178,6 @@ export function getLineEndHeading(
   return 0;
 }
 
-export function vh(percent: number) {
-  var h = Math.max(
-    document.documentElement.clientHeight,
-    window.innerHeight || 0,
-  );
-  return (percent * h) / 100;
-}
-
-export function vw(percent: number) {
-  var w = Math.max(
-    document.documentElement.clientWidth,
-    window.innerWidth || 0,
-  );
-  return (percent * w) / 100;
-}
-
 /**
  * Convert a Catmull-Rom segment to a cubic Bezier control pair.
  * scaledTension should be tension/3 like in the Java implementation.
@@ -232,7 +217,11 @@ export function catmullToCubic(
 export function curveThroughPoints(
   tension: number,
   poses: { x: number; y: number }[],
-): { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] {
+): {
+  cp1: { x: number; y: number };
+  cp2: { x: number; y: number };
+  end: { x: number; y: number };
+}[] {
   if (!poses || poses.length < 3) return [];
 
   // Clone to avoid mutating input
@@ -245,7 +234,11 @@ export function curveThroughPoints(
   pts.push({ x: last.x + diff.x, y: last.y + diff.y });
 
   const scaledTension = tension / 3.0;
-  const out: { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+  const out: {
+    cp1: { x: number; y: number };
+    cp2: { x: number; y: number };
+    end: { x: number; y: number };
+  }[] = [];
 
   // For i = 1 .. pts.length-3 produce segment between pts[i] and pts[i+1]
   for (let i = 1; i < pts.length - 2; i++) {

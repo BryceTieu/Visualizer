@@ -1,7 +1,14 @@
 <script lang="ts">
-  import type { Point } from "../../types";
+  import { stopPropagation } from "svelte/legacy";
 
-  export let startPoint: Point;
+  import type { Point } from "../../types";
+  import { FIELD_SIZE } from "../../config";
+
+  interface Props {
+    startPoint: Point;
+  }
+
+  let { startPoint = $bindable() }: Props = $props();
 </script>
 
 <div class="flex flex-col w-full justify-start items-start gap-2">
@@ -9,11 +16,13 @@
     <div class="font-semibold flex items-center gap-2">
       Starting Point
       <button
-        title={startPoint.locked ? "Unlock Starting Point" : "Lock Starting Point"}
-        on:click|stopPropagation={() => {
+        title={startPoint.locked
+          ? "Unlock Starting Point"
+          : "Lock Starting Point"}
+        onclick={stopPropagation(() => {
           startPoint.locked = !startPoint.locked;
           startPoint = { ...startPoint };
-        }}
+        })}
         class="p-1 rounded transition-colors duration-250"
       >
         {#if startPoint.locked}
@@ -56,7 +65,7 @@
       <span class="font-extralight">Name</span>
       <input
         value={startPoint.name ?? ""}
-        on:input={(e) => {
+        oninput={(e) => {
           startPoint.name = e.currentTarget.value;
           startPoint = { ...startPoint };
         }}
@@ -72,7 +81,7 @@
       <input
         bind:value={startPoint.x}
         min="0"
-        max="141.5"
+        max={FIELD_SIZE}
         type="number"
         class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
         step="0.1"
@@ -85,7 +94,7 @@
       <input
         bind:value={startPoint.y}
         min="0"
-        max="141.5"
+        max={FIELD_SIZE}
         type="number"
         class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
         step="0.1"

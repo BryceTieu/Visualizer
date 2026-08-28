@@ -1,6 +1,6 @@
-@import "tailwindcss/base";
-@import "tailwindcss/components";
-@import "tailwindcss/utilities";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Global text selection styling to avoid white flash */
 *::selection {
@@ -13,7 +13,7 @@
   color: inherit;
 }
 
-// Modern animations
+/* Modern animations */
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -56,7 +56,7 @@
   }
 }
 
-// Smooth button transitions
+/* Smooth button transitions */
 button {
   @apply transition-colors duration-300 outline-none ring-0;
 
@@ -65,21 +65,21 @@ button {
   }
 }
 
-// Smooth input transitions
+/* Smooth input transitions */
 input,
 textarea,
 select {
   @apply transition-all duration-300 outline-none ring-0;
 
-  // Default to dark text so inputs with a white/light background (light theme)
-  // remain readable. Concrete color classes on an element win over this.
+  /* Default to dark text so inputs with a white/light background (light theme) */
+  /* remain readable. Concrete color classes on an element win over this. */
   color: #161616;
 
   &:focus {
     @apply ring-offset-0 ring-0 outline-none;
   }
 
-  // In dark theme the app chrome + inputs are dark, so use light text instead.
+  /* In dark theme the app chrome + inputs are dark, so use light text instead. */
   &::placeholder {
     color: #888888;
   }
@@ -96,15 +96,15 @@ select {
   }
 }
 
-// In dark theme the app chrome + inputs use dark surfaces, so flip the
-// default input text back to light so it stays readable.
+/* In dark theme the app chrome + inputs use dark surfaces, so flip the */
+/* default input text back to light so it stays readable. */
 .dark input,
 .dark textarea,
 .dark select {
   color: var(--ui-text);
 }
 
-// Card hover effects
+/* Card hover effects */
 .card-hover {
   @apply transition-all duration-300 ease-out;
 
@@ -339,6 +339,23 @@ img[alt="Robot"] {
   border-radius: 999rem;
 }
 
+/* Flatten Tailwind rounding/shadows inside console surfaces so nested
+   utility-styled markup matches the squared-off console look. */
+.console-flat .rounded,
+.console-flat .rounded-md,
+.console-flat .rounded-lg,
+.console-flat .rounded-full {
+  border-radius: 0 !important;
+}
+
+.console-flat .shadow-sm,
+.console-flat .shadow-md,
+.console-flat .shadow-lg,
+.console-flat .shadow-xl,
+.console-flat .shadow-2xl {
+  box-shadow: none !important;
+}
+
 body {
   background: radial-gradient(circle at 20% -15%, #1a1a1a 0%, var(--ui-bg) 46%);
   color: var(--ui-text);
@@ -350,7 +367,10 @@ body {
 
 .desktop-grid {
   display: grid;
-  grid-template-columns: var(--left-panel-width, 330px) 18px minmax(0, 1fr) 18px var(--right-panel-width, 360px);
+  grid-template-columns: var(--left-panel-width, 330px) 18px minmax(
+      0,
+      1fr
+    ) 18px var(--right-panel-width, 360px);
   gap: 0;
   align-items: stretch;
 }
@@ -764,11 +784,12 @@ body {
   font-size: 0.74rem;
 }
 
-
-
 @media (max-width: 1300px) {
   .desktop-grid {
-    grid-template-columns: minmax(250px, 0.85fr) minmax(520px, 1.8fr) minmax(300px, 1fr);
+    grid-template-columns: minmax(250px, 0.85fr) minmax(520px, 1.8fr) minmax(
+        300px,
+        1fr
+      );
   }
 }
 

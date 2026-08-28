@@ -1,15 +1,20 @@
 <script lang="ts">
-  import type { FieldPoint, Point, Line, Shape, Settings, SequenceItem } from "../types";
+  import { run } from "svelte/legacy";
+
+  import type {
+    FieldPoint,
+    Point,
+    Line,
+    Shape,
+    Settings,
+    SequenceItem,
+  } from "../types";
   import { onMount, onDestroy } from "svelte";
   import {
-    showRuler,
-    showProtractor,
     showGrid,
-    protractorLockToRobot,
     gridSize,
     currentFilePath,
     isUnsaved,
-    snapToGrid,
     dualPathMode,
     activePaths,
   } from "../stores";
@@ -23,71 +28,102 @@
   import ExportCodeDialog from "./components/ExportCodeDialog.svelte";
   import MultiplePathsDialog from "./components/MultiplePathsDialog.svelte";
   import { calculatePathTime, formatTime } from "../utils";
+  import { basename, pathStem } from "../utils/filename";
+  import { downloadBlob } from "../utils/download";
+  import NavDivider from "./components/ui/NavDivider.svelte";
+  import ViewToggles from "./components/ViewToggles.svelte";
   import html2canvas from "html2canvas";
 
-  export let loadFile: (evt: any) => any;
+  interface Props {
+    loadFile: (evt: any) => any;
+    startPoint: Point;
+    lines: Line[];
+    shapes: Shape[];
+    sequence: SequenceItem[];
+    fieldPoints?: FieldPoint[];
+    secondStartPoint?: Point | null;
+    secondLines?: Line[];
+    secondShapes?: Shape[];
+    secondSequence?: SequenceItem[];
+    percent?: number;
+    settings: Settings;
+    saveProject: () => any;
+    saveFileAs: () => any;
+    undoAction: () => any;
+    redoAction: () => any;
+    recordChange: () => any;
+    canUndo: boolean;
+    canRedo: boolean;
+    optimizeAllLines: () => Promise<void>;
+    optimizingAll?: boolean;
+    twoElement?: HTMLDivElement | null;
+    exportPathAsGif: () => Promise<void>;
+  }
 
-  export let startPoint: Point;
-  export let lines: Line[];
-  export let shapes: Shape[];
-  export let sequence: SequenceItem[];
-  export let fieldPoints: FieldPoint[] = [];
-  export let secondStartPoint: Point | null = null;
-  export let secondLines: Line[] = [];
-  export let secondShapes: Shape[] = [];
-  export let secondSequence: SequenceItem[] = [];
-  export let percent: number = 0;
-  export let robotWidth: number;
-  export let robotHeight: number;
-  export let settings: Settings;
+  let {
+    loadFile,
+    startPoint = $bindable(),
+    lines = $bindable(),
+    shapes = $bindable(),
+    sequence = $bindable(),
+    fieldPoints = $bindable([]),
+    secondStartPoint = $bindable(null),
+    secondLines = $bindable([]),
+    secondShapes = $bindable([]),
+    secondSequence = $bindable([]),
+    percent = 0,
+    settings = $bindable(),
+    saveProject,
+    saveFileAs,
+    undoAction,
+    redoAction,
+    recordChange,
+    canUndo,
+    canRedo,
+    optimizeAllLines,
+    optimizingAll = false,
+    twoElement = null,
+    exportPathAsGif,
+  }: Props = $props();
 
-  export let saveProject: () => any;
-  export let saveFileAs: () => any;
-  export let undoAction: () => any;
-  export let redoAction: () => any;
-  export let recordChange: () => any;
-  export let canUndo: boolean;
-  export let canRedo: boolean;
-  export let optimizeAllLines: () => Promise<void>;
-  export let optimizingAll: boolean = false;
-  export let twoElement: HTMLDivElement | null = null;
-  export let playing: boolean = false;
-  export let play: () => void;
-  export let pause: () => void;
-  export let exportPathAsGif: () => Promise<void>;
-
-  $: playing;
-  $: play;
-  $: pause;
-
-  let fileManagerOpen = false;
-  let settingsOpen = false;
-  let exportMenuOpen = false;
-  let exportDialogOpen = false;
-  let exportDialog: ExportCodeDialog;
-  let multiplePathsDialogOpen = false;
+  let fileManagerOpen = $state(false);
+  let settingsOpen = $state(false);
+  let exportMenuOpen = $state(false);
+  let exportDialogOpen = $state(false);
+  let exportDialog = $state<ExportCodeDialog>()!;
+  let multiplePathsDialogOpen = $state(false);
   // Hide sequential export UI by default; backend generator remains available
   const showSequentialExport = false;
 
-  let saveDropdownOpen = false;
-  let saveDropdownRef: HTMLElement;
-  let saveButtonRef: HTMLElement;
+  let saveDropdownOpen = $state(false);
+  let saveDropdownRef = $state<HTMLElement>();
+  let saveButtonRef = $state<HTMLElement>();
+  let exportMenuRef = $state<HTMLElement>();
+  let exportButtonRef = $state<HTMLElement>();
 
-  let selectedGridSize = 12;
+  let selectedGridSize = $state(12);
   const gridSizeOptions = [0, 1, 3, 6, 12];
 
   // Ensure File Manager and Export dialog are mutually exclusive
-  $: if (fileManagerOpen && exportDialogOpen) {
-    exportDialogOpen = false;
-  }
+  run(() => {
+    if (fileManagerOpen && exportDialogOpen) {
+      exportDialogOpen = false;
+    }
+  });
 
   // Ensure save dropdown and export menu are mutually exclusive
-  $: if (saveDropdownOpen && exportMenuOpen) {
-    exportMenuOpen = false;
-  }
+  run(() => {
+    if (saveDropdownOpen && exportMenuOpen) {
+      exportMenuOpen = false;
+    }
+  });
 
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
-  $: elapsedSeconds = (percent / 100) * (timePrediction?.totalTime || 0);
+  let timePrediction = $derived(
+    calculatePathTime(startPoint, lines, settings, sequence),
+  );
+  let elapsedSeconds = $derived(
+    (percent / 100) * (timePrediction?.totalTime || 0),
+  );
 
   onMount(() => {
     const unsubscribeGridSize = gridSize.subscribe((value) => {
@@ -150,22 +186,20 @@
       // Convert canvas to blob and download
       canvas.toBlob((blob) => {
         if (blob) {
-          const downloadUrl = URL.createObjectURL(blob);
-          const link = document.createElement("a");
           const fileName = $currentFilePath
-            ? $currentFilePath.split(/[\/\\]/).pop()?.replace(/\.pp$/, "")
+            ? pathStem($currentFilePath)
             : "field";
-          link.download = `${fileName}_field.png`;
-          link.href = downloadUrl;
-          link.click();
-          URL.revokeObjectURL(downloadUrl);
+          downloadBlob(blob, `${fileName}_field.png`);
         } else {
           alert("Failed to create image blob.");
         }
       });
     } catch (error) {
       console.error("Export error:", error);
-      alert("Failed to export field as image: " + (error instanceof Error ? error.message : String(error)));
+      alert(
+        "Failed to export field as image: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
     }
   }
 
@@ -189,7 +223,7 @@
 
     if (hasChanges) {
       if ($currentFilePath) {
-        message += `This will reset "${$currentFilePath.split(/[\\/]/).pop()}" to the default path.`;
+        message += `This will reset "${basename($currentFilePath)}" to the default path.`;
       } else {
         message += "This will reset your current work to the default path.";
       }
@@ -209,28 +243,24 @@
     }
   }
 
-  $: if (settings) {
-    settings.rHeight = robotHeight;
-    settings.rWidth = robotWidth;
+  function isOutside(event: MouseEvent, ...refs: (HTMLElement | undefined)[]) {
+    return refs.every((ref) => ref && !ref.contains(event.target as Node));
   }
 
   function handleClickOutside(event: MouseEvent) {
-    if (
-      saveDropdownOpen &&
-      saveDropdownRef &&
-      !saveDropdownRef.contains(event.target as Node) &&
-      saveButtonRef &&
-      !saveButtonRef.contains(event.target as Node)
-    ) {
+    if (saveDropdownOpen && isOutside(event, saveDropdownRef, saveButtonRef)) {
       saveDropdownOpen = false;
+    }
+    if (exportMenuOpen && isOutside(event, exportMenuRef, exportButtonRef)) {
+      exportMenuOpen = false;
     }
   }
 
   // Handle Escape key to close dropdown
   function handleKeyDown(event: KeyboardEvent) {
-    if (saveDropdownOpen && event.key === "Escape") {
-      saveDropdownOpen = false;
-    }
+    if (event.key !== "Escape") return;
+    saveDropdownOpen = false;
+    exportMenuOpen = false;
   }
 
   onMount(() => {
@@ -242,7 +272,6 @@
     document.removeEventListener("click", handleClickOutside);
     document.removeEventListener("keydown", handleKeyDown);
   });
-
 </script>
 
 {#if fileManagerOpen}
@@ -263,9 +292,9 @@
 <ExportCodeDialog
   bind:this={exportDialog}
   bind:isOpen={exportDialogOpen}
-  bind:startPoint
-  bind:lines
-  bind:sequence
+  {startPoint}
+  {lines}
+  {sequence}
 />
 
 <SettingsDialog bind:isOpen={settingsOpen} bind:settings />
@@ -279,7 +308,7 @@
       <!-- File manager button -->
       <button
         title="File Manager"
-        on:click={() => {
+        onclick={() => {
           exportDialogOpen = false;
           fileManagerOpen = true;
         }}
@@ -325,7 +354,7 @@
         <span
           class="text-sm font-normal text-neutral-600 dark:text-neutral-300"
         >
-          {$currentFilePath.split(/[\\/]/).pop()}
+          {basename($currentFilePath)}
           {#if $isUnsaved}
             <span class="text-amber-500 font-bold ml-1" title="Unsaved changes"
               >*</span
@@ -342,14 +371,16 @@
       <!-- time estimate -->
       <div class="flex items-center gap-2 text-sm">
         <div class="text-neutral-600 dark:text-neutral-300">
-            {#if timePrediction && timePrediction.totalTime > 0}
-              {formatTime(elapsedSeconds)} / {formatTime(timePrediction.totalTime)}
-            {:else}
-              {formatTime(0)} / {formatTime(0)}
-            {/if}
+          {#if timePrediction && timePrediction.totalTime > 0}
+            {formatTime(elapsedSeconds)} / {formatTime(
+              timePrediction.totalTime,
+            )}
+          {:else}
+            {formatTime(0)} / {formatTime(0)}
+          {/if}
         </div>
         <div class="text-neutral-500 dark:text-neutral-400">
-            ({(timePrediction?.totalDistance ?? 0).toFixed(0)} in)
+          ({(timePrediction?.totalDistance ?? 0).toFixed(0)} in)
         </div>
       </div>
 
@@ -357,7 +388,7 @@
         <button
           class="console-trigger console-trigger--accent relative text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           title="Optimize all paths"
-          on:click={optimizeAllLines}
+          onclick={optimizeAllLines}
           disabled={optimizingAll}
         >
           {optimizingAll ? "Optimizing All…" : "Optimize All"}
@@ -368,7 +399,7 @@
       <div class="flex items-center gap-2">
         <button
           title="Undo"
-          on:click={undoAction}
+          onclick={undoAction}
           disabled={!canUndo}
           class:opacity-50={!canUndo}
           class="console-icon-button disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
@@ -390,7 +421,7 @@
         </button>
         <button
           title="Redo"
-          on:click={redoAction}
+          onclick={redoAction}
           disabled={!canRedo}
           class:opacity-50={!canRedo}
           class="console-icon-button disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
@@ -413,190 +444,18 @@
       </div>
     </div>
 
-    <!-- Divider -->
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
-    <!-- Snap to grid toggle -->
-    {#if $showGrid}
-      <button
-        title={$snapToGrid ? "Disable Snap to Grid" : "Enable Snap to Grid"}
-        on:click={() => snapToGrid.update((v) => !v)}
-        class:text-[#888888]={$snapToGrid && $showGrid}
-        class:text-gray-400={!$showGrid}
-        class:opacity-50={!$showGrid}
-        class="console-icon-button"
-        disabled={!$showGrid}
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          width="24"
-          height="24"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        >
-          <!-- When snapped, show magnet icon -->
-          <path
-            d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"
-          ></path>
-          <path d="m5 8 4 4"></path>
-          <path d="m12 15 4 4"></path>
-
-          <!-- If the snap is disabled, turn the icon grey, not white -->
-          {#if !$snapToGrid}
-            <line x1="23" y1="23" x2="1" y2="1"></line>
-            class="opacity-50"
-          {/if}
-        </svg>
-      </button>
-    {/if}
-
-    <!-- Grid toggle -->
-    <button
-      title={$showGrid ? `Grid: ${selectedGridSize}" (click to cycle)` : "Toggle Grid"}
-      on:click={cycleGridSize}
-      class:text-blue-500={$showGrid}
-      class="console-icon-button relative"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-        <line x1="3" y1="9" x2="21" y2="9"></line>
-        <line x1="3" y1="15" x2="21" y2="15"></line>
-        <line x1="9" y1="3" x2="9" y2="21"></line>
-        <line x1="15" y1="3" x2="15" y2="21"></line>
-      </svg>
-      {#if $showGrid}
-        <span class="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs font-semibold whitespace-nowrap">
-          {selectedGridSize}"
-        </span>
-      {/if}
-    </button>
-
-    <!-- Ruler toggle -->
-    <button
-      title="Toggle Ruler"
-      on:click={() => showRuler.update((v) => !v)}
-      class:text-blue-500={$showRuler}
-      class="console-icon-button"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path
-          d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0z"
-        ></path>
-        <path d="m14.5 12.5 2-2"></path>
-        <path d="m11.5 9.5 2-2"></path>
-        <path d="m8.5 6.5 2-2"></path>
-        <path d="m17.5 15.5 2-2"></path>
-      </svg>
-    </button>
-
-    <!-- Protractor lock to robot toggle -->
-    {#if $showProtractor}
-      <button
-        title={$protractorLockToRobot
-          ? "Unlock Protractor from Robot"
-          : "Lock Protractor to Robot"}
-        on:click={() => protractorLockToRobot.update((v) => !v)}
-        class:text-amber-500={$protractorLockToRobot}
-        class="console-icon-button"
-      >
-        {#if $protractorLockToRobot}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-        {:else}
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
-          </svg>
-        {/if}
-      </button>
-    {/if}
-
-    <!-- Protractor toggle -->
-
-    <button
-      title="Toggle Protractor"
-      on:click={() => showProtractor.update((v) => !v)}
-      class:text-blue-500={$showProtractor}
-      class="console-icon-button"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="24"
-        height="24"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <path d="M12 21a9 9 0 1 1 0-18c2.52 0 4.93 1 6.74 2.74L21 8"></path>
-        <path d="M12 3v6l3.7 2.7"></path>
-      </svg>
-    </button>
-
-    <!-- Divider -->
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <ViewToggles {selectedGridSize} onCycleGridSize={cycleGridSize} />
+    <NavDivider />
 
     <!-- Multiple Paths Toggle -->
     <button
       title="Manage Multiple Paths Visualization"
-      on:click={() => (multiplePathsDialogOpen = true)}
-        class="console-trigger relative text-sm"
-        class:console-trigger--active={$activePaths.length > 0}
-        class:console-trigger--muted={$activePaths.length === 0}
+      onclick={() => (multiplePathsDialogOpen = true)}
+      class="console-trigger relative text-sm"
+      class:console-trigger--active={$activePaths.length > 0}
+      class:console-trigger--muted={$activePaths.length === 0}
     >
       <div class="flex items-center gap-1.5">
         <svg
@@ -615,16 +474,14 @@
         </svg>
         <span>Multiple Paths</span>
         {#if $activePaths.length > 0}
-          <span class="console-badge ml-1 px-1.5 py-0.5 text-xs font-bold">{$activePaths.length}</span>
+          <span class="console-badge ml-1 px-1.5 py-0.5 text-xs font-bold"
+            >{$activePaths.length}</span
+          >
         {/if}
       </div>
     </button>
 
-    <!-- Divider -->
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
     <div class="flex items-center gap-3">
       <!-- Load trajectory from file -->
@@ -632,7 +489,7 @@
         id="file-input"
         type="file"
         accept=".pp"
-        on:change={loadFile}
+        onchange={loadFile}
         class="hidden"
       />
       <label
@@ -661,7 +518,7 @@
         <button
           bind:this={saveButtonRef}
           title="Save options"
-          on:click={() => (saveDropdownOpen = !saveDropdownOpen)}
+          onclick={() => (saveDropdownOpen = !saveDropdownOpen)}
           class="console-icon-button"
           aria-expanded={saveDropdownOpen}
           aria-label="Save options"
@@ -691,7 +548,7 @@
           >
             <!-- Save option -->
             <button
-              on:click={() => {
+              onclick={() => {
                 saveProject();
                 saveDropdownOpen = false;
               }}
@@ -717,9 +574,12 @@
                 <span class="console-menu-item-title">Save</span>
                 <span class="console-menu-item-subtitle">
                   {#if $currentFilePath}
-                    Overwrite the current project file in app storage ({$currentFilePath.split(/[\/]/).pop()})
+                    Overwrite the current project file in app storage ({basename(
+                      $currentFilePath,
+                    )})
                   {:else}
-                    No project file selected — this will download the path as a new file to your computer
+                    No project file selected — this will download the path as a
+                    new file to your computer
                   {/if}
                 </span>
               </div>
@@ -727,7 +587,7 @@
 
             <!-- Save As option -->
             <button
-              on:click={() => {
+              onclick={() => {
                 saveFileAs();
                 saveDropdownOpen = false;
               }}
@@ -752,7 +612,8 @@
               <div class="flex flex-col">
                 <span class="console-menu-item-title">Save As</span>
                 <span class="console-menu-item-subtitle">
-                  Create a new project file (choose a filename) or download a new .pp to your computer
+                  Create a new project file (choose a filename) or download a
+                  new .pp to your computer
                 </span>
               </div>
             </button>
@@ -762,8 +623,9 @@
 
       <div class="relative">
         <button
+          bind:this={exportButtonRef}
           title="Export path"
-          on:click={() => (exportMenuOpen = !exportMenuOpen)}
+          onclick={() => (exportMenuOpen = !exportMenuOpen)}
           class="console-icon-button"
         >
           <svg
@@ -784,42 +646,40 @@
 
         {#if exportMenuOpen}
           <div
+            bind:this={exportMenuRef}
             class="console-panel console-menu absolute right-0 mt-2 w-48 z-50"
           >
             <button
-              on:click={() => handleExport("java")}
+              onclick={() => handleExport("java")}
               class="console-menu-item"
             >
               Java Code
             </button>
             <button
-              on:click={() => handleExport("kotlin")}
+              onclick={() => handleExport("kotlin")}
               class="console-menu-item"
             >
               Kotlin Code
             </button>
             <button
-              on:click={() => handleExport("points")}
+              onclick={() => handleExport("points")}
               class="console-menu-item"
             >
               Points Array
             </button>
             {#if showSequentialExport}
               <button
-                on:click={() => handleExport("sequential")}
+                onclick={() => handleExport("sequential")}
                 class="console-menu-item"
               >
                 Sequential Command
               </button>
             {/if}
-            <button
-              on:click={exportFieldAsImage}
-              class="console-menu-item"
-            >
+            <button onclick={exportFieldAsImage} class="console-menu-item">
               Field as Image
             </button>
             <button
-              on:click={async () => {
+              onclick={async () => {
                 exportMenuOpen = false;
                 await exportPathAsGif();
               }}
@@ -832,16 +692,13 @@
       </div>
     </div>
 
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
     <div class="flex items-center gap-3">
       <!-- Delete/Reset path -->
       <button
         title="Delete/Reset path"
-        on:click={handleResetPathWithConfirmation}
+        onclick={handleResetPathWithConfirmation}
         class="console-icon-button relative group"
       >
         <svg
@@ -861,14 +718,18 @@
 
         <!-- Tooltip for better UX -->
         <div
-          class="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-xs text-center whitespace-normal max-w-[12rem] shadow-md"
+          class="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-xs text-center whitespace-normal max-w-48 shadow-md"
         >
           Reset path to default (with confirmation)
         </div>
       </button>
 
       <!-- Settings button -->
-      <button title="Open Settings" on:click={() => (settingsOpen = true)} class="console-icon-button">
+      <button
+        title="Open Settings"
+        onclick={() => (settingsOpen = true)}
+        class="console-icon-button"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"
