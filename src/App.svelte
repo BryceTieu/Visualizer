@@ -38,6 +38,41 @@
   import { buildProject } from "./utils/project";
   import { basename, pathStem } from "./utils/filename";
   import { buildPathElements } from "./lib/scene/paths";
+  import { fitStrokeToLines } from "./lib/pen/strokeFitting";
+  import {
+    resolvePointRef,
+    snapPointToGrid,
+    type PointRefContext,
+  } from "./lib/canvas/pointRefs";
+  import {
+    SIDE_PANEL_MIN_WIDTH,
+    PANEL_DIVIDER_WIDTH,
+    clampPanelWidth,
+    getCenterWidth,
+    getMinCenterWidthForSquare,
+    getRightPanelMinWidth,
+    getTotalAvailableWidth,
+  } from "./lib/panels/panelLayout";
+  import {
+    GIF_EXPORT_FPS,
+    GIF_EXPORT_QUALITY,
+    GIF_EXPORT_SCALE,
+    computeGifDuration,
+    createImageLoader,
+    createRobotDrawer,
+    formatGifProgressStatus,
+    resolveGifFileName,
+  } from "./lib/export/gifExport";
+  import {
+    applyOptimizedWaypoints,
+    buildOptimizationPayload,
+    runOptimization,
+  } from "./lib/optimizer/optimizer";
+  import {
+    clamp,
+    clampFieldCoordinate,
+    distanceBetweenPoints,
+  } from "./utils/math";
   import {
     buildPathPointMarkers,
     buildSelectedPointRing,
@@ -59,6 +94,7 @@
     getRandomColor,
     normalizeLines,
     makeLineId,
+    createLine,
     downloadTrajectory,
     loadTrajectoryFromFile,
     updateRobotImageDisplay,
@@ -74,7 +110,16 @@
     getDefaultLines,
     getDefaultShapes,
   } from "./config";
-  import { loadSettings, saveSettings } from "./utils/settingsPersistence";
+  import {
+    loadSettings,
+    saveSettings,
+    normalizeLegacyFieldMap,
+  } from "./utils/settingsPersistence";
+  import {
+    loadSessionSnapshot,
+    saveSessionSnapshot,
+    type SessionSnapshot,
+  } from "./lib/session/sessionSnapshot";
   import * as browserFileStore from "./utils/browserFileStore";
   import { onDestroy, onMount, tick } from "svelte";
   import { debounce } from "lodash";
@@ -88,10 +133,6 @@
   let fieldPointsCanvas: HTMLCanvasElement;
   let width = 0;
   let height = 0;
-  const SIDE_PANEL_MIN_WIDTH = 240;
-  const SIDE_PANEL_MAX_WIDTH = 620;
-  const CENTER_MIN_WIDTH = 300;
-  const PANEL_DIVIDER_WIDTH = 18;
   let leftPanelWidth = DEFAULT_SETTINGS.leftPanelWidth || 370;
   let rightPanelWidth = DEFAULT_SETTINGS.rightPanelWidth || 620;
   let leftPanelHidden = false;
@@ -123,24 +164,6 @@
   let startPoint: Point = getDefaultStartPoint();
   let lines: Line[] = normalizeLines(getDefaultLines());
   let fieldPoints: FieldPoint[] = [];
-
-  function normalizeLegacyFieldMap(input: Settings): Settings {
-    const next = { ...input };
-
-    if (typeof next.fieldMap === "string" && next.fieldMap.startsWith("custom||")) {
-      const [, embeddedImage = ""] = next.fieldMap.split("||");
-      next.fieldMap = "custom";
-      if (embeddedImage && !next.customFieldImage) {
-        next.customFieldImage = embeddedImage;
-      }
-    }
-
-    if (!next.fieldMap) {
-      next.fieldMap = DEFAULT_SETTINGS.fieldMap;
-    }
-
-    return next;
-  }
 
   function detectMobileDevice() {
     if (typeof window === "undefined" || typeof navigator === "undefined") {
@@ -202,18 +225,25 @@
   if (typeof window !== "undefined") {
     // Initial detection
     isMobileBlocked = detectMobileDevice();
+  }
 
-    // Re-evaluate on viewport changes which can indicate mobile/orientation changes
-    const _updateMobile = () => {
+  // Re-evaluate on viewport changes which can indicate mobile/orientation changes
+  onMount(() => {
+    const updateMobile = () => {
       try {
         isMobileBlocked = detectMobileDevice();
       } catch (e) {
         /* ignore */
       }
     };
-    window.addEventListener("resize", _updateMobile);
-    window.addEventListener("orientationchange", _updateMobile);
-  }
+    window.addEventListener("resize", updateMobile);
+    window.addEventListener("orientationchange", updateMobile);
+
+    return () => {
+      window.removeEventListener("resize", updateMobile);
+      window.removeEventListener("orientationchange", updateMobile);
+    };
+  });
   $: if (fieldMapSrc !== lastFieldMapSrc) {
     fieldMapLoaded = false;
     lastFieldMapSrc = fieldMapSrc;
@@ -261,206 +291,17 @@
   const formatPathPoint = (value: number) =>
     Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
 
-  const SESSION_RECOVERY_KEY = "pedro_session_recovery_v1";
-
-  interface SessionSnapshot {
-    startPoint: Point;
-    lines: Line[];
-    sequence: SequenceItem[];
-    shapes: Shape[];
-    settings: Settings;
-    currentFilePath: string | null;
-    secondFilePath: string | null;
-    secondStartPoint: Point | null;
-    secondLines: Line[];
-    secondSequence: SequenceItem[];
-    secondShapes: Shape[];
-    activePaths: string[];
-    timestamp: string;
-  }
-
   const history = createHistory();
   const { canUndoStore, canRedoStore } = history;
-  const OPTIMIZER_BASE_URL = "https://fpa.pedropathing.com";
 
-  function clampFieldCoordinate(value: number): number {
-    return clamp(value, 0, FIELD_SIZE);
-  }
-
-  function clamp(value: number, min: number, max: number): number {
-    return Math.min(max, Math.max(min, value));
-  }
-  function distanceBetweenPoints(a: BasePoint, b: BasePoint): number {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-  
-  function perpendicularDistance(
-    point: BasePoint,
-    lineStart: BasePoint,
-    lineEnd: BasePoint,
-  ): number {
-    const denominator = Math.hypot(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y);
-    if (denominator === 0) {
-      return distanceBetweenPoints(point, lineStart);
-    }
-  
-    const numerator = Math.abs(
-      (lineEnd.y - lineStart.y) * point.x -
-        (lineEnd.x - lineStart.x) * point.y +
-        lineEnd.x * lineStart.y -
-        lineEnd.y * lineStart.x,
-    );
-  
-    return numerator / denominator;
-  }
-  
-  function simplifyStrokePoints(points: BasePoint[], tolerance: number): BasePoint[] {
-    if (points.length <= 2) return points.map((point) => ({ ...point }));
-  
-    const simplifyRange = (startIndex: number, endIndex: number): BasePoint[] => {
-      let maxDistance = 0;
-      let farthestIndex = -1;
-  
-      for (let index = startIndex + 1; index < endIndex; index += 1) {
-        const distance = perpendicularDistance(points[index], points[startIndex], points[endIndex]);
-        if (distance > maxDistance) {
-          maxDistance = distance;
-          farthestIndex = index;
-        }
-      }
-  
-      if (maxDistance <= tolerance || farthestIndex === -1) {
-        return [{ ...points[startIndex] }, { ...points[endIndex] }];
-      }
-  
-      const left = simplifyRange(startIndex, farthestIndex);
-      const right = simplifyRange(farthestIndex, endIndex);
-      return [...left.slice(0, -1), ...right];
-    };
-  
-    return simplifyRange(0, points.length - 1);
-  }
-  
-  function dedupeStrokePoints(points: BasePoint[], minDistance: number): BasePoint[] {
-    const deduped: BasePoint[] = [];
-  
-    for (const point of points) {
-      const lastPoint = deduped[deduped.length - 1];
-      if (!lastPoint || distanceBetweenPoints(lastPoint, point) >= minDistance) {
-        deduped.push({ ...point });
-      }
-    }
-  
-    return deduped;
-  }
-
-  function getPointOnStroke(points: BasePoint[], targetDistance: number): BasePoint {
-    if (points.length === 0) return { x: 0, y: 0 };
-    if (points.length === 1) return { ...points[0] };
-
-    let remaining = targetDistance;
-
-    for (let index = 0; index < points.length - 1; index += 1) {
-      const current = points[index];
-      const next = points[index + 1];
-      const segmentLength = distanceBetweenPoints(current, next);
-
-      if (segmentLength === 0) continue;
-      if (remaining <= segmentLength) {
-        const ratio = remaining / segmentLength;
-        return {
-          x: current.x + (next.x - current.x) * ratio,
-          y: current.y + (next.y - current.y) * ratio,
-        };
-      }
-
-      remaining -= segmentLength;
-    }
-
-    return { ...points[points.length - 1] };
-  }
-
-  function sampleStrokeControlPoints(points: BasePoint[], controlPointCount: number): BasePoint[] {
-    if (points.length < 2 || controlPointCount <= 0) return [];
-
-    const totalLength = points.reduce((sum, point, index) => {
-      if (index === 0) return 0;
-      return sum + distanceBetweenPoints(points[index - 1], point);
-    }, 0);
-
-    if (totalLength === 0) return [];
-
-    const sampled: BasePoint[] = [];
-    for (let index = 1; index <= controlPointCount; index += 1) {
-      const targetDistance = (totalLength * index) / (controlPointCount + 1);
-      sampled.push(getPointOnStroke(points, targetDistance));
-    }
-
-    return sampled;
-  }
-  
-  function fitStrokeToLines(
-    stroke: BasePoint[],
-    startAnchor?: BasePoint,
-  ): { startPoint: Point; lines: Line[] } | null {
-    const cleanedStroke = dedupeStrokePoints(
-      stroke.map((point) => ({
-        x: clampFieldCoordinate(point.x),
-        y: clampFieldCoordinate(point.y),
-      })),
-      0.25,
-    );
-  
-    if (cleanedStroke.length < 2) return null;
-  
-    const simplifiedStroke = simplifyStrokePoints(cleanedStroke, 0.45);
-    const strokePoints = dedupeStrokePoints(simplifiedStroke, 0.05);
-  
-    if (strokePoints.length < 2) return null;
-  
-      const maxControlPoints = Math.max(0, Math.round(Number(settings?.penToolAccuracy ?? DEFAULT_SETTINGS.penToolAccuracy)));
-      const controlPointsSource = startAnchor
-        ? [
-            { x: clampFieldCoordinate(startAnchor.x), y: clampFieldCoordinate(startAnchor.y) },
-            ...strokePoints,
-          ]
-        : strokePoints;
-      const controlPoints = sampleStrokeControlPoints(controlPointsSource, maxControlPoints);
-
-      const fittedLines: Line[] = [
-        {
-          id: makeLineId(),
-          name: "Path 1",
-          endPoint: {
-            x: strokePoints[strokePoints.length - 1].x,
-            y: strokePoints[strokePoints.length - 1].y,
-            heading: "tangential",
-            reverse: false,
-          },
-          controlPoints,
-          color: getRandomColor(),
-          waitBeforeMs: 0,
-          waitAfterMs: 0,
-          waitBeforeName: "",
-          waitAfterName: "",
-        },
-      ];
-  
-    return {
-      startPoint: {
-          x: (startAnchor?.x ?? strokePoints[0].x),
-          y: (startAnchor?.y ?? strokePoints[0].y),
-        heading: "tangential",
-        reverse: false,
-      },
-      lines: fittedLines,
-    };
-  }
-  
   function commitPenStroke() {
       const selectedLine = lines[selectedLineIndex];
       const startAnchor = selectedLine?.endPoint || undefined;
-      const fitted = fitStrokeToLines(penStroke, startAnchor);
+      const fitted = fitStrokeToLines(
+        penStroke,
+        Number(settings?.penToolAccuracy ?? DEFAULT_SETTINGS.penToolAccuracy),
+        startAnchor,
+      );
     penStroke = [];
     penIsDrawing = false;
   
@@ -503,70 +344,33 @@
     }
   }
 
-  function clampPanelWidth(
-    side: "left" | "right",
-    desiredWidth: number,
-    availableWidth: number,
-    otherPanelWidth: number,
-  ) {
-    const rightPanelMinWidth = Math.max(
-      0,
-      Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth),
-    );
-    const minWidth = side === "right" ? rightPanelMinWidth : SIDE_PANEL_MIN_WIDTH;
-    // Calculate the minimum center width needed to make the field square or wider.
-    // The field height is determined by the center-stage layout, roughly:
-    // window height - navbar (~80px) - ui-shell padding (~24px) - center-stage padding (~20px) - field-stage padding (~16px)
-    const estimatedFieldHeight = Math.max(
-      300,
-      window.innerHeight - 80 - 24 - 20 - 16 - PANEL_DIVIDER_WIDTH * 2
-    );
-    // Center must be at least as wide as the field height to avoid a tall rectangle
-    const minCenterWidthForSquare = estimatedFieldHeight;
-    // Maximum panel width is constrained so center is at least minCenterWidthForSquare
-    const maxPanelWidth = availableWidth - otherPanelWidth - minCenterWidthForSquare - PANEL_DIVIDER_WIDTH * 2;
-    // Panel cannot exceed maxPanelWidth, but must be at least minWidth
-    // If maxPanelWidth < minWidth, the panel will be shrunk to fit (making center bigger)
-    const effectiveMax = Math.max(minWidth, Math.min(SIDE_PANEL_MAX_WIDTH, maxPanelWidth));
-    return clamp(desiredWidth, minWidth, effectiveMax);
-  }
-
-  // Calculate the minimum center width needed for a square-or-wider field
-  function getMinCenterWidthForSquare(): number {
-    // Estimate field height: window height minus navbar, padding, and dividers
-    const estimatedFieldHeight = Math.max(
-      300,
-      window.innerHeight - 80 - 24 - 20 - 16 - PANEL_DIVIDER_WIDTH * 2
-    );
-    return estimatedFieldHeight;
-  }
-
   // Reactive center width calculation for the field constraint
-  $: centerWidth = Math.max(
-    300,
-    window.innerWidth - 24 - (leftPanelHidden ? 0 : leftPanelWidth) - (rightPanelHidden ? 0 : rightPanelWidth) - PANEL_DIVIDER_WIDTH * 2
+  $: centerWidth = getCenterWidth(
+    leftPanelWidth,
+    rightPanelWidth,
+    leftPanelHidden,
+    rightPanelHidden,
   );
 
   // Calculate available width for panels after ensuring center is at least square
   // If default panel sizes would make center too small, panels auto-shrink
   $: {
-    const minCenterWidth = getMinCenterWidthForSquare();
-    const totalAvailable = window.innerWidth - 24 - PANEL_DIVIDER_WIDTH * 2;
-    const availableForPanels = totalAvailable - minCenterWidth;
-    
+    const availableForPanels =
+      getTotalAvailableWidth() - getMinCenterWidthForSquare();
+
     // Auto-shrink left panel if needed to fit
     if (!leftPanelHidden) {
-      const rightMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const rightMinWidth = getRightPanelMinWidth(settings);
       const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
       const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
       const desiredLeft = Number(settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 240);
       leftPanelWidth = clamp(desiredLeft, SIDE_PANEL_MIN_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, maxLeft));
     }
-    
+
     // Auto-shrink right panel if needed to fit
     if (!rightPanelHidden) {
       const leftWidth = leftPanelHidden ? 0 : leftPanelWidth;
-      const rightMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+      const rightMinWidth = getRightPanelMinWidth(settings);
       const maxRight = Math.max(rightMinWidth, availableForPanels - leftWidth);
       const desiredRight = Number(settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 360);
       rightPanelWidth = clamp(desiredRight, rightMinWidth, Math.max(rightMinWidth, maxRight));
@@ -607,13 +411,13 @@
       const otherWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
       const desiredWidth = panelResizeState.startWidth + (event.clientX - panelResizeState.startX);
       leftPanelHidden = false;
-      leftPanelWidth = clampPanelWidth("left", desiredWidth, availableWidth, otherWidth);
+      leftPanelWidth = clampPanelWidth("left", desiredWidth, availableWidth, otherWidth, settings);
       settings.leftPanelWidth = leftPanelWidth;
     } else {
       const otherWidth = leftPanelHidden ? 0 : leftPanelWidth;
       const desiredWidth = panelResizeState.startWidth - (event.clientX - panelResizeState.startX);
       rightPanelHidden = false;
-      rightPanelWidth = clampPanelWidth("right", desiredWidth, availableWidth, otherWidth);
+      rightPanelWidth = clampPanelWidth("right", desiredWidth, availableWidth, otherWidth, settings);
       settings.rightPanelWidth = rightPanelWidth;
     }
   }
@@ -624,6 +428,26 @@
 
   function toggleRightPanelVisibility() {
     rightPanelHidden = !rightPanelHidden;
+  }
+
+  function pointRefContext(): PointRefContext {
+    return {
+      startPoint,
+      lines,
+      secondStartPoint,
+      secondLines,
+      additionalPaths,
+      shapes,
+      obstaclesEnabled: Boolean(settings?.experimentalFeatures?.obstacles),
+    };
+  }
+
+  function gridSnapOptions() {
+    return {
+      snapToGrid: $snapToGrid,
+      showGrid: $showGrid,
+      gridSize: $gridSize,
+    };
   }
 
   function getMouseFieldPoint(evt: MouseEvent): BasePoint | null {
@@ -827,56 +651,27 @@
   }
 
   function restoreSessionSnapshot(): boolean {
-    try {
-      const raw = localStorage.getItem(SESSION_RECOVERY_KEY);
-      if (!raw) return false;
+    const snapshot = loadSessionSnapshot();
+    if (!snapshot) return false;
 
-      const parsed: SessionSnapshot = JSON.parse(raw);
-      if (!parsed?.startPoint || !Array.isArray(parsed?.lines)) {
-        return false;
-      }
+    startPoint = snapshot.startPoint;
+    lines = snapshot.lines;
+    sequence = snapshot.sequence;
+    shapes = snapshot.shapes;
+    settings = snapshot.settings;
 
-      startPoint = parsed.startPoint;
+    currentFilePath.set(snapshot.currentFilePath);
+    secondFilePath.set(snapshot.secondFilePath);
 
-      const restoredLines = normalizeLines(parsed.lines || []);
-      lines = restoredLines;
+    secondStartPoint = snapshot.secondStartPoint;
+    secondLines = snapshot.secondLines;
+    secondSequence = snapshot.secondSequence;
+    secondShapes = snapshot.secondShapes;
 
-      sequence =
-        parsed.sequence && parsed.sequence.length
-          ? parsed.sequence
-          : restoredLines.map((ln) => ({
-              kind: "path",
-              lineId: ln.id!,
-            }));
+    activePaths.set(snapshot.activePaths);
+    isUnsaved.set(true);
 
-      shapes = parsed.shapes || [];
-      settings = normalizeLegacyFieldMap({
-        ...DEFAULT_SETTINGS,
-        ...(parsed.settings || {}),
-      });
-
-      currentFilePath.set(parsed.currentFilePath || null);
-      secondFilePath.set(parsed.secondFilePath || null);
-
-      secondStartPoint = parsed.secondStartPoint || null;
-      secondLines = normalizeLines(parsed.secondLines || []);
-      secondSequence =
-        parsed.secondSequence && parsed.secondSequence.length
-          ? parsed.secondSequence
-          : secondLines.map((ln) => ({
-              kind: "path",
-              lineId: ln.id!,
-            }));
-      secondShapes = parsed.secondShapes || [];
-
-      activePaths.set(parsed.activePaths || []);
-      isUnsaved.set(true);
-
-      return true;
-    } catch (error) {
-      console.error("Session restore failed:", error);
-      return false;
-    }
+    return true;
   }
   
   let secondRobotXY: BasePoint = { x: 0, y: 0 };
@@ -1199,23 +994,17 @@
   function clampAllPanels() {
     if (typeof window === "undefined") return;
     const availableWidth = Math.max(0, window.innerWidth - 24);
-    const rightPanelMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
+    const rightPanelMinWidth = getRightPanelMinWidth(settings);
     const otherForLeft = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
-    leftPanelWidth = clampPanelWidth("left", leftPanelWidth, availableWidth, otherForLeft);
+    leftPanelWidth = clampPanelWidth("left", leftPanelWidth, availableWidth, otherForLeft, settings);
     const otherForRight = leftPanelHidden ? 0 : leftPanelWidth;
-    rightPanelWidth = clampPanelWidth("right", rightPanelWidth, availableWidth, otherForRight);
+    rightPanelWidth = clampPanelWidth("right", rightPanelWidth, availableWidth, otherForRight, settings);
     settings.leftPanelWidth = leftPanelWidth;
     settings.rightPanelWidth = rightPanelWidth;
   }
 
 
-  const debouncedSaveSession = debounce((snapshot: SessionSnapshot) => {
-    try {
-      localStorage.setItem(SESSION_RECOVERY_KEY, JSON.stringify(snapshot));
-    } catch (error) {
-      console.warn("Session snapshot save failed:", error);
-    }
-  }, 750);
+  const debouncedSaveSession = debounce(saveSessionSnapshot, 750);
 
   // Watch for settings changes and save
   $: {
@@ -1304,16 +1093,20 @@
   }
 
   // Keyboard shortcut for save
-  hotkeys("cmd+s, ctrl+s", function (event, handler) {
-    event.preventDefault();
-    if ($activePaths.length > 0) {
-      // Multiple paths mode - save all modified paths
-      showDualPathSaveDialog = true;
-    } else if ($dualPathMode && secondStartPoint && secondLines.length > 0) {
-      showDualPathSaveDialog = true;
-    } else {
-      showSaveDialog = true;
-    }
+  onMount(() => {
+    hotkeys("cmd+s, ctrl+s", function (event) {
+      event.preventDefault();
+      if ($activePaths.length > 0) {
+        // Multiple paths mode - save all modified paths
+        showDualPathSaveDialog = true;
+      } else if ($dualPathMode && secondStartPoint && secondLines.length > 0) {
+        showDualPathSaveDialog = true;
+      } else {
+        showSaveDialog = true;
+      }
+    });
+
+    return () => hotkeys.unbind("cmd+s, ctrl+s");
   });
 
   // Export path animation as GIF
@@ -1346,27 +1139,8 @@
       gifExportProgress = 0;
       gifExportStatus = "Calculating animation duration...";
 
-      const scale = 0.65;
-      const viewWidth = twoElement.clientWidth;
-      const viewHeight = twoElement.clientHeight;
-      const robotPixelWidth = x(robotWidth);
-      const robotPixelHeight = x(robotHeight);
-
-      const imageCache = new Map<string, HTMLImageElement>();
-      const loadImage = (src: string) =>
-        new Promise<HTMLImageElement>((resolve, reject) => {
-          if (imageCache.has(src)) {
-            resolve(imageCache.get(src)!);
-            return;
-          }
-          const image = new Image();
-          image.onload = () => {
-            imageCache.set(src, image);
-            resolve(image);
-          };
-          image.onerror = () => reject(new Error(`Failed to load image: ${src}`));
-          image.src = src;
-        });
+      const scale = GIF_EXPORT_SCALE;
+      const loadImage = createImageLoader();
 
       const fieldImage = await loadImage(fieldMapSrc).catch(async () => {
         return loadImage("/fields/decode.webp");
@@ -1375,53 +1149,25 @@
         return loadImage("/robot.png");
       });
 
-      const drawRobot = (
-        ctx: CanvasRenderingContext2D,
-        xy: BasePoint,
-        headingDeg: number,
-        opacity = 1,
-      ) => {
-        ctx.save();
-        ctx.globalAlpha = opacity;
-        ctx.translate(xy.x * scale, xy.y * scale);
-        ctx.rotate((headingDeg * Math.PI) / 180);
-        ctx.drawImage(
-          robotImage,
-          (-robotPixelWidth * scale) / 2,
-          (-robotPixelHeight * scale) / 2,
-          robotPixelWidth * scale,
-          robotPixelHeight * scale,
-        );
-        ctx.restore();
-      };
+      const drawRobot = createRobotDrawer(
+        robotImage,
+        x(robotWidth),
+        x(robotHeight),
+        scale,
+      );
 
-      // Calculate total animation duration
-      let totalDuration = 0;
-      
-      if (hasActivePaths) {
-        // Multiple paths mode - use the longest path duration
-        for (const pathData of additionalPaths) {
-          if (!pathData.startPoint) continue;
-          const pathTime = calculatePathTime(
-            pathData.startPoint,
-            pathData.lines,
-            pathData.settings,
-            pathData.sequence
-          );
-          totalDuration = Math.max(totalDuration, pathTime?.totalTime || 0);
-        }
-      } else if (hasDualPath) {
-        // Dual path mode - use the longer path
-        const path1Time = calculatePathTime(startPoint, lines, settings, sequence);
-        const path2Time = secondStartPoint 
-          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
-          : { totalTime: 0 };
-        totalDuration = Math.max(path1Time?.totalTime || 0, path2Time?.totalTime || 0);
-      } else {
-        // Single path mode
-        const pathTime = calculatePathTime(startPoint, lines, settings, sequence);
-        totalDuration = pathTime?.totalTime || 0;
-      }
+      const totalDuration = computeGifDuration({
+        hasActivePaths,
+        hasDualPath: Boolean(hasDualPath),
+        additionalPaths,
+        startPoint,
+        lines,
+        sequence,
+        settings,
+        secondStartPoint,
+        secondLines,
+        secondSequence,
+      });
 
       if (totalDuration <= 0) {
         alert("Path duration is too short to export.");
@@ -1446,8 +1192,8 @@
       const blob = await exportAsGif({
         source: rendererElement as HTMLCanvasElement | SVGSVGElement,
         duration: durationMs,
-        fps: 20, // Higher FPS for smoother animation
-        quality: 15, // Slightly lower quality for smaller file size
+        fps: GIF_EXPORT_FPS, // Higher FPS for smoother animation
+        quality: GIF_EXPORT_QUALITY, // Slightly lower quality for smaller file size
         scale, // Lower resolution for smaller file size
         shouldCancel: () => cancelGifExport,
         onDrawBackground: (ctx, outputWidth, outputHeight) => {
@@ -1469,11 +1215,7 @@
         },
         onProgress: (progress) => {
           gifExportProgress = progress;
-          if (progress < 0.5) {
-            gifExportStatus = `Capturing frames... ${Math.round(progress * 200)}%`;
-          } else {
-            gifExportStatus = `Encoding GIF... ${Math.round((progress - 0.5) * 200)}%`;
-          }
+          gifExportStatus = formatGifProgressStatus(progress);
         },
         onFrameAdvance: async (frameIndex, totalFrames) => {
           // Calculate the percentage for this frame
@@ -1501,14 +1243,12 @@
       gifExportStatus = "Saving file...";
       
       // Download the GIF
-      const fileName = $currentFilePath
-        ? pathStem($currentFilePath)
-        : hasActivePaths
-          ? "multiple_paths"
-          : hasDualPath
-            ? "dual_path"
-            : "path_animation";
-      
+      const fileName = resolveGifFileName(
+        $currentFilePath,
+        hasActivePaths,
+        Boolean(hasDualPath),
+      );
+
       downloadBlob(blob, `${fileName}.gif`);
 
       exportingGif = false;
@@ -2018,123 +1758,38 @@
         const xPos = evt.clientX - rect.left;
         const yPos = evt.clientY - rect.top;
 
-        // Get current store values for reactivity
-        const currentGridSize = $gridSize;
-        const currentSnapToGrid = $snapToGrid;
-        const currentShowGrid = $showGrid;
-
         // Apply drag offset (in inches) to the raw mouse position
-        let rawInchX = x.invert(xPos) + dragOffset.x;
-        let rawInchY = y.invert(yPos) + dragOffset.y;
+        const { x: inchX, y: inchY } = snapPointToGrid(
+          x.invert(xPos) + dragOffset.x,
+          y.invert(yPos) + dragOffset.y,
+          gridSnapOptions(),
+        );
 
-        let inchX = rawInchX;
-        let inchY = rawInchY;
+        const ref = resolvePointRef(currentElem, pointRefContext());
+        if (!ref || ref.locked) return;
 
-        // Always apply grid snapping when enabled
-        if (currentSnapToGrid && currentShowGrid && currentGridSize > 0) {
-          // Force snap to nearest grid point
-          inchX = Math.round(rawInchX / currentGridSize) * currentGridSize;
-          inchY = Math.round(rawInchY / currentGridSize) * currentGridSize;
+        ref.point.x = inchX;
+        ref.point.y = inchY;
 
-          // Clamp to field boundaries
-          inchX = Math.max(0, Math.min(FIELD_SIZE, inchX));
-          inchY = Math.max(0, Math.min(FIELD_SIZE, inchY));
-        }
-
-        // Handle path point dragging
-        if (settings?.experimentalFeatures?.obstacles && currentElem.startsWith("obstacle-")) {
-          // Handle obstacle vertex dragging
-          const parts = currentElem.split("-");
-          const shapeIdx = Number(parts[1]);
-          const vertexIdx = Number(parts[2]);
-
-          shapes[shapeIdx].vertices[vertexIdx].x = inchX;
-          shapes[shapeIdx].vertices[vertexIdx].y = inchY;
-          // Coalesce the reactive commit to once per frame instead of per mousemove.
+        // Coalesce the reactive commit to once per frame so points live-track
+        // the mouse while the (heavy) scene recompute happens once per frame
+        // instead of on every mousemove.
+        if (ref.container === "shapes") {
           scheduleDragCommit(() => {
             shapes = [...shapes];
           });
-        } else if (currentElem.startsWith("second-point-")) {
-          // Handle second path point dragging
-          const parts = currentElem.split("-");
-          const line = Number(parts[2]) - 1;
-          const point = Number(parts[3]);
-
-          if (line === -1) {
-            // This is the second starting point
-            if (secondStartPoint?.locked) return;
-            if (secondStartPoint) {
-              secondStartPoint.x = inchX;
-              secondStartPoint.y = inchY;
-            }
-          } else if (secondLines[line]) {
-            if (point === 0 && secondLines[line].endPoint) {
-              secondLines[line].endPoint.x = inchX;
-              secondLines[line].endPoint.y = inchY;
-            } else {
-              if (secondLines[line]?.locked) return;
-              secondLines[line].controlPoints[point - 1].x = inchX;
-              secondLines[line].controlPoints[point - 1].y = inchY;
-            }
-          }
-          // Coalesce the reactive commit to once per frame instead of per mousemove.
+        } else if (ref.container === "second") {
           scheduleDragCommit(() => {
             secondLines = [...secondLines];
           });
-        } else if (currentElem.startsWith("additional-path-")) {
-          // Handle additional path point dragging
-          const parts = currentElem.split("-");
-          const pathIdx = Number(parts[2]);
-          const line = Number(parts[4]) - 1;
-          const point = Number(parts[5]);
-
-          if (!additionalPaths[pathIdx]) return;
-
-          if (line === -1) {
-            // This is the starting point
-            if (additionalPaths[pathIdx].startPoint) {
-              additionalPaths[pathIdx].startPoint.x = inchX;
-              additionalPaths[pathIdx].startPoint.y = inchY;
-            }
-          } else if (additionalPaths[pathIdx].lines[line]) {
-            if (point === 0 && additionalPaths[pathIdx].lines[line].endPoint) {
-              additionalPaths[pathIdx].lines[line].endPoint.x = inchX;
-              additionalPaths[pathIdx].lines[line].endPoint.y = inchY;
-            } else if (additionalPaths[pathIdx].lines[line].controlPoints[point - 1]) {
-              additionalPaths[pathIdx].lines[line].controlPoints[point - 1].x = inchX;
-              additionalPaths[pathIdx].lines[line].controlPoints[point - 1].y = inchY;
-            }
-          }
-          // Coalesce the reactive commit to once per frame instead of per mousemove.
+        } else if (ref.container === "additional") {
           scheduleDragCommit(() => {
             additionalPaths = [...additionalPaths];
           });
           // Debounce the auto-save so it fires after the drag settles instead of
           // writing the file on every mousemove.
-          debouncedSaveAdditionalPath(pathIdx);
+          debouncedSaveAdditionalPath(Number(currentElem.split("-")[2]));
         } else {
-          // Handle path point dragging
-          const line = Number(currentElem.split("-")[1]) - 1;
-          const point = Number(currentElem.split("-")[2]);
-
-          if (line === -1) {
-            // This is the starting point
-            if (startPoint.locked) return;
-            startPoint.x = inchX;
-            startPoint.y = inchY;
-          } else if (lines[line]) {
-            if (point === 0 && lines[line].endPoint) {
-              lines[line].endPoint.x = inchX;
-              lines[line].endPoint.y = inchY;
-            } else {
-              if (lines[line]?.locked) return;
-              lines[line].controlPoints[point - 1].x = inchX;
-              lines[line].controlPoints[point - 1].y = inchY;
-            }
-          }
-          // Coalesce the reactive commit to once per frame so main-path points
-          // live-track the mouse while the (heavy) path/scene recompute happens
-          // only once per frame instead of on every mousemove.
           scheduleDragCommit(() => {
             lines = [...lines];
           });
@@ -2213,80 +1868,11 @@
         const mouseX = x.invert(evt.clientX - rect.left);
         const mouseY = y.invert(evt.clientY - rect.top);
 
-        let objectX = 0;
-        let objectY = 0;
-
-        if (settings?.experimentalFeatures?.obstacles && currentElem.startsWith("obstacle-")) {
-          const parts = currentElem.split("-");
-          const shapeIdx = Number(parts[1]);
-          const vertexIdx = Number(parts[2]);
-          if (shapes[shapeIdx]?.vertices[vertexIdx]) {
-            objectX = shapes[shapeIdx].vertices[vertexIdx].x;
-            objectY = shapes[shapeIdx].vertices[vertexIdx].y;
-          }
-        } else if (currentElem.startsWith("second-point-")) {
-          const parts = currentElem.split("-");
-          const line = Number(parts[2]) - 1;
-          const point = Number(parts[3]);
-
-          if (line === -1) {
-            if (secondStartPoint) {
-              objectX = secondStartPoint.x;
-              objectY = secondStartPoint.y;
-            }
-          } else if (secondLines[line]) {
-            if (point === 0 && secondLines[line].endPoint) {
-              objectX = secondLines[line].endPoint.x;
-              objectY = secondLines[line].endPoint.y;
-            } else if (secondLines[line].controlPoints[point - 1]) {
-              objectX = secondLines[line].controlPoints[point - 1].x;
-              objectY = secondLines[line].controlPoints[point - 1].y;
-            }
-          }
-        } else if (currentElem.startsWith("additional-path-")) {
-          const parts = currentElem.split("-");
-          const pathIdx = Number(parts[2]);
-          const line = Number(parts[4]) - 1;
-          const point = Number(parts[5]);
-
-          if (additionalPaths[pathIdx]) {
-            if (line === -1) {
-              // Starting point
-              if (additionalPaths[pathIdx].startPoint) {
-                objectX = additionalPaths[pathIdx].startPoint.x;
-                objectY = additionalPaths[pathIdx].startPoint.y;
-              }
-            } else if (additionalPaths[pathIdx].lines[line]) {
-              if (point === 0 && additionalPaths[pathIdx].lines[line].endPoint) {
-                objectX = additionalPaths[pathIdx].lines[line].endPoint.x;
-                objectY = additionalPaths[pathIdx].lines[line].endPoint.y;
-              } else if (additionalPaths[pathIdx].lines[line].controlPoints[point - 1]) {
-                objectX = additionalPaths[pathIdx].lines[line].controlPoints[point - 1].x;
-                objectY = additionalPaths[pathIdx].lines[line].controlPoints[point - 1].y;
-              }
-            }
-          }
-        } else {
-          const line = Number(currentElem.split("-")[1]) - 1;
-          const point = Number(currentElem.split("-")[2]);
-
-          if (line === -1) {
-            objectX = startPoint.x;
-            objectY = startPoint.y;
-          } else if (lines[line]) {
-            if (point === 0 && lines[line].endPoint) {
-              objectX = lines[line].endPoint.x;
-              objectY = lines[line].endPoint.y;
-            } else if (lines[line].controlPoints[point - 1]) {
-              objectX = lines[line].controlPoints[point - 1].x;
-              objectY = lines[line].controlPoints[point - 1].y;
-            }
-          }
-        }
+        const ref = resolvePointRef(currentElem, pointRefContext());
 
         dragOffset = {
-          x: objectX - mouseX,
-          y: objectY - mouseY,
+          x: (ref?.point.x ?? 0) - mouseX,
+          y: (ref?.point.y ?? 0) - mouseY,
         };
       }
     });
@@ -2325,43 +1911,18 @@
       }
 
       const rect = two.renderer.domElement.getBoundingClientRect();
-      const rawInchX = x.invert(evt.clientX - rect.left);
-      const rawInchY = y.invert(evt.clientY - rect.top);
-
-      // Apply grid snapping if enabled
-      const currentGridSize = $gridSize;
-      const currentSnapToGrid = $snapToGrid;
-      const currentShowGrid = $showGrid;
-
-      let inchX = rawInchX;
-      let inchY = rawInchY;
-
-      if (currentSnapToGrid && currentShowGrid && currentGridSize > 0) {
-        inchX = Math.round(rawInchX / currentGridSize) * currentGridSize;
-        inchY = Math.round(rawInchY / currentGridSize) * currentGridSize;
-      }
+      const snapped = snapPointToGrid(
+        x.invert(evt.clientX - rect.left),
+        y.invert(evt.clientY - rect.top),
+        gridSnapOptions(),
+      );
 
       // Clamp to field boundaries
-      inchX = Math.max(0, Math.min(FIELD_SIZE, inchX));
-      inchY = Math.max(0, Math.min(FIELD_SIZE, inchY));
+      const inchX = clampFieldCoordinate(snapped.x);
+      const inchY = clampFieldCoordinate(snapped.y);
 
       // Create a new line with endPoint at the clicked position
-      const newLine: Line = {
-        id: `line-${Math.random().toString(36).slice(2)}`,
-        endPoint: {
-          x: inchX,
-          y: inchY,
-          heading: "tangential",
-          reverse: false,
-        },
-        controlPoints: [],
-        color: getRandomColor(),
-        locked: false,
-        waitBeforeMs: 0,
-        waitAfterMs: 0,
-        waitBeforeName: "",
-        waitAfterName: "",
-      };
+      const newLine = createLine(inchX, inchY);
 
       lines = [...lines, newLine];
       sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
@@ -2370,14 +1931,18 @@
       two.update();
     });
   });
-  document.addEventListener("keydown", function (evt) {
-    if (evt.code === "Space" && document.activeElement === document.body) {
-      if (playing) {
-        pause();
-      } else {
-        play();
+  onMount(() => {
+    const handleSpaceKey = (evt: KeyboardEvent) => {
+      if (evt.code === "Space" && document.activeElement === document.body) {
+        if (playing) {
+          pause();
+        } else {
+          play();
+        }
       }
-    }
+    };
+    document.addEventListener("keydown", handleSpaceKey);
+    return () => document.removeEventListener("keydown", handleSpaceKey);
   });
   async function saveFile() {
     try {
@@ -2474,78 +2039,6 @@
 
   // Helper function to load data into app state
 
-  function toHeadingDegrees(point: Point, position: "start" | "end"): number {
-    if (!point) return 0;
-    if (point.heading === "linear") {
-      return position === "start" ? (point.startDeg ?? 0) : (point.endDeg ?? 0);
-    }
-    if (point.heading === "constant") {
-      return point.degrees ?? 0;
-    }
-    return 0;
-  }
-
-  function buildOptimizationPayload(lineIndex: number) {
-    const line = lines[lineIndex];
-    if (!line) throw new Error("Line not found");
-
-    const startPt =
-      lineIndex === 0 ? startPoint : lines[lineIndex - 1]?.endPoint;
-    if (!startPt) throw new Error("Missing start point for optimization");
-
-    const waypoints = [startPt, ...line.controlPoints, line.endPoint].map(
-      (p) => [p.x, p.y],
-    );
-
-    return {
-      waypoints,
-      start_heading_degrees: toHeadingDegrees(startPt, "start"),
-      end_heading_degrees: toHeadingDegrees(line.endPoint, "end"),
-      x_velocity: settings.xVelocity,
-      y_velocity: settings.yVelocity,
-      angular_velocity: settings.aVelocity,
-      friction_coefficient: settings.kFriction,
-      robot_width: settings.rWidth,
-      robot_height: settings.rHeight,
-      min_coord_field: 0,
-      max_coord_field: FIELD_SIZE,
-      interpolation:
-        line.endPoint.heading === "tangential"
-          ? "tangent"
-          : line.endPoint.heading === "constant"
-            ? "constant"
-            : "linear",
-      obstacles: shapes.map((shape) => shape.vertices.map((v) => [v.x, v.y])),
-    };
-  }
-
-
-  async function runOptimization(payload: any) {
-    const response = await fetch(`${OPTIMIZER_BASE_URL}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "");
-      throw new Error(
-        `Optimizer request failed (${response.status}): ${errorText || response.statusText}`,
-      );
-    }
-
-    const data = await response.json();
-    if (data?.status === "completed" && data.result) {
-      return data.result;
-    }
-    if (data?.status === "error") {
-      throw new Error(
-        `Optimization failed: ${data.message || "Unknown error"}`,
-      );
-    }
-    throw new Error("Unexpected API response format");
-  }
-
   async function optimizeLine(
     lineId: string,
     targetControlPointIndex?: number,
@@ -2560,53 +2053,22 @@
     optimizingLineIds = { ...optimizingLineIds, [lineId]: true };
 
     try {
-      const payload = buildOptimizationPayload(lineIndex);
+      const payload = buildOptimizationPayload(
+        lineIndex,
+        startPoint,
+        lines,
+        shapes,
+        settings,
+      );
       const result = await runOptimization(payload);
+      const newLines = applyOptimizedWaypoints(
+        lines,
+        lineIndex,
+        result,
+        targetControlPointIndex,
+      );
 
-      const optimizedWaypoints = Array.isArray(result?.optimized_waypoints)
-        ? result.optimized_waypoints
-        : Array.isArray(result)
-          ? result
-          : null;
-
-      if (!optimizedWaypoints || optimizedWaypoints.length < 2) {
-        throw new Error("Unexpected optimizer response format.");
-      }
-
-      const interior = optimizedWaypoints
-        .slice(1, optimizedWaypoints.length - 1)
-        .map((p: number[]) => ({ x: p[0], y: p[1] }));
-
-      const newLines = [...lines];
-      const current = newLines[lineIndex];
-
-      if (typeof targetControlPointIndex === "number") {
-        // Only replace the targeted control point; keep others and endpoint untouched
-        const replacement =
-          interior[targetControlPointIndex] ?? interior[interior.length - 1];
-        if (replacement) {
-          const cps = [...current.controlPoints];
-          if (cps[targetControlPointIndex]) {
-            cps[targetControlPointIndex] = replacement;
-            newLines[lineIndex] = {
-              ...current,
-              controlPoints: cps,
-            };
-            lines = normalizeLines(newLines);
-            recordChange();
-          }
-        }
-      } else {
-        // Replace entire line (control points and endpoint)
-        newLines[lineIndex] = {
-          ...current,
-          endPoint: {
-            ...current.endPoint,
-            x: optimizedWaypoints[optimizedWaypoints.length - 1][0],
-            y: optimizedWaypoints[optimizedWaypoints.length - 1][1],
-          },
-          controlPoints: interior,
-        };
+      if (newLines) {
         lines = normalizeLines(newLines);
         recordChange();
       }
@@ -2633,26 +2095,11 @@
 
 
   function addNewLine() {
-    const newLineId = `line-${Math.random().toString(36).slice(2)}`;
-    lines = [
-      ...lines,
-      {
-        id: newLineId,
-        endPoint: {
-          x: _.random(36, 108),
-          y: _.random(36, 108),
-          heading: "tangential",
-          reverse: true,
-        } as Point,
-        controlPoints: [],
-        color: getRandomColor(),
-        locked: false,
-        waitBeforeMs: 0,
-        waitAfterMs: 0,
-        waitBeforeName: "",
-        waitAfterName: "",
-      },
-    ];
+    const newLine = createLine(_.random(36, 108), _.random(36, 108), {
+      reverse: true,
+    });
+    const newLineId = newLine.id!;
+    lines = [...lines, newLine];
     sequence = [
       ...sequence,
       { kind: "path", lineId: newLineId },
@@ -2723,24 +2170,8 @@
     };
     const midpointX = (Number(startPoint.x) + Number(endPoint.x)) / 2;
     const midpointY = (Number(startPoint.y) + Number(endPoint.y)) / 2;
-    const newLineId = `line-${Math.random().toString(36).slice(2)}`;
-
-    const newLine: Line = {
-      id: newLineId,
-      endPoint: {
-        x: midpointX,
-        y: midpointY,
-        heading: "tangential",
-        reverse: false,
-      },
-      controlPoints: [],
-      color: getRandomColor(),
-      locked: false,
-      waitBeforeMs: 0,
-      waitAfterMs: 0,
-      waitBeforeName: "",
-      waitAfterName: "",
-    };
+    const newLine = createLine(midpointX, midpointY);
+    const newLineId = newLine.id!;
 
     const nextLines = [...lines];
     nextLines.splice(selectedLineIndex + 1, 0, newLine);
@@ -2764,27 +2195,37 @@
   }
 
   // Keyboard shortcuts for quick path editing
-  hotkeys("w", function (event, handler) {
-    event.preventDefault();
-    addNewLine();
-  });
-  hotkeys("a", function (event, handler) {
-    event.preventDefault();
-    addControlPoint();
-    two.update();
-  });
-  hotkeys("s", function (event, handler) {
-    event.preventDefault();
-    removeControlPoint();
-    two.update();
-  });
-  hotkeys("cmd+z, ctrl+z", function (event) {
-    event.preventDefault();
-    undoAction();
-  });
-  hotkeys("cmd+shift+z, ctrl+shift+z, ctrl+y", function (event) {
-    event.preventDefault();
-    redoAction();
+  onMount(() => {
+    hotkeys("w", function (event) {
+      event.preventDefault();
+      addNewLine();
+    });
+    hotkeys("a", function (event) {
+      event.preventDefault();
+      addControlPoint();
+      two.update();
+    });
+    hotkeys("s", function (event) {
+      event.preventDefault();
+      removeControlPoint();
+      two.update();
+    });
+    hotkeys("cmd+z, ctrl+z", function (event) {
+      event.preventDefault();
+      undoAction();
+    });
+    hotkeys("cmd+shift+z, ctrl+shift+z, ctrl+y", function (event) {
+      event.preventDefault();
+      redoAction();
+    });
+
+    return () => {
+      hotkeys.unbind("w");
+      hotkeys.unbind("a");
+      hotkeys.unbind("s");
+      hotkeys.unbind("cmd+z, ctrl+z");
+      hotkeys.unbind("cmd+shift+z, ctrl+shift+z, ctrl+y");
+    };
   });
   // Auto-export for CI/testing: if the app is loaded with URL hash #export-gif-test, automatically run GIF export once mounted
   onMount(() => {

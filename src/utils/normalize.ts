@@ -5,6 +5,30 @@ export function makeLineId(): string {
   return `line-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** A new path segment ending at (x, y), with defaults matching normalizeLines. */
+export function createLine(
+  x: number,
+  y: number,
+  options: { reverse?: boolean } = {},
+): Line {
+  return {
+    id: makeLineId(),
+    endPoint: {
+      x,
+      y,
+      heading: "tangential",
+      reverse: options.reverse ?? false,
+    },
+    controlPoints: [],
+    color: getRandomColor(),
+    locked: false,
+    waitBeforeMs: 0,
+    waitAfterMs: 0,
+    waitBeforeName: "",
+    waitAfterName: "",
+  };
+}
+
 export function normalizeLines(input: Line[] = []): Line[] {
   return (input || []).map((line) => ({
     ...line,

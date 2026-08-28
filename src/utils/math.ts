@@ -1,4 +1,17 @@
-import type { Line, Point } from "../types";
+import type { BasePoint, Line, Point } from "../types";
+import { FIELD_SIZE } from "../config/defaults";
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+export function clampFieldCoordinate(value: number): number {
+  return clamp(value, 0, FIELD_SIZE);
+}
+
+export function distanceBetweenPoints(a: BasePoint, b: BasePoint): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
 
 export function quadraticToCubic(
   P0: { x: number; y: number },
