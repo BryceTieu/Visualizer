@@ -15,6 +15,7 @@
   import PlaybackControls from "./components/PlaybackControls.svelte";
   import { calculatePathTime, normalizeLines } from "../utils";
   import { FIELD_SIZE } from "../config";
+  import StatCell from "./components/ui/StatCell.svelte";
   import { curveThroughPoints } from "../utils/math";
 
   export let percent: number;
@@ -313,18 +314,15 @@
             on:change={() => recordChange?.()}
           />
         </div>
-          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
-            <div class="text-gray-500">Endpoint</div>
-            <div class="font-medium text-gray-100">{selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}</div>
-          </div>
-          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
-            <div class="text-gray-500">Control Points</div>
-            <div class="font-medium text-gray-100">{selectedLine.controlPoints.length}</div>
-          </div>
-          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-1.5">
-            <div class="text-gray-500">Locked</div>
-            <div class="font-medium text-gray-100">{selectedLine.locked ? "Yes" : "No"}</div>
-          </div>
+          <StatCell label="Endpoint">
+            {selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}
+          </StatCell>
+          <StatCell label="Control Points">
+            {selectedLine.controlPoints.length}
+          </StatCell>
+          <StatCell label="Locked">
+            {selectedLine.locked ? "Yes" : "No"}
+          </StatCell>
         </div>
 
         <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
@@ -442,20 +440,22 @@
         </div>
 
         <div class="grid gap-2 text-[11px] sm:grid-cols-2">
-          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
-            <div class="text-gray-500">Color</div>
-            <div class="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug">
-              <span class="size-2.5 rounded-full" style={`background:${selectedLine?.color || "#666666"}`}></span>
-              <span>{selectedLine?.color || "Default"}</span>
-            </div>
-          </div>
+          <StatCell
+            label="Color"
+            roomy
+            valueClass="mt-1 flex items-center gap-2 font-medium text-gray-100 leading-snug"
+          >
+            <span class="size-2.5 rounded-full" style={`background:${selectedLine?.color || "#666666"}`}></span>
+            <span>{selectedLine?.color || "Default"}</span>
+          </StatCell>
 
-          <div class="border border-[#333333] bg-[#1f1f1f] px-2 py-2 leading-tight">
-            <div class="text-gray-500">Status</div>
-            <div class="mt-1 font-medium text-gray-100 leading-snug">
-              {selectedLine?.locked ? "Locked" : "Editable"}
-            </div>
-          </div>
+          <StatCell
+            label="Status"
+            roomy
+            valueClass="mt-1 font-medium text-gray-100 leading-snug"
+          >
+            {selectedLine?.locked ? "Locked" : "Editable"}
+          </StatCell>
         </div>
       {:else}
         <div class="text-[11px] text-gray-500">Select a path from the left list to inspect it here.</div>

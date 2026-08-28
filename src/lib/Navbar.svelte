@@ -24,6 +24,8 @@
   import MultiplePathsDialog from "./components/MultiplePathsDialog.svelte";
   import { calculatePathTime, formatTime } from "../utils";
   import { basename, pathStem } from "../utils/filename";
+  import { downloadBlob } from "../utils/download";
+  import NavDivider from "./components/ui/NavDivider.svelte";
   import html2canvas from "html2canvas";
 
   export let loadFile: (evt: any) => any;
@@ -153,15 +155,8 @@
       // Convert canvas to blob and download
       canvas.toBlob((blob) => {
         if (blob) {
-          const downloadUrl = URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          const fileName = $currentFilePath
-            ? pathStem($currentFilePath)
-            : "field";
-          link.download = `${fileName}_field.png`;
-          link.href = downloadUrl;
-          link.click();
-          URL.revokeObjectURL(downloadUrl);
+          const fileName = $currentFilePath ? pathStem($currentFilePath) : "field";
+          downloadBlob(blob, `${fileName}_field.png`);
         } else {
           alert("Failed to create image blob.");
         }
@@ -417,11 +412,7 @@
       </div>
     </div>
 
-    <!-- Divider -->
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
     <!-- Snap to grid toggle -->
     {#if $showGrid}
@@ -587,11 +578,7 @@
       </svg>
     </button>
 
-    <!-- Divider -->
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
     <!-- Multiple Paths Toggle -->
     <button
@@ -623,11 +610,7 @@
       </div>
     </button>
 
-    <!-- Divider -->
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
     <div class="flex items-center gap-3">
       <!-- Load trajectory from file -->
@@ -837,10 +820,7 @@
       </div>
     </div>
 
-    <div
-      class="h-6 border-l border-neutral-300 dark:border-neutral-700 mx-4"
-      aria-hidden="true"
-    ></div>
+    <NavDivider />
 
     <div class="flex items-center gap-3">
       <!-- Delete/Reset path -->

@@ -16,6 +16,7 @@
   import { downloadJson } from "../utils/download";
   import { stripPpExtension } from "../utils/filename";
   import { FIELD_SIZE } from "../config";
+  import { showToast } from "./toast";
   import NameDialog from "./components/NameDialog.svelte";
 
   export let isOpen = false;
@@ -707,35 +708,6 @@
   }
 
   // Toast notification system
-  function showToast(
-    message: string,
-    type: "success" | "error" | "warning" | "info" = "info",
-  ) {
-    // Create toast element
-    const toast = document.createElement("div");
-    toast.className = `fixed bottom-4 right-4 px-4 py-2 rounded-md shadow-lg z-1100 ${
-      type === "success"
-        ? "bg-green-500 text-white"
-        : type === "error"
-          ? "bg-red-500 text-white"
-          : type === "warning"
-            ? "bg-amber-500 text-white"
-            : "bg-blue-500 text-white"
-    }`;
-    toast.textContent = message;
-
-    document.body.appendChild(toast);
-
-    // Auto-remove after 3 seconds
-    setTimeout(() => {
-      if (toast.parentNode) {
-        toast.style.opacity = "0";
-        toast.style.transition = "opacity 0.3s";
-        setTimeout(() => toast.remove(), 300);
-      }
-    }, 3000);
-  }
-
   function formatFileSize(bytes: number): string {
     if (bytes === 0) return "0 B";
     const k = 1024;

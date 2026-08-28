@@ -10,6 +10,47 @@
   export let disabled = false;
   export let inputClass = "console-input px-3 py-2";
   export let onInput: (rawValue: string) => void;
+
+  let focused = false;
+  let text = "";
+
+  // Mirror the prop while the user is not editing. During editing the field
+  // owns its text so partial input ("8" on a min-180 field) is not clamped
+  // out from under the caret.
+  $: if (!focused) text = value === undefined ? "" : String(value);
+
+  function inRange(n: number): boolean {
+    if (Number.isNaN(n)) return false;
+    if (min !== undefined && n < min) return false;
+    if (max !== undefined && n > max) return false;
+    return true;
+  }
+
+  function handleInput(event: Event) {
+    text = (event.currentTarget as HTMLInputElement).value;
+    // Only push through while the typed value is already valid; anything
+    // partial waits for blur so it does not get clamped mid-keystroke.
+    if (inRange(parseFloat(text))) onInput(text);
+  }
+
+  function commit() {
+    const parsed = parseFloat(text);
+    const fallback = min ?? 0;
+    const clamped = Number.isNaN(parsed)
+      ? fallback
+      : Math.min(max ?? Infinity, Math.max(min ?? -Infinity, parsed));
+    text = String(clamped);
+    onInput(text);
+  }
+
+  function handleBlur() {
+    focused = false;
+    commit();
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.key === "Enter") commit();
+  }
 </script>
 
 <div>
@@ -28,12 +69,15 @@
     <input
       {id}
       type="number"
-      {value}
+      value={text}
       {min}
       {max}
       {step}
       {disabled}
-      on:input={(e) => onInput(e.currentTarget.value)}
+      on:input={handleInput}
+      on:focus={() => (focused = true)}
+      on:blur={handleBlur}
+      on:keydown={handleKeydown}
       class="{inputClass} focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
     {#if suffix}

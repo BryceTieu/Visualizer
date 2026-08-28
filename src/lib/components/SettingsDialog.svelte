@@ -2,6 +2,7 @@
   import Modal from "./ui/Modal.svelte";
   import CollapsibleSection from "./ui/CollapsibleSection.svelte";
   import NumberField from "./ui/NumberField.svelte";
+  import { showToast } from "../toast";
   import { resetSettings } from "../../utils/settingsPersistence";
   import { AVAILABLE_FIELD_MAPS, DEFAULT_SETTINGS } from "../../config/defaults";
   import type { Settings } from "../../types";
@@ -21,11 +22,9 @@
   // Display value for angular velocity (user inputs this, gets multiplied by PI)
   $: angularVelocityDisplay = settings ? settings.aVelocity / Math.PI : 1;
 
-  function handleAngularVelocityInput(e: Event) {
-    const target = e.target;
-    if (target && 'value' in target) {
-      settings.aVelocity = parseFloat(String(target.value)) * Math.PI;
-    }
+  function handleAngularVelocityInput(value: string) {
+    const parsed = parseFloat(value);
+    settings.aVelocity = (Number.isNaN(parsed) ? 0 : parsed) * Math.PI;
   }
 
   async function handleReset() {
@@ -57,24 +56,6 @@
     if (min !== undefined) num = Math.max(min, num);
     if (max !== undefined) num = Math.min(max, num);
     settings[property] = num;
-  }
-
-  function handleRightPanelMinWidthInput(e: Event) {
-    const target = e.currentTarget as HTMLInputElement | null;
-    if (!target) return;
-    handleNumberInput(target.value, "rightPanelMinWidth", 0, 600);
-  }
-
-  function handleLeftPanelWidthInput(e: Event) {
-    const target = e.currentTarget as HTMLInputElement | null;
-    if (!target) return;
-    handleNumberInput(target.value, "leftPanelWidth", 180, 800);
-  }
-
-  function handleRightPanelWidthInput(e: Event) {
-    const target = e.currentTarget as HTMLInputElement | null;
-    if (!target) return;
-    handleNumberInput(target.value, "rightPanelWidth", 180, 800);
   }
 
   // Helper function to convert file to base64
@@ -333,13 +314,7 @@
                             settings.showHeadingArrow = true;
                             settings = { ...settings }; // Force reactivity
 
-                            // Show success message
-                            const successMsg = document.createElement("div");
-                            successMsg.className =
-                              "fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg";
-                            successMsg.textContent = "Robot image updated!";
-                            document.body.appendChild(successMsg);
-                            setTimeout(() => successMsg.remove(), 3000);
+                            showToast("Robot image updated!", "success");
                           } catch (error) {
                             alert(
                               "Error loading image: " +
@@ -481,26 +456,15 @@
               </div>
 
               <!-- Angular Velocity -->
-              <div>
-                <label
-                  for="angular-velocity"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Angular Velocity (π rad/s)
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Multiplier of π radians per second
-                  </div>
-                </label>
-                <input
-                  id="angular-velocity"
-                  type="number"
-                  value={angularVelocityDisplay}
-                  min="0"
-                  step="0.1"
-                  on:input={handleAngularVelocityInput}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
+              <NumberField
+                id="angular-velocity"
+                label="Angular Velocity (π rad/s)"
+                description="Multiplier of π radians per second"
+                value={angularVelocityDisplay}
+                min={0}
+                step={0.1}
+                onInput={handleAngularVelocityInput}
+              />
 
               <!-- Velocity Limits -->
                 <NumberField
@@ -577,61 +541,42 @@
                   Panel Layout
                 </div>
 
-                <div>
-                  <label for="left-panel-width" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                    Left Panel Width
-                  </label>
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="180"
-                      max="800"
-                      step="5"
-                      value={settings.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 370}
-                      id="left-panel-width"
-                      on:input={handleLeftPanelWidthInput}
-                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
-                  </div>
-                </div>
+                <NumberField
+                  id="left-panel-width"
+                  label="Left Panel Width"
+                  value={settings.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 370}
+                  min={180}
+                  max={800}
+                  step={5}
+                  suffix="px"
+                  inputClass="console-input w-28 px-3 py-2"
+                  onInput={(v) => handleNumberInput(v, "leftPanelWidth", 180, 800)}
+                />
+
+                <NumberField
+                  id="right-panel-width"
+                  label="Right Panel Width"
+                  value={settings.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 620}
+                  min={180}
+                  max={800}
+                  step={5}
+                  suffix="px"
+                  inputClass="console-input w-28 px-3 py-2"
+                  onInput={(v) => handleNumberInput(v, "rightPanelWidth", 180, 800)}
+                />
 
                 <div>
-                  <label for="right-panel-width" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                    Right Panel Width
-                  </label>
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="180"
-                      max="800"
-                      step="5"
-                      value={settings.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 620}
-                      id="right-panel-width"
-                      on:input={handleRightPanelWidthInput}
-                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label for="right-panel-min-width" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                    Right Panel Minimum Width
-                  </label>
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min="0"
-                      max="600"
-                      step="5"
-                      value={settings.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth ?? 0}
-                      id="right-panel-min-width"
-                      on:input={handleRightPanelMinWidthInput}
-                      class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span class="text-sm text-neutral-500 dark:text-neutral-400">px</span>
-                  </div>
+                  <NumberField
+                    id="right-panel-min-width"
+                    label="Right Panel Minimum Width"
+                    value={settings.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth ?? 0}
+                    min={0}
+                    max={600}
+                    step={5}
+                    suffix="px"
+                    inputClass="console-input w-28 px-3 py-2"
+                    onInput={(v) => handleNumberInput(v, "rightPanelMinWidth", 0, 600)}
+                  />
                   <div class="text-xs text-neutral-500 dark:text-neutral-400 mt-1">
                     Prevents the right sidebar from being squished smaller than this. Set to 0 for no limit.
                   </div>
@@ -706,16 +651,13 @@
               <div
                 class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
               >
-                <label for="pen-tool-accuracy" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
-                  Pen Tool Accuracy
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
+                <NumberField
                   id="pen-tool-accuracy"
-                  bind:value={settings.penToolAccuracy}
-                  class="w-full px-3 py-2 rounded border bg-white dark:bg-neutral-800"
+                  label="Pen Tool Accuracy"
+                  value={settings.penToolAccuracy}
+                  min={0}
+                  step={1}
+                  onInput={(v) => handleNumberInput(v, "penToolAccuracy", 0)}
                 />
                 <div class="mt-2 flex items-center justify-between gap-2">
                   <span class="text-xs text-neutral-500 dark:text-neutral-400">

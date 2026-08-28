@@ -34,6 +34,7 @@
   import LeftRail from "./lib/components/LeftRail.svelte";
   import FieldMapImage from "./lib/components/FieldMapImage.svelte";
   import FieldLoadingOverlay from "./lib/components/FieldLoadingOverlay.svelte";
+  import ToastHost from "./lib/components/ui/ToastHost.svelte";
   import _ from "lodash";
   import hotkeys from "hotkeys-js";
   import { createAnimationController } from "./utils/animation";
@@ -357,28 +358,28 @@
     rightPanelHidden,
   );
 
-  // Calculate available width for panels after ensuring center is at least square
-  // If default panel sizes would make center too small, panels auto-shrink
+  // Keep panels inside the space left over once the centre stage is square.
+  // This only ever shrinks a panel that no longer fits; it must not grow one
+  // back toward its saved width, or the left panel would reclaim any space
+  // freed by dragging the right panel smaller and the right panel could never
+  // take it back. Saved widths are applied once on load instead.
   $: {
     const availableForPanels =
       getTotalAvailableWidth() - getMinCenterWidthForSquare();
+    const rightMinWidth = getRightPanelMinWidth(settings);
 
-    // Auto-shrink left panel if needed to fit
     if (!leftPanelHidden) {
-      const rightMinWidth = getRightPanelMinWidth(settings);
       const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
       const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
-      const desiredLeft = Number(settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 240);
-      leftPanelWidth = clamp(desiredLeft, SIDE_PANEL_MIN_WIDTH, Math.max(SIDE_PANEL_MIN_WIDTH, maxLeft));
+      const nextLeft = clamp(leftPanelWidth, SIDE_PANEL_MIN_WIDTH, maxLeft);
+      if (nextLeft !== leftPanelWidth) leftPanelWidth = nextLeft;
     }
 
-    // Auto-shrink right panel if needed to fit
     if (!rightPanelHidden) {
       const leftWidth = leftPanelHidden ? 0 : leftPanelWidth;
-      const rightMinWidth = getRightPanelMinWidth(settings);
       const maxRight = Math.max(rightMinWidth, availableForPanels - leftWidth);
-      const desiredRight = Number(settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 360);
-      rightPanelWidth = clamp(desiredRight, rightMinWidth, Math.max(rightMinWidth, maxRight));
+      const nextRight = clamp(rightPanelWidth, rightMinWidth, maxRight);
+      if (nextRight !== rightPanelWidth) rightPanelWidth = nextRight;
     }
   }
 
@@ -978,7 +979,15 @@
     // Update robot dimensions from loaded settings
     robotWidth = settings.rWidth;
     robotHeight = settings.rHeight;
-    // Ensure panel widths obey min/max after loading settings
+    // Apply the saved panel widths, then clamp them to the current viewport.
+    // This is the only place saved widths are restored — the reactive clamp
+    // above deliberately never grows a panel back on its own.
+    leftPanelWidth = Number(
+      settings?.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 370,
+    );
+    rightPanelWidth = Number(
+      settings?.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 620,
+    );
     clampAllPanels();
     if (typeof window !== "undefined") {
       window.addEventListener("resize", clampAllPanels);
@@ -2391,6 +2400,8 @@
     gifExportStatus = "Cancelling...";
   }}
 />
+
+<ToastHost />
 
 <!--   {saveFile} -->
 <div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
