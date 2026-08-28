@@ -24,11 +24,16 @@
   import ControlTab from "./lib/ControlTab.svelte";
   import Navbar from "./lib/Navbar.svelte";
   import MathTools from "./lib/MathTools.svelte";
-  import PlayIcon from "./lib/components/icons/PlayIcon.svelte";
-  import PauseIcon from "./lib/components/icons/PauseIcon.svelte";
   import SaveDialog from "./lib/components/SaveDialog.svelte";
   import DualPathSaveDialog from "./lib/components/DualPathSaveDialog.svelte";
   import ProgressDialog from "./lib/components/ProgressDialog.svelte";
+  import RobotSprite from "./lib/components/RobotSprite.svelte";
+  import PanelDivider from "./lib/components/PanelDivider.svelte";
+  import FieldToolbar from "./lib/components/FieldToolbar.svelte";
+  import MobileBlocked from "./lib/components/MobileBlocked.svelte";
+  import LeftRail from "./lib/components/LeftRail.svelte";
+  import FieldMapImage from "./lib/components/FieldMapImage.svelte";
+  import FieldLoadingOverlay from "./lib/components/FieldLoadingOverlay.svelte";
   import _ from "lodash";
   import hotkeys from "hotkeys-js";
   import { createAnimationController } from "./utils/animation";
@@ -2335,16 +2340,7 @@
 />
 
 {#if isMobileBlocked}
-  <div class="flex min-h-screen w-screen items-center justify-center bg-neutral-950 px-6 text-center text-neutral-100">
-    <div class="max-w-lg rounded-3xl border border-white/10 bg-neutral-900/95 px-8 py-10 shadow-2xl shadow-black/40">
-      <div class="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">Desktop Required</div>
-      <h1 class="mt-4 text-3xl font-semibold text-white">You need to be on a desktop for the website to function.</h1>
-      <p class="mt-4 text-sm leading-6 text-neutral-300">
-        This visualizer depends on mouse, keyboard, and a large workspace, so mobile devices are blocked from using it.
-      </p>
-      <p class="mt-3 text-xs text-neutral-500">Please reopen the site on a desktop browser.</p>
-    </div>
-  </div>
+  <MobileBlocked />
 {:else}
 
 <Navbar
@@ -2402,104 +2398,39 @@
     class="desktop-grid h-full"
     style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`}; --center-width: ${centerWidth}px;`}
   >
-    <aside class="panel-box side-rail side-rail-left" class:side-rail--collapsed={leftPanelHidden}>
-      <section class="module-box">
-        <div class="module-header-row">
-          <h3 class="module-title">File</h3>
-          <div class="flex items-center gap-2">
-            <span class="module-chip">v1.2.1</span>
-            <button
-              class="panel-toggle-btn"
-              type="button"
-              on:click={toggleLeftPanelVisibility}
-              aria-label={leftPanelHidden ? "Show left panel" : "Hide left panel"}
-              title={leftPanelHidden ? "Show left panel" : "Hide left panel"}
-            >
-              {leftPanelHidden ? "›" : "‹"}
-            </button>
-          </div>
-        </div>
-        <p class="module-caption">Export name</p>
-        <div class="module-mono">
-          {basename($currentFilePath) || "untitled_path.pp"}
-        </div>
-      </section>
+    <LeftRail
+      hidden={leftPanelHidden}
+      fileName={basename($currentFilePath) || "untitled_path.pp"}
+      version="v1.2.1"
+      lineCount={lines.length}
+      {pathPreviewItems}
+      {selectedLineIndex}
+      onToggleVisibility={toggleLeftPanelVisibility}
+      onSelectLine={(lineIndex) => selectLinePoint(lineIndex, 0)}
+    />
 
-      <section class="module-box module-fill">
-        <div class="module-header-row">
-          <h3 class="module-title">Path List</h3>
-          <span class="module-caption">{lines.length} path{lines.length === 1 ? "" : "s"}</span>
-        </div>
-        <div class="module-list">
-          {#each pathPreviewItems as item (item.index)}
-            <button
-              class="list-item-box compact text-left"
-              class:list-item-box--selected={selectedLineIndex === item.lineIndex}
-              on:click={() => selectLinePoint(item.lineIndex, 0)}
-            >
-              <div class="list-item-top">
-                <span class="list-item-name">{item.name}</span>
-              </div>
-              <div class="list-item-sub">{item.x}, {item.y}</div>
-            </button>
-          {/each}
-          {#if lines.length > pathPreviewItems.length}
-            <div class="list-empty">+ {lines.length - pathPreviewItems.length} more...</div>
-          {/if}
-        </div>
-      </section>
-    </aside>
-
-    <div class="panel-divider panel-divider--left">
-      <button
-        class="panel-divider-grip"
-        type="button"
-        aria-label="Resize left panel"
-        title={leftPanelHidden ? "Click to restore the left panel" : "Drag to resize the left panel"}
-        on:mousedown={(event) => beginPanelResize("left", event)}
-        on:click={() => {
-          if (leftPanelHidden) {
-            leftPanelHidden = false;
-          }
-        }}
-      >
-        {#if leftPanelHidden}
-          ›
-        {:else}
-          <span class="panel-divider-line"></span>
-        {/if}
-      </button>
-    </div>
+    <PanelDivider
+      side="left"
+      hidden={leftPanelHidden}
+      onResizeStart={beginPanelResize}
+      onRestore={() => (leftPanelHidden = false)}
+    />
 
     <main class="panel-box center-stage">
       <div class="module-header-row mb-2">
         <h3 class="module-title">Field</h3>
         <span class="module-caption">Click a line or point to select it</span>
       </div>
-      <div class="center-toolbar">
-        <button class="toolbar-btn" on:click={addNewLine}>+ Add Path</button>
-        <button class="toolbar-btn" class:toolbar-btn--blue={penToolEnabled} on:click={togglePenTool}>
-          {penToolEnabled ? "Pen Tool On" : "Pen Tool"}
-        </button>
-        <button class="toolbar-btn" on:click={addControlPoint}>+ Control Point</button>
-        <button class="toolbar-btn" on:click={removeControlPoint}>- Control Point</button>
-        <button class="toolbar-btn toolbar-btn--blue" on:click={createPathBetweenSelectedPoints}>
-          Create Path to Last Point
-        </button>
-        <div style="flex: 1;"></div>
-        <button
-          class="toolbar-btn toolbar-btn--icon"
-          title={playing ? "Pause" : "Play"}
-          aria-label={playing ? "Pause" : "Play"}
-          on:click={() => (playing ? pause() : play())}
-        >
-          {#if playing}
-            <PauseIcon className="size-5" strokeWidth={2} />
-          {:else}
-            <PlayIcon className="size-5" strokeWidth={2} />
-          {/if}
-        </button>
-      </div>
+      <FieldToolbar
+        {playing}
+        {penToolEnabled}
+        onAddPath={addNewLine}
+        onTogglePenTool={togglePenTool}
+        onAddControlPoint={addControlPoint}
+        onRemoveControlPoint={removeControlPoint}
+        onCreatePathToLastPoint={createPathBetweenSelectedPoints}
+        onTogglePlay={() => (playing ? pause() : play())}
+      />
 
       <div
         class="field-stage flex h-full justify-center items-center"
@@ -2518,34 +2449,10 @@
       on:selectstart={(e) => e.preventDefault()}
       tabindex="-1"
         >
-      <img
+      <FieldMapImage
         src={fieldMapSrc}
-        alt="Field"
-        class="absolute top-0 left-0 w-full h-full rounded-lg z-10"
-        style="
-    background: transparent; 
-    pointer-events: none; 
-    user-select: none; 
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
-    -webkit-touch-callout: none;
-    -webkit-tap-highlight-color: transparent;
-    user-drag: none;
-    -webkit-user-drag: none;
-    -moz-user-drag: none;
-    -ms-user-drag: none;
-    -o-user-drag: none;
-  "
-        draggable="false"
-        on:load={() => (fieldMapLoaded = true)}
-        on:error={(e) => {
-          console.error("Failed to load field map:", settings.fieldMap);
-          fieldMapLoaded = true;
-          (e.currentTarget as HTMLImageElement).src = "/fields/decode.webp"; // Fallback
-        }}
-        on:dragstart={(e) => e.preventDefault()}
-        on:selectstart={(e) => e.preventDefault()}
+        fieldMapName={settings.fieldMap}
+        onSettled={() => (fieldMapLoaded = true)}
       />
       <canvas
         bind:this={fieldPointsCanvas}
@@ -2554,207 +2461,70 @@
       ></canvas>
       <MathTools {x} {y} {twoElement} {robotXY} />
       <!-- Main robot: only show in normal mode -->
-      {#if $activePaths.length === 0}
-        <img
-          src={settings.robotImage || "/robot.png"}
+      {#if !isMultiPathMode}
+        <RobotSprite
+          xy={robotXY}
+          heading={robotHeading}
+          widthPx={x(robotWidth)}
+          heightPx={x(robotHeight)}
+          {settings}
           alt="Robot"
-          style={`position: absolute; top: ${robotXY.y}px;
-left: ${robotXY.x}px; transform: translate(-50%, -50%) rotate(${robotHeading}deg); z-index: 20; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
-pointer-events: none;`}
-          draggable="false"
-          on:load={() => (robotImageLoaded = true)}
-          on:error={(e) => {
-            console.error("Failed to load robot image:", settings.robotImage);
-            robotImageLoaded = true;
-            (e.currentTarget as HTMLImageElement).src = "/robot.png"; // Fallback to default
-          }}
-          on:dragstart={(e) => e.preventDefault()}
-          on:selectstart={(e) => e.preventDefault()}
+          zIndex={20}
+          arrowZIndex={21}
+          arrowId="arrowhead-main"
+          showTValue={settings.showCurrentTValue}
+          tValue={robotT}
+          onImageSettled={() => (robotImageLoaded = true)}
         />
-        {#if settings.showCurrentTValue && robotT !== null}
-          <div
-            class="pointer-events-none absolute z-22 rounded-full border border-white/20 bg-black/60 px-3.5 py-1.5 font-mono text-[22px] font-semibold leading-none tracking-wide text-white shadow-lg backdrop-blur-sm"
-            style={`left: ${robotXY.x}px; top: ${robotXY.y - x(robotHeight) / 2 - 14}px; transform: translate(-50%, -100%);`}
-          >
-            t {robotT.toFixed(3)}
-          </div>
-        {/if}
-        <!-- Heading arrow for main robot -->
-        {#if settings.showHeadingArrow}
-          <svg
-            style={`position: absolute; top: ${robotXY.y}px; left: ${robotXY.x}px; z-index: 21; pointer-events: none; overflow: visible;`}
-            width="1"
-            height="1"
-          >
-            <defs>
-              <marker
-                id="arrowhead-main"
-                markerWidth="10"
-                markerHeight="10"
-                refX="6.5"
-                refY="3"
-                orient="auto"
-              >
-                <polygon
-                  points="0 0, 7 3, 0 6"
-                  fill={settings.headingArrowColor || "#ffffff"}
-                />
-              </marker>
-            </defs>
-            <line
-              x1="0"
-              y1="0"
-              x2="{(settings.headingArrowLength || 50) * Math.cos(-robotHeading * Math.PI / 180)}"
-              y2="{(settings.headingArrowLength || 50) * -Math.sin(-robotHeading * Math.PI / 180)}"
-              stroke={settings.headingArrowColor || "#ffffff"}
-              stroke-width={settings.headingArrowThickness || 3}
-              marker-end="url(#arrowhead-main)"
-            />
-          </svg>
-        {/if}
       {/if}
       <!-- Second robot: only show in dual path mode (not multi-path mode) -->
-      {#if $activePaths.length === 0 && $dualPathMode}
-        <img
-          src={settings.robotImage || "/robot.png"}
+      {#if !isMultiPathMode && $dualPathMode}
+        <RobotSprite
+          xy={secondRobotXY}
+          heading={secondRobotHeading}
+          widthPx={x(robotWidth)}
+          heightPx={x(robotHeight)}
+          {settings}
           alt="Robot 2"
-          style={`position: absolute; top: ${secondRobotXY.y}px;
-left: ${secondRobotXY.x}px; transform: translate(-50%, -50%) rotate(${secondRobotHeading}deg); z-index: 19; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
-pointer-events: none; opacity: 0.8;`}
-          draggable="false"
-          on:load={() => (robotImageLoaded = true)}
-          on:error={(e) => {
-            console.error("Failed to load robot image:", settings.robotImage);
-            robotImageLoaded = true;
-            (e.currentTarget as HTMLImageElement).src = "/robot.png";
-          }}
-          on:dragstart={(e) => e.preventDefault()}
-          on:selectstart={(e) => e.preventDefault()}
+          zIndex={19}
+          arrowZIndex={19}
+          opacity={0.8}
+          arrowId="arrowhead-second"
+          onImageSettled={() => (robotImageLoaded = true)}
         />
-        <!-- Heading arrow for second robot -->
-        {#if settings.showHeadingArrow}
-          <svg
-            style={`position: absolute; top: ${secondRobotXY.y}px; left: ${secondRobotXY.x}px; z-index: 19; pointer-events: none; overflow: visible; opacity: 0.8;`}
-            width="1"
-            height="1"
-          >
-            <defs>
-              <marker
-                id="arrowhead-second"
-                markerWidth="10"
-                markerHeight="10"
-                refX="6.5"
-                refY="3"
-                orient="auto"
-              >
-                <polygon
-                  points="0 0, 7 3, 0 6"
-                  fill={settings.headingArrowColor || "#ffffff"}
-                />
-              </marker>
-            </defs>
-            <line
-              x1="0"
-              y1="0"
-              x2="{(settings.headingArrowLength || 50) * Math.cos(-secondRobotHeading * Math.PI / 180)}"
-              y2="{(settings.headingArrowLength || 50) * -Math.sin(-secondRobotHeading * Math.PI / 180)}"
-              stroke={settings.headingArrowColor || "#ffffff"}
-              stroke-width={settings.headingArrowThickness || 3}
-              marker-end="url(#arrowhead-second)"
-            />
-          </svg>
-        {/if}
       {/if}
       <!-- Additional robots: only show in multi-path mode -->
-      {#if $activePaths.length > 0}
+      {#if isMultiPathMode}
         {#each additionalRobotStates as robotState, idx}
-          <img
-            src={settings.robotImage || "/robot.png"}
+          <RobotSprite
+            xy={robotState.xy}
+            heading={robotState.heading}
+            widthPx={x(robotWidth)}
+            heightPx={x(robotHeight)}
+            {settings}
             alt="Robot {idx + 1}"
-            style={`position: absolute; top: ${robotState.xy.y}px;
-left: ${robotState.xy.x}px; transform: translate(-50%, -50%) rotate(${robotState.heading}deg); z-index: ${20 - idx}; width: ${x(robotWidth)}px; height: ${x(robotHeight)}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
-pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
-            draggable="false"
-            on:load={() => (robotImageLoaded = true)}
-            on:error={(e) => {
-              console.error("Failed to load robot image:", settings.robotImage);
-              robotImageLoaded = true;
-              (e.currentTarget as HTMLImageElement).src = "/robot.png";
-            }}
-            on:dragstart={(e) => e.preventDefault()}
-            on:selectstart={(e) => e.preventDefault()}
+            zIndex={20 - idx}
+            arrowZIndex={20 - idx}
+            opacity={1.0 - idx * 0.15}
+            arrowId="arrowhead-{idx}"
+            onImageSettled={() => (robotImageLoaded = true)}
           />
-          <!-- Heading arrow for additional robots -->
-          {#if settings.showHeadingArrow}
-            <svg
-              style={`position: absolute; top: ${robotState.xy.y}px; left: ${robotState.xy.x}px; z-index: ${20 - idx}; pointer-events: none; overflow: visible; opacity: ${1.0 - idx * 0.15};`}
-              width="1"
-              height="1"
-            >
-              <defs>
-                <marker
-                  id="arrowhead-{idx}"
-                  markerWidth="10"
-                  markerHeight="10"
-                  refX="6.5"
-                  refY="3"
-                  orient="auto"
-                >
-                  <polygon
-                    points="0 0, 7 3, 0 6"
-                    fill={settings.headingArrowColor || "#ffffff"}
-                  />
-                </marker>
-              </defs>
-              <line
-                x1="0"
-                y1="0"
-                x2="{(settings.headingArrowLength || 50) * Math.cos(-robotState.heading * Math.PI / 180)}"
-                y2="{(settings.headingArrowLength || 50) * -Math.sin(-robotState.heading * Math.PI / 180)}"
-                stroke={settings.headingArrowColor || "#ffffff"}
-                stroke-width={settings.headingArrowThickness || 3}
-                marker-end="url(#arrowhead-{idx})"
-              />
-            </svg>
-          {/if}
         {/each}
       {/if}
       {#if !initialAssetsReady}
-        <div class="absolute inset-0 z-60 flex items-center justify-center rounded-lg bg-neutral-950/80 backdrop-blur-sm">
-          <div class="flex flex-col items-center gap-3 rounded-2xl border border-neutral-700 bg-neutral-900/95 px-6 py-5 shadow-2xl">
-            <img src="/loading.svg" alt="Loading" class="size-20" draggable="false" />
-            <div class="text-center">
-              <div class="text-sm font-semibold text-neutral-100">Loading Visualizer</div>
-              <div class="text-xs text-neutral-400">Waiting for field assets to finish loading</div>
-            </div>
-          </div>
-        </div>
+        <FieldLoadingOverlay />
       {/if}
         </div>
       </div>
       <div class="module-footer">Field · {FIELD_SIZE}&quot; x {FIELD_SIZE}&quot;</div>
     </main>
 
-    <div class="panel-divider panel-divider--right">
-      <button
-        class="panel-divider-grip"
-        type="button"
-        aria-label="Resize right panel"
-        title={rightPanelHidden ? "Click to restore the right panel" : "Drag to resize the right panel"}
-        on:mousedown={(event) => beginPanelResize("right", event)}
-        on:click={() => {
-          if (rightPanelHidden) {
-            rightPanelHidden = false;
-          }
-        }}
-      >
-        {#if rightPanelHidden}
-          ‹
-        {:else}
-          <span class="panel-divider-line"></span>
-        {/if}
-      </button>
-    </div>
+    <PanelDivider
+      side="right"
+      hidden={rightPanelHidden}
+      onResizeStart={beginPanelResize}
+      onRestore={() => (rightPanelHidden = false)}
+    />
 
     <aside class="panel-box side-rail side-rail-right" class:side-rail--collapsed={rightPanelHidden}>
       <div class="module-box control-panel-header">
