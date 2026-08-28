@@ -49,7 +49,7 @@
 
 {#if isOpen}
   <div
-    class="fixed inset-0 z-[1200] flex items-center justify-center"
+    class="fixed inset-0 z-1200 flex items-center justify-center"
     transition:fade={{ duration: 250 }}
   >
     <!-- Backdrop -->
@@ -69,7 +69,7 @@
       transition:scale={{ duration: 250, start: 0.95 }}
     >
       <!-- Header -->
-      <div class="px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-b border-neutral-200 dark:border-neutral-700">
+      <div class="px-6 py-4 bg-linear-to-r from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-b border-neutral-200 dark:border-neutral-700">
         <h2 class="text-lg font-semibold text-neutral-900 dark:text-white flex items-center gap-2">
           <svg
             xmlns="http://www.w3.org/2000/svg"

@@ -69,7 +69,7 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     transition:fade={{ duration: 200, easing: cubicInOut }}
-    class="console-backdrop fixed inset-0 flex items-center justify-center z-[2000]"
+    class="console-backdrop fixed inset-0 flex items-center justify-center z-2000"
     on:click={handleClose}
     role="presentation"
   >
@@ -107,7 +107,7 @@
             viewBox="0 0 24 24"
             stroke-width="2"
             stroke="currentColor"
-            class="size-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5"
+            class="size-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5"
           >
             <path
               stroke-linecap="round"
@@ -173,7 +173,7 @@
                 class:dark-selected={isSelected}
               >
                 <!-- Checkbox -->
-                <div class="flex-shrink-0">
+                <div class="shrink-0">
                   {#if isSelected}
                     <div
                       class="size-6 console-badge bg-purple-600 flex items-center justify-center text-white font-bold text-sm"
@@ -204,7 +204,7 @@
                 <!-- Selection Badge -->
                 {#if isSelected}
                   <div
-                    class="console-badge flex-shrink-0 px-2 py-1 bg-purple-600 text-white text-xs font-semibold"
+                    class="console-badge shrink-0 px-2 py-1 bg-purple-600 text-white text-xs font-semibold"
                   >
                     Path {selectionIndex + 1}
                   </div>

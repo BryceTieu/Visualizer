@@ -114,7 +114,7 @@
 {#if isOpen}
   <div
     transition:fade={{ duration: 500, easing: cubicInOut }}
-    class="console-backdrop flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-[1005]"
+    class="console-backdrop flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-1005"
     role="dialog"
     aria-modal="true"
     aria-labelledby="settings-title"
@@ -167,7 +167,7 @@
             viewBox="0 0 24 24"
             stroke-width={1.5}
             stroke="currentColor"
-            class="size-5 text-[#888888] flex-shrink-0 mt-0.5"
+            class="size-5 text-[#888888] shrink-0 mt-0.5"
           >
             <path
               stroke-linecap="round"
@@ -479,7 +479,7 @@
 
                       <!-- Fun hover effect -->
                       <div
-                        class="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-200/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
+                        class="absolute inset-0 bg-linear-to-r from-transparent via-yellow-200/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700"
                       ></div>
                     </button>
 
@@ -1005,7 +1005,7 @@
                   <span class="text-xs text-neutral-500 dark:text-neutral-400">
                     Maximum control points used when fitting freehand strokes
                   </span>
-                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right">
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-12 text-right">
                     {settings.penToolAccuracy ?? 8}
                   </span>
                 </div>
@@ -1090,7 +1090,7 @@
                       title="Distance between each robot body trace"
                     />
                     <span
-                      class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right"
+                      class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-12 text-right"
                     >
                       {settings.onionLayerSpacing || 6}"
                     </span>
@@ -1140,7 +1140,7 @@
                         class="flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                       />
                       <span
-                        class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right"
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-12 text-right"
                       >
                         {settings.headingArrowLength || 30}px
                       </span>
@@ -1183,7 +1183,7 @@
                         class="flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                       />
                       <span
-                        class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right"
+                        class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-12 text-right"
                       >
                         {settings.headingArrowThickness || 3}px
                       </span>
@@ -1210,7 +1210,7 @@
                     bind:value={settings.pathOpacity}
                     class="flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                   />
-                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-[3rem] text-right">
+                  <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300 min-w-12 text-right">
                     {Math.round((settings.pathOpacity || 1) * 100)}%
                   </span>
                 </div>

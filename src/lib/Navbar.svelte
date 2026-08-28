@@ -861,7 +861,7 @@
 
         <!-- Tooltip for better UX -->
         <div
-          class="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-xs text-center whitespace-normal max-w-[12rem] shadow-md"
+          class="absolute hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-neutral-900 text-white text-xs text-center whitespace-normal max-w-48 shadow-md"
         >
           Reset path to default (with confirmation)
         </div>

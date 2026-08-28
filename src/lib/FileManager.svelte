@@ -761,7 +761,7 @@
   ) {
     // Create toast element
     const toast = document.createElement("div");
-    toast.className = `fixed bottom-4 right-4 px-4 py-2 rounded-md shadow-lg z-[1100] ${
+    toast.className = `fixed bottom-4 right-4 px-4 py-2 rounded-md shadow-lg z-1100 ${
       type === "success"
         ? "bg-green-500 text-white"
         : type === "error"
@@ -843,12 +843,12 @@
   };
 </script>
 
-<div class="fixed inset-0 z-[1010] flex" class:pointer-events-none={!isOpen}>
+<div class="fixed inset-0 z-1010 flex" class:pointer-events-none={!isOpen}>
   <!-- Backdrop -->
   {#if isOpen}
     <div
       transition:fade={{ duration: 300 }}
-      class="fixed inset-0 bg-black bg-opacity-50"
+      class="fixed inset-0 bg-black/50"
       on:click={() => (isOpen = false)}
       role="button"
       tabindex="0"
@@ -869,7 +869,7 @@
   >
     <!-- Header -->
     <div
-      class="flex-shrink-0 p-3 border-b border-neutral-200 dark:border-neutral-700"
+      class="shrink-0 p-3 border-b border-neutral-200 dark:border-neutral-700"
     >
       <div class="flex items-center justify-between">
         <h2 class="text-base font-semibold text-neutral-100">
@@ -910,7 +910,7 @@
 
     <!-- New File Section -->
     <div
-      class="flex-shrink-0 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700"
+      class="shrink-0 px-3 py-2 border-b border-neutral-200 dark:border-neutral-700"
     >
       {#if creatingNewFile}
         <div class="space-y-2">
@@ -1107,7 +1107,7 @@
                     <!-- Rename Button -->
                     <button
                       on:click|stopPropagation={() => startRename(file)}
-                      class="p-1.5 rounded hover:bg-blue-500 hover:text-white transition-colors flex-shrink-0"
+                      class="p-1.5 rounded hover:bg-blue-500 hover:text-white transition-colors shrink-0"
                       title="Rename file"
                     >
                       <svg
@@ -1129,7 +1129,7 @@
                     <!-- Delete Button -->
                     <button
                       on:click|stopPropagation={() => deleteFile(file)}
-                      class="p-1.5 rounded hover:bg-red-500 hover:text-white transition-colors flex-shrink-0"
+                      class="p-1.5 rounded hover:bg-red-500 hover:text-white transition-colors shrink-0"
                       title="Delete file"
                     >
                       <svg
@@ -1159,7 +1159,7 @@
     <!-- Current File Actions -->
     {#if selectedFile}
       <div
-        class="flex-shrink-0 p-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 bg-neutral-50 dark:bg-neutral-950"
+        class="shrink-0 p-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 bg-neutral-50 dark:bg-neutral-950"
       >
         <div class="text-xs font-medium text-neutral-700 dark:text-neutral-300 px-1">
           {selectedFile.name}
@@ -1306,7 +1306,7 @@
       </div>
     {:else}
       <div
-        class="flex-shrink-0 p-3 border-t border-neutral-200 dark:border-neutral-700 text-center text-xs text-neutral-500 dark:text-neutral-400"
+        class="shrink-0 p-3 border-t border-neutral-200 dark:border-neutral-700 text-center text-xs text-neutral-500 dark:text-neutral-400"
       >
         Select a file to manage
       </div>

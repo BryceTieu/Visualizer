@@ -55,7 +55,7 @@
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     transition:fade={{ duration: 200, easing: cubicInOut }}
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000]"
+    class="fixed inset-0 bg-black/50 flex items-center justify-center z-2000"
     on:click={handleCancel}
     role="presentation"
   >

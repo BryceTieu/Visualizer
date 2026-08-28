@@ -4149,7 +4149,7 @@
       />
       <canvas
         bind:this={fieldPointsCanvas}
-        class="absolute top-0 left-0 w-full h-full z-[15] pointer-events-none"
+        class="absolute top-0 left-0 w-full h-full z-15 pointer-events-none"
         aria-hidden="true"
       ></canvas>
       <MathTools {x} {y} {twoElement} {robotXY} />
@@ -4173,7 +4173,7 @@ pointer-events: none;`}
         />
         {#if settings.showCurrentTValue && robotT !== null}
           <div
-            class="pointer-events-none absolute z-[22] rounded-full border border-white/20 bg-black/60 px-3.5 py-1.5 font-mono text-[22px] font-semibold leading-none tracking-wide text-white shadow-lg backdrop-blur-sm"
+            class="pointer-events-none absolute z-22 rounded-full border border-white/20 bg-black/60 px-3.5 py-1.5 font-mono text-[22px] font-semibold leading-none tracking-wide text-white shadow-lg backdrop-blur-sm"
             style={`left: ${robotXY.x}px; top: ${robotXY.y - x(robotHeight) / 2 - 14}px; transform: translate(-50%, -100%);`}
           >
             t {robotT.toFixed(3)}
@@ -4320,7 +4320,7 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
         {/each}
       {/if}
       {#if !initialAssetsReady}
-        <div class="absolute inset-0 z-[60] flex items-center justify-center rounded-lg bg-neutral-950/80 backdrop-blur-sm">
+        <div class="absolute inset-0 z-60 flex items-center justify-center rounded-lg bg-neutral-950/80 backdrop-blur-sm">
           <div class="flex flex-col items-center gap-3 rounded-2xl border border-neutral-700 bg-neutral-900/95 px-6 py-5 shadow-2xl">
             <img src="/loading.svg" alt="Loading" class="size-20" draggable="false" />
             <div class="text-center">

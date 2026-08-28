@@ -13,7 +13,7 @@
 {#if isOpen}
   <div
     transition:fade={{ duration: 200, easing: cubicInOut }}
-    class="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[2000]"
+    class="fixed inset-0 bg-black/60 flex items-center justify-center z-2000"
     role="dialog"
     aria-modal="true"
     aria-labelledby="progress-title"
@@ -43,7 +43,7 @@
         <!-- Progress bar -->
         <div class="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-3 overflow-hidden">
           <div
-            class="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-300 ease-out"
+            class="bg-linear-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-300 ease-out"
             style="width: {progressPercentage}%"
           ></div>
         </div>

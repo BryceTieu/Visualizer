@@ -1,6 +1,6 @@
-@use "tailwindcss/base";
-@use "tailwindcss/components";
-@use "tailwindcss/utilities";
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
 
 /* Global text selection styling to avoid white flash */
 *::selection {
@@ -13,7 +13,7 @@
   color: inherit;
 }
 
-// Modern animations
+/* Modern animations */
 @keyframes slideDown {
   from {
     opacity: 0;
@@ -56,7 +56,7 @@
   }
 }
 
-// Smooth button transitions
+/* Smooth button transitions */
 button {
   @apply transition-colors duration-300 outline-none ring-0;
 
@@ -65,21 +65,21 @@ button {
   }
 }
 
-// Smooth input transitions
+/* Smooth input transitions */
 input,
 textarea,
 select {
   @apply transition-all duration-300 outline-none ring-0;
 
-  // Default to dark text so inputs with a white/light background (light theme)
-  // remain readable. Concrete color classes on an element win over this.
+  /* Default to dark text so inputs with a white/light background (light theme) */
+  /* remain readable. Concrete color classes on an element win over this. */
   color: #161616;
 
   &:focus {
     @apply ring-offset-0 ring-0 outline-none;
   }
 
-  // In dark theme the app chrome + inputs are dark, so use light text instead.
+  /* In dark theme the app chrome + inputs are dark, so use light text instead. */
   &::placeholder {
     color: #888888;
   }
@@ -96,15 +96,15 @@ select {
   }
 }
 
-// In dark theme the app chrome + inputs use dark surfaces, so flip the
-// default input text back to light so it stays readable.
+/* In dark theme the app chrome + inputs use dark surfaces, so flip the */
+/* default input text back to light so it stays readable. */
 .dark input,
 .dark textarea,
 .dark select {
   color: var(--ui-text);
 }
 
-// Card hover effects
+/* Card hover effects */
 .card-hover {
   @apply transition-all duration-300 ease-out;
 

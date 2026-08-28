@@ -164,7 +164,7 @@
 {#if isOpen}
   <div
     transition:fade={{ duration: 500, easing: cubicInOut }}
-    class="bg-black bg-opacity-25 flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-[1005]"
+    class="bg-black/25 flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-1005"
     role="dialog"
     aria-modal="true"
     aria-label="Export code dialog"
