@@ -11,6 +11,11 @@
   import * as browserFileStore from "../utils/browserFileStore";
   import { currentFilePath, isUnsaved, dualPathMode, secondFilePath } from "../stores";
   import { normalizeFieldPoints } from "../utils/fieldPoints";
+  import { normalizeLines, deriveSequence } from "../utils/normalize";
+  import { serializeProject } from "../utils/project";
+  import { downloadJson } from "../utils/download";
+  import { stripPpExtension } from "../utils/filename";
+  import { FIELD_SIZE } from "../config";
   import NameDialog from "./components/NameDialog.svelte";
 
   export let isOpen = false;
@@ -59,35 +64,8 @@
   }
 
   // Normalize lines to ensure ids and wait fields exist
-  function normalizeLines(input: Line[] = []): Line[] {
-    return (input || []).map((line) => ({
-      ...line,
-      id: line.id || `line-${Math.random().toString(36).slice(2)}`,
-      waitBeforeMs: Math.max(
-        0,
-        Number(line.waitBeforeMs ?? (line as any).waitBefore?.durationMs ?? 0),
-      ),
-      waitAfterMs: Math.max(
-        0,
-        Number(line.waitAfterMs ?? (line as any).waitAfter?.durationMs ?? 0),
-      ),
-      waitBeforeName:
-        line.waitBeforeName ?? (line as any).waitBefore?.name ?? "",
-      waitAfterName: line.waitAfterName ?? (line as any).waitAfter?.name ?? "",
-    }));
-  }
 
   // Normalize sequence data, falling back to path-only sequence if waits are missing
-  function deriveSequence(data: any, normalizedLines: Line[]): SequenceItem[] {
-    if (Array.isArray(data?.sequence) && data.sequence.length) {
-      return data.sequence as SequenceItem[];
-    }
-
-    return normalizedLines.map((ln) => ({
-      kind: "path",
-      lineId: ln.id!,
-    }));
-  }
 
   function hydrateFieldPoints(data: any): FieldPoint[] {
     return normalizeFieldPoints(data);
@@ -156,7 +134,7 @@
   // NEW: Start renaming a file
   function startRename(file: FileInfo) {
     renamingFile = file;
-    renameInputValue = file.name.replace(/\.pp$/, "");
+    renameInputValue = stripPpExtension(file.name);
   }
 
   // NEW: Cancel renaming
@@ -327,14 +305,12 @@
     }
 
     try {
-      const content = JSON.stringify({
+      const content = serializeProject({
         startPoint,
         lines,
         shapes,
         sequence,
         fieldPoints,
-        version: "1.2.1", // Add version for compatibility
-        timestamp: new Date().toISOString(),
       });
 
       await browserFileStore.writeFile(selectedFile.path, content);
@@ -351,27 +327,14 @@
   // Download current project as a .pp file to the user's computer (Save As...)
   function downloadCurrentToDisk() {
     try {
-      const content = JSON.stringify({
-        startPoint,
-        lines,
-        shapes,
-        sequence,
-        fieldPoints,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
-      }, null, 2);
+      const content = serializeProject(
+        { startPoint, lines, shapes, sequence, fieldPoints },
+        { pretty: true },
+      );
 
-      const blob = new Blob([content], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
       const defaultName = selectedFile?.name || "path.pp";
-      a.href = url;
-      a.download = defaultName;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      showToast(`Downloaded: ${a.download}`, "success");
+      downloadJson(content, defaultName);
+      showToast(`Downloaded: ${defaultName}`, "success");
     } catch (error) {
       showToast(`Failed to download file: ${getErrorMessage(error)}`, "error");
     }
@@ -404,15 +367,10 @@
 
       const writable = await handle.createWritable();
 
-      const content = JSON.stringify({
-        startPoint,
-        lines,
-        shapes,
-        sequence,
-        fieldPoints,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
-      }, null, 2);
+      const content = serializeProject(
+        { startPoint, lines, shapes, sequence, fieldPoints },
+        { pretty: true },
+      );
 
       await writable.write(content);
       await writable.close();
@@ -453,14 +411,12 @@
       }
 
       const normalizedLines = normalizeLines(lines);
-      const content = JSON.stringify({
+      const content = serializeProject({
         startPoint,
         lines: normalizedLines,
         shapes,
         sequence,
         fieldPoints,
-        version: "1.2.1",
-        timestamp: new Date().toISOString(),
       });
 
       await browserFileStore.writeFile(filePath, content);
@@ -570,7 +526,7 @@
         data.name += " Copy";
       }
 
-      const baseName = selectedFile.name.replace(/\.pp$/, "");
+      const baseName = stripPpExtension(selectedFile.name);
       let newFileName = `${baseName}_copy.pp`;
       let counter = 1;
 
@@ -629,7 +585,7 @@
       mirroredData.lines = normalizeLines(mirroredData.lines || []);
       mirroredData.sequence = deriveSequence(mirroredData, mirroredData.lines);
 
-      const baseName = selectedFile.name.replace(/\.pp$/, "");
+      const baseName = stripPpExtension(selectedFile.name);
       const defaultName = `${baseName}_mirrored`;
       
       // Store the mirrored data and open custom dialog
@@ -649,7 +605,7 @@
 
     try {
       // Remove .pp extension if user added it
-      userInput = userInput.replace(/\.pp$/, "");
+      userInput = stripPpExtension(userInput);
       
       let newFileName = `${userInput}.pp`;
       let counter = 1;
@@ -722,7 +678,7 @@
 
     // Mirror start point
     if (mirrored.startPoint) {
-      mirrored.startPoint.x = 141.5 - mirrored.startPoint.x;
+      mirrored.startPoint.x = FIELD_SIZE - mirrored.startPoint.x;
       mirrored.startPoint = mirrorPointHeading(mirrored.startPoint);
     }
 
@@ -731,14 +687,14 @@
       mirrored.lines.forEach((line: Line) => {
         // Mirror end point
         if (line.endPoint) {
-          line.endPoint.x = 141.5 - line.endPoint.x;
+          line.endPoint.x = FIELD_SIZE - line.endPoint.x;
           line.endPoint = mirrorPointHeading(line.endPoint);
         }
 
         // Mirror control points
         if (line.controlPoints && Array.isArray(line.controlPoints)) {
           line.controlPoints.forEach((controlPoint: any) => {
-            controlPoint.x = 141.5 - controlPoint.x;
+            controlPoint.x = FIELD_SIZE - controlPoint.x;
           });
         }
       });

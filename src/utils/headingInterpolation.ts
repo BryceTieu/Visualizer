@@ -6,20 +6,17 @@ import type {
   PiecewiseHeadingSegment,
   PathChain,
 } from "../types";
-import { getCurvePoint, interpolateAngleDegrees, radiansToDegrees as mathRadiansToDegrees } from "./math";
+import {
+  getCurvePoint,
+  interpolateAngleDegrees,
+  normalizeAngleDegrees,
+  radiansToDegrees,
+} from "./math";
 
 const MIN_SEGMENT_LENGTH = 0.0001;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function normalizeDegrees(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  let normalized = value % 360;
-  if (normalized > 180) normalized -= 360;
-  if (normalized <= -180) normalized += 360;
-  return normalized;
 }
 
 function clonePoint(point?: BasePoint): BasePoint | undefined {
@@ -202,15 +199,11 @@ export function validatePiecewiseHeadingInterpolation(
 }
 
 export function degreesToRadians(degrees: number): number {
-  return (normalizeDegrees(degrees) * Math.PI) / 180;
-}
-
-export function radiansToDegrees(radians: number): number {
-  return (radians * 180) / Math.PI;
+  return (normalizeAngleDegrees(degrees) * Math.PI) / 180;
 }
 
 export function toDegreesDisplay(value: number): number {
-  return normalizeDegrees(value);
+  return normalizeAngleDegrees(value);
 }
 
 export function lineCurvePoints(
@@ -256,7 +249,7 @@ export function getPointAndTangentAtProgress(
 
   return {
     point,
-    tangentDegrees: Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9 ? 0 : mathRadiansToDegrees(Math.atan2(dy, dx)),
+    tangentDegrees: Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9 ? 0 : radiansToDegrees(Math.atan2(dy, dx)),
   };
 }
 
@@ -340,7 +333,7 @@ export function evaluatePiecewiseHeading(
 
   switch (segment.interpolationType) {
     case "constant":
-      return normalizeDegrees(segment.parameters?.degrees ?? 0);
+      return normalizeAngleDegrees(segment.parameters?.degrees ?? 0);
     case "linear":
       return interpolateAngleDegrees(
         segment.parameters?.startDeg ?? 0,
@@ -350,13 +343,13 @@ export function evaluatePiecewiseHeading(
       );
     case "facing-point": {
       const point = segment.parameters?.point || { x: 0, y: 0 };
-      const base = mathRadiansToDegrees(
+      const base = radiansToDegrees(
         Math.atan2(point.y - sourcePoint.y, point.x - sourcePoint.x),
       );
-      return normalizeDegrees(base + (segment.reversed ? 180 : 0));
+      return normalizeAngleDegrees(base + (segment.reversed ? 180 : 0));
     }
     case "tangential":
     default:
-      return normalizeDegrees(sourceTangent + (segment.reversed ? 180 : 0));
+      return normalizeAngleDegrees(sourceTangent + (segment.reversed ? 180 : 0));
   }
 }

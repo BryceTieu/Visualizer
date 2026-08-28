@@ -6,7 +6,7 @@ import type {
   SequenceItem,
 } from "../types";
 
-const FIELD_WIDTH_INCHES = 141.5;
+import { FIELD_SIZE as FIELD_WIDTH_INCHES } from "../config/defaults";
 
 interface ExportTransformOptions {
   mirrorHorizontally?: boolean;

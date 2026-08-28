@@ -1,6 +1,10 @@
 export * from "./animation";
 export * from "./codeExporter";
-export * from "./draw";
+export * from "./color";
+export * from "./normalize";
+export * from "./project";
+export * from "./download";
+export * from "./filename";
 export * from "./file";
 export * from "./geometry";
 export * from "./gifExporter";
@@ -15,7 +19,6 @@ export {
   normalizePiecewiseHeadingInterpolation,
   validatePiecewiseHeadingInterpolation,
   degreesToRadians,
-  radiansToDegrees as headingRadiansToDegrees,
   toDegreesDisplay,
   lineCurvePoints,
   approximateCurveLength,

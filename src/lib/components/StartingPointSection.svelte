@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Point } from "../../types";
+  import { FIELD_SIZE } from "../../config";
 
   export let startPoint: Point;
 </script>
@@ -72,7 +73,7 @@
       <input
         bind:value={startPoint.x}
         min="0"
-        max="141.5"
+        max={FIELD_SIZE}
         type="number"
         class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
         step="0.1"
@@ -85,7 +86,7 @@
       <input
         bind:value={startPoint.y}
         min="0"
-        max="141.5"
+        max={FIELD_SIZE}
         type="number"
         class="w-full rounded-md border-[0.5px] bg-neutral-100 px-2 py-1 focus:outline-none dark:border-neutral-700 dark:bg-neutral-950"
         step="0.1"

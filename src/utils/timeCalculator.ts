@@ -13,30 +13,7 @@ import {
   getLineEndHeading,
   getAngularDifference,
 } from "./math";
-
-/**
- * Calculate the length of a curve by sampling points
- */
-function calculateCurveLength(
-  start: BasePoint,
-  controlPoints: BasePoint[],
-  end: BasePoint,
-  samples: number = 100,
-): number {
-  let length = 0;
-  let prevPoint: BasePoint = start;
-
-  for (let i = 1; i <= samples; i++) {
-    const t = i / samples;
-    const point = getCurvePoint(t, [start, ...controlPoints, end]);
-    const dx = point.x - prevPoint.x;
-    const dy = point.y - prevPoint.y;
-    length += Math.sqrt(dx * dx + dy * dy);
-    prevPoint = point;
-  }
-
-  return length;
-}
+import { approximateCurveLength } from "./headingInterpolation";
 
 /**
  * Calculate time for a motion profile (trapezoidal or triangular)
@@ -178,15 +155,11 @@ export function calculatePathTime(
     }
 
     // --- TRAVEL ---
-    const length = calculateCurveLength(
-      prevPoint,
-      line.controlPoints as any,
-      line.endPoint as any,
-    );
+    const curvePoints = [prevPoint, ...line.controlPoints, line.endPoint];
+    const length = approximateCurveLength(curvePoints);
     segmentLengths.push(length);
     let segmentTime = 0;
     const sampledPoints: Array<{ x: number; y: number }> = [];
-    const curvePoints = [prevPoint, ...line.controlPoints, line.endPoint];
     const sampleCount = Math.max(12, Math.ceil(length / 6));
     for (let sampleIndex = 0; sampleIndex <= sampleCount; sampleIndex += 1) {
       const t = sampleIndex / sampleCount;

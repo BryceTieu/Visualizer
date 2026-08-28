@@ -33,7 +33,10 @@
   import hotkeys from "hotkeys-js";
   import { createAnimationController } from "./utils/animation";
   import { createPerfSampler, sampleNodeCounts } from "./utils/perf";
-  import { exportAsGif, downloadBlob } from "./utils/gifExporter";
+  import { exportAsGif } from "./utils/gifExporter";
+  import { downloadBlob } from "./utils/download";
+  import { buildProject } from "./utils/project";
+  import { basename, pathStem } from "./utils/filename";
   import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
   import {
     calculatePathTime,
@@ -43,6 +46,8 @@
     generateOnionLayers,
     getCurvePoint,
     getRandomColor,
+    normalizeLines,
+    makeLineId,
     quadraticToCubic,
     downloadTrajectory,
     loadTrajectoryFromFile,
@@ -66,26 +71,6 @@
   import { createHistory, type AppState } from "./utils/history";
   // Browser-only build: file operations use the browser file store and
   // localStorage. Electron-specific APIs have been removed.
-
-  function normalizeLines(input: Line[]): Line[] {
-    return (input || []).map((line) => ({
-      ...line,
-      id: line.id || `line-${Math.random().toString(36).slice(2)}`,
-      controlPoints: line.controlPoints || [],
-      color: line.color || getRandomColor(),
-      name: line.name || "",
-      waitBeforeMs: Math.max(
-        0,
-        Number(line.waitBeforeMs ?? line.waitBefore?.durationMs ?? 0),
-      ),
-      waitAfterMs: Math.max(
-        0,
-        Number(line.waitAfterMs ?? line.waitAfter?.durationMs ?? 0),
-      ),
-      waitBeforeName: line.waitBeforeName ?? line.waitBefore?.name ?? "",
-      waitAfterName: line.waitAfterName ?? line.waitAfter?.name ?? "",
-    }));
-  }
 
   // Canvas state
   let two: Two;
@@ -181,8 +166,6 @@
     kind: "path",
     lineId: ln.id!,
   }));
-  const makeId = () =>
-    `line-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   let selectedLineIndex = 0;
   let selectedPointIndex = 0;
   let selectedLine: Line | null = null;
@@ -436,7 +419,7 @@
 
       const fittedLines: Line[] = [
         {
-          id: makeId(),
+          id: makeLineId(),
           name: "Path 1",
           endPoint: {
             x: strokePoints[strokePoints.length - 1].x,
@@ -643,18 +626,18 @@
   }
 
   function buildProjectData(overrides: Record<string, unknown> = {}) {
-    return {
-      startPoint,
-      lines,
-      shapes,
-      sequence,
-      fieldPoints,
-      activePaths: $activePaths,
-      settings,
-      version: "1.3.0",
-      timestamp: new Date().toISOString(),
-      ...overrides,
-    };
+    return buildProject(
+      {
+        startPoint,
+        lines,
+        shapes,
+        sequence,
+        fieldPoints,
+        activePaths: $activePaths,
+        settings,
+      },
+      overrides,
+    );
   }
 
   function getAppState(): AppState {
@@ -2398,7 +2381,7 @@
       
       // Download the GIF
       const fileName = $currentFilePath
-        ? $currentFilePath.split(/[\/\\]/).pop()?.replace(/\.pp$/, "")
+        ? pathStem($currentFilePath)
         : hasActivePaths
           ? "multiple_paths"
           : hasDualPath
@@ -3882,7 +3865,7 @@
 <SaveDialog
   bind:isOpen={showSaveDialog}
   bind:isSaving
-  fileName={$currentFilePath?.split(/[\\/]/).pop()?.replace(/\.pp$/, "") || "my_path"}
+  fileName={pathStem($currentFilePath) || "my_path"}
 />
 
 <DualPathSaveDialog bind:isOpen={showDualPathSaveDialog} />
@@ -3922,7 +3905,7 @@
         </div>
         <p class="module-caption">Export name</p>
         <div class="module-mono">
-          {$currentFilePath?.split(/[\\/]/).pop() || "untitled_path.pp"}
+          {basename($currentFilePath) || "untitled_path.pp"}
         </div>
       </section>
 
@@ -4233,7 +4216,7 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
       {/if}
         </div>
       </div>
-      <div class="module-footer">Field · 141.5&quot; x 141.5&quot;</div>
+      <div class="module-footer">Field · {FIELD_SIZE}&quot; x {FIELD_SIZE}&quot;</div>
     </main>
 
     <div class="panel-divider panel-divider--right">

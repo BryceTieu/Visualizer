@@ -23,6 +23,7 @@
   import ExportCodeDialog from "./components/ExportCodeDialog.svelte";
   import MultiplePathsDialog from "./components/MultiplePathsDialog.svelte";
   import { calculatePathTime, formatTime } from "../utils";
+  import { basename, pathStem } from "../utils/filename";
   import html2canvas from "html2canvas";
 
   export let loadFile: (evt: any) => any;
@@ -155,7 +156,7 @@
           const downloadUrl = URL.createObjectURL(blob);
           const link = document.createElement("a");
           const fileName = $currentFilePath
-            ? $currentFilePath.split(/[\/\\]/).pop()?.replace(/\.pp$/, "")
+            ? pathStem($currentFilePath)
             : "field";
           link.download = `${fileName}_field.png`;
           link.href = downloadUrl;
@@ -191,7 +192,7 @@
 
     if (hasChanges) {
       if ($currentFilePath) {
-        message += `This will reset "${$currentFilePath.split(/[\\/]/).pop()}" to the default path.`;
+        message += `This will reset "${basename($currentFilePath)}" to the default path.`;
       } else {
         message += "This will reset your current work to the default path.";
       }
@@ -328,7 +329,7 @@
         <span
           class="text-sm font-normal text-neutral-600 dark:text-neutral-300"
         >
-          {$currentFilePath.split(/[\\/]/).pop()}
+          {basename($currentFilePath)}
           {#if $isUnsaved}
             <span class="text-amber-500 font-bold ml-1" title="Unsaved changes"
               >*</span

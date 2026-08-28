@@ -2,6 +2,7 @@
   import type { Shape } from "../../types";
   import { createTriangle } from "../../utils";
   import { snapToGrid, showGrid, gridSize } from "../../stores";
+  import { FIELD_SIZE } from "../../config";
 
   const colorChoices = [
     { label: "Red", color: "#dc2626", fill: "#ff6b6b" },
@@ -162,7 +163,7 @@
               bind:value={vertex.x}
               type="number"
               min="0"
-              max="141.5"
+              max={FIELD_SIZE}
               step={$snapToGrid && $showGrid ? $gridSize : 0.1}
               title={snapToGridTitle}
               class={`pl-1.5 bg-neutral-100 dark:bg-neutral-950 dark:border-neutral-700 border-[0.5px] focus:outline-none ${compact ? "w-16 py-0.5 text-xs" : "w-24 py-1 text-sm"}`}
@@ -172,7 +173,7 @@
               bind:value={vertex.y}
               type="number"
               min="0"
-              max="141.5"
+              max={FIELD_SIZE}
               step={$snapToGrid && $showGrid ? $gridSize : 0.1}
               class={`pl-1.5 bg-neutral-100 dark:bg-neutral-950 dark:border-neutral-700 border-[0.5px] focus:outline-none ${compact ? "w-16 py-0.5 text-xs" : "w-24 py-1 text-sm"}`}
               title={snapToGridTitle}

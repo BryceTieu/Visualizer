@@ -6,6 +6,7 @@
     protractorLockToRobot,
     gridSize,
   } from "../stores";
+  import { FIELD_SIZE } from "../config";
   import type * as d3 from "d3";
 
   export let x: d3.ScaleLinear<number, number>;
@@ -120,7 +121,6 @@
     ? { x: x.invert(robotXY.x), y: y.invert(robotXY.y) }
     : protractorPos;
 
-  const FIELD_SIZE = 141.5;
   let spacing = 12;
   let gridPositions: number[] = [];
   let labelInterval = 1; // Show label every N grid lines

@@ -7,30 +7,14 @@
     Shape,
     SequenceItem,
   } from "../types";
-  // Local normalizeLines helper (keeps behavior consistent with FileManager/App)
-  function normalizeLines(input: Line[] = []): Line[] {
-    return (input || []).map((line) => ({
-      ...line,
-      id: line.id || `line-${Math.random().toString(36).slice(2)}`,
-      waitBeforeMs: Math.max(
-        0,
-        Number(line.waitBeforeMs ?? (line as any).waitBefore?.durationMs ?? 0),
-      ),
-      waitAfterMs: Math.max(
-        0,
-        Number(line.waitAfterMs ?? (line as any).waitAfter?.durationMs ?? 0),
-      ),
-      waitBeforeName: line.waitBeforeName ?? (line as any).waitBefore?.name ?? "",
-      waitAfterName: line.waitAfterName ?? (line as any).waitAfter?.name ?? "",
-    }));
-  }
   import { snapToGrid, showGrid, gridSize } from "../stores";
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
   import HeadingControls from "./components/HeadingControls.svelte";
   import RobotPositionDisplay from "./components/RobotPositionDisplay.svelte";
   import StartingPointSection from "./components/StartingPointSection.svelte";
   import PlaybackControls from "./components/PlaybackControls.svelte";
-  import { calculatePathTime } from "../utils";
+  import { calculatePathTime, normalizeLines } from "../utils";
+  import { FIELD_SIZE } from "../config";
   import { curveThroughPoints } from "../utils/math";
 
   export let percent: number;
@@ -393,7 +377,7 @@
                   bind:value={selectedPoint.x}
                   type="number"
                   min="0"
-                  max="141.5"
+                  max={FIELD_SIZE}
                   step={$snapToGrid && $showGrid ? $gridSize : 0.1}
                   class="w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                   on:change={commitSelectedPointChange}
@@ -406,7 +390,7 @@
                   bind:value={selectedPoint.y}
                   type="number"
                   min="0"
-                  max="141.5"
+                  max={FIELD_SIZE}
                   step={$snapToGrid && $showGrid ? $gridSize : 0.1}
                   class="w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50"
                   on:change={commitSelectedPointChange}

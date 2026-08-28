@@ -12,6 +12,7 @@
     generatePointsArray,
     generateSequentialCommandCode,
   } from "../../utils/codeExporter";
+  import { basename } from "../../utils/filename";
 
   export let isOpen = false;
   export let startPoint: Point;
@@ -28,7 +29,7 @@
 
   // Update sequential class name when file changes
   $: if ($currentFilePath) {
-    const fileName = $currentFilePath.split(/[\\/]/).pop();
+    const fileName = basename($currentFilePath);
     if (fileName) {
       const baseName = fileName
         .replace(".pp", "")
@@ -72,7 +73,7 @@
         // so the user sees the file-derived class name, but keep the
         // field editable for manual overrides.
         if ($currentFilePath) {
-          const fileName = $currentFilePath.split(/[\\/]/).pop();
+          const fileName = basename($currentFilePath);
           if (fileName) {
             sequentialClassName = fileName
               .replace(".pp", "")
