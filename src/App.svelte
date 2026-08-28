@@ -37,6 +37,18 @@
   import { downloadBlob } from "./utils/download";
   import { buildProject } from "./utils/project";
   import { basename, pathStem } from "./utils/filename";
+  import { buildPathElements } from "./lib/scene/paths";
+  import {
+    buildPathPointMarkers,
+    buildSelectedPointRing,
+    buildObstacleVertexMarkers,
+  } from "./lib/scene/points";
+  import {
+    buildClosedPolygon,
+    buildGhostPath,
+    buildOnionLayer,
+    selectVisibleOnionLayers,
+  } from "./lib/scene/polygons";
   import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
   import {
     calculatePathTime,
@@ -44,11 +56,9 @@
     calculateRobotState,
     generateGhostPathPoints,
     generateOnionLayers,
-    getCurvePoint,
     getRandomColor,
     normalizeLines,
     makeLineId,
-    quadraticToCubic,
     downloadTrajectory,
     loadTrajectoryFromFile,
     updateRobotImageDisplay,
@@ -889,605 +899,96 @@
     // Ensure effectiveSize matches the smallest of width/height so the field image and grid align
     effectiveSize = Math.min(width || FIELD_SIZE, height || FIELD_SIZE);
   }
-  $: points = (() => {
-    let _points = [];
-    
+  $: isMultiPathMode = $activePaths.length > 0;
+  $: scales = { x, y };
+  const GHOST_COLOR = "#a78bfa"; // Light purple/lavender
+  const SECOND_PATH_COLOR = "#fca5a5"; // Light red/pink for the second robot
+  $: pointSelection = { lineIndex: selectedLineIndex, pointIndex: selectedPointIndex };
+  $: points = [
     // Only show main path points when NOT in multi-path mode
-    if ($activePaths.length === 0) {
-      let startPointElem = new Two.Circle(
-        x(startPoint.x),
-        y(startPoint.y),
-        x(POINT_RADIUS),
+    ...(isMultiPathMode
+      ? []
+      : [
+          ...buildPathPointMarkers(startPoint, lines, scales, {
+            idPrefix: "point",
+            selection: pointSelection,
+          }),
+          ...buildSelectedPointRing(lines, pointSelection, scales),
+        ]),
+    // Draggable obstacle vertices
+    ...(settings?.experimentalFeatures?.obstacles
+      ? buildObstacleVertexMarkers(shapes, scales)
+      : []),
+    // Second path points (dual path mode) - not in multi-path mode
+    ...(!isMultiPathMode &&
+    $dualPathMode &&
+    secondStartPoint &&
+    secondLines.length > 0
+      ? buildPathPointMarkers(secondStartPoint, secondLines, scales, {
+          idPrefix: "second-point",
+        })
+      : []),
+    // All control points for additional paths (full editing support)
+    ...(isMultiPathMode
+      ? additionalPaths.flatMap((pathData, pathIdx) =>
+          !pathData.startPoint || !pathData.lines.length
+            ? []
+            : buildPathPointMarkers(
+                pathData.startPoint,
+                pathData.lines,
+                scales,
+                {
+                  idPrefix: `additional-path-${pathIdx}-point`,
+                  color: pathData.color,
+                  radiusScale: 0.9,
+                  textSize: 1.4,
+                  opacity: 0.8,
+                },
+              ),
+        )
+      : []),
+  ];
+
+  // Hide main path when in multi-path mode (isolated visualization)
+  $: path = isMultiPathMode
+    ? []
+    : buildPathElements(
+        { startPoint, lines, idPrefix: "line" },
+        scales,
+        settings,
       );
-      startPointElem.id = `point-0-0`;
-      startPointElem.fill = lines[0].color;
-      startPointElem.noStroke();
 
-      _points.push(startPointElem);
-
-      lines.forEach((line, idx) => {
-        if (!line || !line.endPoint) return; // Skip invalid lines or lines without endPoint
-        [line.endPoint, ...line.controlPoints].forEach((point, idx1) => {
-          if (idx1 > 0) {
-            let pointGroup = new Two.Group();
-            pointGroup.id = `point-${idx + 1}-${idx1}`;
-
-            let pointElem = new Two.Circle(
-              x(point.x),
-              y(point.y),
-              x(POINT_RADIUS),
-            );
-            pointElem.id = `point-${idx + 1}-${idx1}-background`;
-            pointElem.fill = line.color;
-            pointElem.stroke = selectedLineIndex === idx ? "#facc15" : line.color;
-            pointElem.linewidth = x(selectedLineIndex === idx ? 0.7 : 0.25);
-
-            let pointText = new Two.Text(
-              `${idx1}`,
-              x(point.x),
-              y(point.y - 0.15),
-            );
-            pointText.id = `point-${idx + 1}-${idx1}-text`;
-            pointText.size = x(1.55);
-            pointText.leading = 1;
-            pointText.family = "ui-sans-serif, system-ui, sans-serif";
-            pointText.alignment = "center";
-            pointText.baseline = "middle";
-            pointText.fill = "white";
-            pointText.noStroke();
-
-            if (selectedLineIndex === idx) {
-              const highlightRing = new Two.Circle(
-                x(point.x),
-                y(point.y),
-                x(POINT_RADIUS) * 1.45,
-              );
-              highlightRing.id = `point-${idx + 1}-${idx1}-highlight`;
-              highlightRing.fill = "transparent";
-              highlightRing.stroke = selectedPointIndex === idx1 ? "#f59e0b" : "#facc15";
-              highlightRing.linewidth = x(selectedPointIndex === idx1 ? 0.45 : 0.25);
-              pointGroup.add(highlightRing);
-            }
-
-            pointGroup.add(pointElem, pointText);
-            _points.push(pointGroup);
-          } else {
-            let pointElem = new Two.Circle(
-              x(point.x),
-              y(point.y),
-              x(POINT_RADIUS),
-            );
-            pointElem.id = `point-${idx + 1}-${idx1}`;
-            pointElem.fill = line.color;
-            pointElem.stroke = selectedLineIndex === idx ? "#facc15" : line.color;
-            pointElem.linewidth = x(selectedLineIndex === idx ? 0.7 : 0.25);
-            if (selectedLineIndex === idx) {
-              const highlightRing = new Two.Circle(
-                x(point.x),
-                y(point.y),
-                x(POINT_RADIUS) * 1.45,
-              );
-              highlightRing.id = `point-${idx + 1}-${idx1}-highlight`;
-              highlightRing.fill = "transparent";
-              highlightRing.stroke = selectedPointIndex === idx1 ? "#f59e0b" : "#facc15";
-              highlightRing.linewidth = x(selectedPointIndex === idx1 ? 0.45 : 0.25);
-              _points.push(highlightRing);
-            }
-            _points.push(pointElem);
-          }
-        });
-      });
-
-      const selectedLine = lines[selectedLineIndex];
-      const selectedPoint =
-        selectedLine && selectedPointIndex >= 0
-          ? selectedPointIndex === 0
-            ? selectedLine.endPoint
-            : selectedLine.controlPoints[selectedPointIndex - 1]
-          : null;
-
-      if (selectedLine && selectedPoint) {
-        const selectedPointRing = new Two.Circle(
-          x(selectedPoint.x),
-          y(selectedPoint.y),
-          x(POINT_RADIUS) * 1.7,
+  // Second path rendering (for dual path mode); not shown in multi-path mode
+  $: secondPath =
+    isMultiPathMode || !$dualPathMode || !secondStartPoint || secondLines.length === 0
+      ? []
+      : buildPathElements(
+          {
+            startPoint: secondStartPoint,
+            lines: secondLines,
+            idPrefix: "second-line",
+          },
+          scales,
+          settings,
         );
-        selectedPointRing.id = `selected-point-${selectedLineIndex}-${selectedPointIndex}`;
-        selectedPointRing.fill = "transparent";
-        selectedPointRing.stroke = "#facc15";
-        selectedPointRing.linewidth = x(0.35);
-        selectedPointRing.opacity = 0.95;
-        _points.push(selectedPointRing);
-      }
-    }
-    
-    // Add obstacle vertices as draggable points
-    if (settings?.experimentalFeatures?.obstacles) {
-    shapes.forEach((shape, shapeIdx) => {
-      shape.vertices.forEach((vertex, vertexIdx) => {
-        let pointGroup = new Two.Group();
-        pointGroup.id = `obstacle-${shapeIdx}-${vertexIdx}`;
 
-        let pointElem = new Two.Circle(
-          x(vertex.x),
-          y(vertex.y),
-          x(POINT_RADIUS),
-        );
-        pointElem.id = `obstacle-${shapeIdx}-${vertexIdx}-background`;
-        pointElem.fill = shape.fillColor; // Match obstacle fill color
-        pointElem.noStroke();
-
-        let pointText = new Two.Text(
-          `${vertexIdx + 1}`,
-          x(vertex.x),
-          y(vertex.y - 0.15),
-        );
-        pointText.id = `obstacle-${shapeIdx}-${vertexIdx}-text`;
-        pointText.size = x(1.55);
-        pointText.leading = 1;
-        pointText.family = "ui-sans-serif, system-ui, sans-serif";
-        pointText.alignment = "center";
-        pointText.baseline = "middle";
-        pointText.fill = "white";
-        pointText.noStroke();
-        pointGroup.add(pointElem, pointText);
-        _points.push(pointGroup);
-      });
-    });
-    }
-
-    // Add second path points (for dual path mode) - not in multi-path mode
-    if ($activePaths.length === 0 && $dualPathMode && secondStartPoint && secondLines.length > 0) {
-      let secondStartPointElem = new Two.Circle(
-        x(secondStartPoint.x),
-        y(secondStartPoint.y),
-        x(POINT_RADIUS),
-      );
-      secondStartPointElem.id = `second-point-0-0`;
-      secondStartPointElem.fill = secondLines[0]?.color || "#888";
-      secondStartPointElem.noStroke();
-      _points.push(secondStartPointElem);
-
-      secondLines.forEach((line, idx) => {
-        if (!line || !line.endPoint) return;
-        [line.endPoint, ...line.controlPoints].forEach((point, idx1) => {
-          if (idx1 > 0) {
-            let pointGroup = new Two.Group();
-            pointGroup.id = `second-point-${idx + 1}-${idx1}`;
-
-            let pointElem = new Two.Circle(
-              x(point.x),
-              y(point.y),
-              x(POINT_RADIUS),
-            );
-            pointElem.id = `second-point-${idx + 1}-${idx1}-background`;
-            pointElem.fill = line.color;
-            pointElem.noStroke();
-
-            let pointText = new Two.Text(
-              `${idx1}`,
-              x(point.x),
-              y(point.y - 0.15),
-            );
-            pointText.id = `second-point-${idx + 1}-${idx1}-text`;
-            pointText.size = x(1.55);
-            pointText.leading = 1;
-            pointText.family = "ui-sans-serif, system-ui, sans-serif";
-            pointText.alignment = "center";
-            pointText.baseline = "middle";
-            pointText.fill = "white";
-            pointText.noStroke();
-
-            pointGroup.add(pointElem, pointText);
-            _points.push(pointGroup);
-          } else {
-            let pointElem = new Two.Circle(
-              x(point.x),
-              y(point.y),
-              x(POINT_RADIUS),
-            );
-            pointElem.id = `second-point-${idx + 1}-${idx1}`;
-            pointElem.fill = line.color;
-            pointElem.noStroke();
-            _points.push(pointElem);
-          }
-        });
-      });
-    }
-
-    // Add all control points for additional paths (full editing support)
-    if ($activePaths.length > 0) {
-      additionalPaths.forEach((pathData, pathIdx) => {
-        if (!pathData.startPoint || !pathData.lines.length) return;
-        
-        // Add starting point
-        let startPointElem = new Two.Circle(
-          x(pathData.startPoint.x),
-          y(pathData.startPoint.y),
-          x(POINT_RADIUS * 0.9),
-        );
-        startPointElem.id = `additional-path-${pathIdx}-point-0-0`;
-        startPointElem.fill = pathData.color || pathData.lines[0]?.color || "#888";
-        startPointElem.noStroke();
-        startPointElem.opacity = 0.8;
-        _points.push(startPointElem);
-        
-        // Add all line points and control points
-        pathData.lines.forEach((line, lineIdx) => {
-          if (!line || !line.endPoint) return;
-          
-          [line.endPoint, ...line.controlPoints].forEach((point, pointIdx) => {
-            if (pointIdx > 0) {
-              // Control point with number
-              let pointGroup = new Two.Group();
-              pointGroup.id = `additional-path-${pathIdx}-point-${lineIdx + 1}-${pointIdx}`;
-
-              let pointElem = new Two.Circle(
-                x(point.x),
-                y(point.y),
-                x(POINT_RADIUS * 0.9),
-              );
-              pointElem.id = `additional-path-${pathIdx}-point-${lineIdx + 1}-${pointIdx}-background`;
-              pointElem.fill = pathData.color || line.color;
-              pointElem.noStroke();
-
-              let pointText = new Two.Text(
-                `${pointIdx}`,
-                x(point.x),
-                y(point.y - 0.15),
-              );
-              pointText.id = `additional-path-${pathIdx}-point-${lineIdx + 1}-${pointIdx}-text`;
-              pointText.size = x(1.4);
-              pointText.leading = 1;
-              pointText.family = "ui-sans-serif, system-ui, sans-serif";
-              pointText.alignment = "center";
-              pointText.baseline = "middle";
-              pointText.fill = "white";
-              pointText.noStroke();
-
-              pointGroup.add(pointElem, pointText);
-              pointGroup.opacity = 0.8;
-              _points.push(pointGroup);
-            } else {
-              // End point without number
-              let pointElem = new Two.Circle(
-                x(point.x),
-                y(point.y),
-                x(POINT_RADIUS * 0.9),
-              );
-              pointElem.id = `additional-path-${pathIdx}-point-${lineIdx + 1}-${pointIdx}`;
-              pointElem.fill = pathData.color || line.color;
-              pointElem.noStroke();
-              pointElem.opacity = 0.8;
-              _points.push(pointElem);
-            }
-          });
-        });
-      });
-    }
-
-    return _points;
-  })();
-
-  $: path = (() => {
-    // Hide main path when in multi-path mode (isolated visualization)
-    if ($activePaths.length > 0) {
-      return [];
-    }
-    
-    let _path: (Path | PathLine)[] = [];
-
-    lines.forEach((line, idx) => {
-      if (!line || !line.endPoint) return; // Skip invalid lines or lines without endPoint
-      let _startPoint =
-        idx === 0 ? startPoint : lines[idx - 1]?.endPoint || null;
-      if (!_startPoint) return; // Skip if previous line's endPoint is missing
-
-      let lineElem: Path | PathLine;
-      if (line.controlPoints.length > 2) {
-        // Approximate an n-degree bezier curve by sampling it at 100 points
-        const samples = 100;
-        const cps = [_startPoint, ...line.controlPoints, line.endPoint];
-        let points = [
-          new Two.Anchor(
-            x(_startPoint.x),
-            y(_startPoint.y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
-          ),
-        ];
-        for (let i = 1; i <= samples; ++i) {
-          const point = getCurvePoint(i / samples, cps);
-          points.push(
-            new Two.Anchor(
-              x(point.x),
-              y(point.y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-        points.forEach((point) => (point.relative = false));
-        lineElem = new Two.Path(points);
-        lineElem.automatic = false;
-      } else if (line.controlPoints.length > 0) {
-        let cp1 = line.controlPoints[1]
-          ? line.controlPoints[0]
-          : quadraticToCubic(_startPoint, line.controlPoints[0], line.endPoint)
-              .Q1;
-        let cp2 =
-          line.controlPoints[1] ??
-          quadraticToCubic(_startPoint, line.controlPoints[0], line.endPoint)
-            .Q2;
-        let points = [
-          new Two.Anchor(
-            x(_startPoint.x),
-            y(_startPoint.y),
-            x(_startPoint.x),
-            y(_startPoint.y),
-            x(cp1.x),
-            y(cp1.y),
-            Two.Commands.move,
-          ),
-          new Two.Anchor(
-            x(line.endPoint.x),
-            y(line.endPoint.y),
-            x(cp2.x),
-            y(cp2.y),
-            x(line.endPoint.x),
-            y(line.endPoint.y),
-            Two.Commands.curve,
-          ),
-        ];
-        points.forEach((point) => (point.relative = false));
-
-        lineElem = new Two.Path(points);
-        lineElem.automatic = false;
-      } else {
-        lineElem = new Two.Line(
-          x(_startPoint.x),
-          y(_startPoint.y),
-          x(line.endPoint.x),
-          y(line.endPoint.y),
-        );
-      }
-
-      lineElem.id = `line-${idx + 1}`;
-      lineElem.stroke = line.color;
-      lineElem.linewidth = x(LINE_WIDTH);
-      lineElem.noFill();
-      // Add a dashed line for locked paths
-      const baseOpacity = settings.pathOpacity || 1.0;
-      if (line.locked) {
-        lineElem.dashes = [x(2), x(2)];
-        lineElem.opacity = baseOpacity * 0.7;
-      } else {
-        lineElem.dashes = [];
-        lineElem.opacity = baseOpacity;
-      }
-
-      _path.push(lineElem);
-    });
-
-    return _path;
-  })();
-
-  // Second path rendering (for dual path mode)
-  $: secondPath = (() => {
-    // Don't show second path when in multi-path mode (use activePaths instead)
-    if ($activePaths.length > 0 || !$dualPathMode || !secondStartPoint || secondLines.length === 0) {
-      return [];
-    }
-
-    let _path: (Path | PathLine)[] = [];
-
-    secondLines.forEach((line, idx) => {
-      if (!line || !line.endPoint) return;
-      let _startPoint =
-        idx === 0 ? secondStartPoint : secondLines[idx - 1]?.endPoint || null;
-      if (!_startPoint) return;
-
-      let lineElem: Path | PathLine;
-      if (line.controlPoints.length > 2) {
-        const samples = 100;
-        const cps = [_startPoint, ...line.controlPoints, line.endPoint];
-        let points = [
-          new Two.Anchor(
-            x(_startPoint.x),
-            y(_startPoint.y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
-          ),
-        ];
-        for (let i = 1; i <= samples; ++i) {
-          const point = getCurvePoint(i / samples, cps);
-          points.push(
-            new Two.Anchor(
-              x(point.x),
-              y(point.y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-        points.forEach((point) => (point.relative = false));
-        lineElem = new Two.Path(points);
-        lineElem.automatic = false;
-      } else if (line.controlPoints.length > 0) {
-        let cp1 = line.controlPoints[1]
-          ? line.controlPoints[0]
-          : quadraticToCubic(_startPoint, line.controlPoints[0], line.endPoint)
-              .Q1;
-        let cp2 =
-          line.controlPoints[1] ??
-          quadraticToCubic(_startPoint, line.controlPoints[0], line.endPoint)
-            .Q2;
-        let points = [
-          new Two.Anchor(
-            x(_startPoint.x),
-            y(_startPoint.y),
-            x(_startPoint.x),
-            y(_startPoint.y),
-            x(cp1.x),
-            y(cp1.y),
-            Two.Commands.move,
-          ),
-          new Two.Anchor(
-            x(line.endPoint.x),
-            y(line.endPoint.y),
-            x(cp2.x),
-            y(cp2.y),
-            x(line.endPoint.x),
-            y(line.endPoint.y),
-            Two.Commands.curve,
-          ),
-        ];
-        points.forEach((point) => (point.relative = false));
-
-        lineElem = new Two.Path(points);
-        lineElem.automatic = false;
-      } else {
-        lineElem = new Two.Line(
-          x(_startPoint.x),
-          y(_startPoint.y),
-          x(line.endPoint.x),
-          y(line.endPoint.y),
-        );
-      }
-
-      lineElem.id = `second-line-${idx + 1}`;
-      lineElem.stroke = line.color;
-      lineElem.linewidth = x(LINE_WIDTH);
-      lineElem.noFill();
-      const baseOpacity = settings.pathOpacity || 1.0;
-      if (line.locked) {
-        lineElem.dashes = [x(2), x(2)];
-        lineElem.opacity = baseOpacity * 0.7;
-      } else {
-        lineElem.dashes = [];
-        lineElem.opacity = baseOpacity;
-      }
-
-      _path.push(lineElem);
-    });
-
-    return _path;
-  })();
-
-  // Render all additional paths
-  $: additionalPathElements = additionalPaths.map((pathData, pathIdx) => {
-    if (!pathData.startPoint || pathData.lines.length === 0) {
-      return [];
-    }
-
-    let _path: (Path | PathLine)[] = [];
-    // All paths should be clearly visible - only slight opacity variation
-    const pathOpacityBase = settings.pathOpacity || 1.0;
-    const opacity = (1.0 - (pathIdx * 0.1)) * pathOpacityBase;
-
-    pathData.lines.forEach((line, idx) => {
-      if (!line || !line.endPoint) return;
-      let _startPoint =
-        idx === 0 ? pathData.startPoint : pathData.lines[idx - 1]?.endPoint || null;
-      if (!_startPoint) return;
-
-      let lineElem: Path | PathLine;
-      if (line.controlPoints.length > 2) {
-        const samples = 100;
-        const cps = [_startPoint, ...line.controlPoints, line.endPoint];
-        let points = [
-          new Two.Anchor(
-            x(_startPoint.x),
-            y(_startPoint.y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
-          ),
-        ];
-        for (let i = 1; i <= samples; ++i) {
-          const point = getCurvePoint(i / samples, cps);
-          points.push(
-            new Two.Anchor(
-              x(point.x),
-              y(point.y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-        points.forEach((point) => (point.relative = false));
-        lineElem = new Two.Path(points);
-        lineElem.automatic = false;
-      } else if (line.controlPoints.length > 0) {
-        let cp1 = line.controlPoints[1]
-          ? line.controlPoints[0]
-          : quadraticToCubic(_startPoint, line.controlPoints[0], line.endPoint)
-              .Q1;
-        let cp2 =
-          line.controlPoints[1] ??
-          quadraticToCubic(_startPoint, line.controlPoints[0], line.endPoint)
-            .Q2;
-        let points = [
-          new Two.Anchor(
-            x(_startPoint.x),
-            y(_startPoint.y),
-            x(_startPoint.x),
-            y(_startPoint.y),
-            x(cp1.x),
-            y(cp1.y),
-            Two.Commands.move,
-          ),
-          new Two.Anchor(
-            x(line.endPoint.x),
-            y(line.endPoint.y),
-            x(cp2.x),
-            y(cp2.y),
-            x(line.endPoint.x),
-            y(line.endPoint.y),
-            Two.Commands.curve,
-          ),
-        ];
-        points.forEach((point) => (point.relative = false));
-
-        lineElem = new Two.Path(points);
-        lineElem.automatic = false;
-      } else {
-        lineElem = new Two.Line(
-          x(_startPoint.x),
-          y(_startPoint.y),
-          x(line.endPoint.x),
-          y(line.endPoint.y),
-        );
-      }
-
-      lineElem.id = `additional-path-${pathIdx}-line-${idx + 1}`;
-      lineElem.stroke = pathData.color || line.color;
-      lineElem.linewidth = x(LINE_WIDTH);
-      lineElem.noFill();
-      lineElem.opacity = opacity;
-
-      _path.push(lineElem);
-    });
-
-    return _path;
-  });
+  // Render all additional paths; only slight opacity variation between them
+  $: additionalPathElements = additionalPaths.map((pathData, pathIdx) =>
+    !pathData.startPoint || pathData.lines.length === 0
+      ? []
+      : buildPathElements(
+          {
+            startPoint: pathData.startPoint,
+            lines: pathData.lines,
+            idPrefix: `additional-path-${pathIdx}-line`,
+            color: pathData.color,
+            opacityScale: 1.0 - pathIdx * 0.1,
+            honorLocked: false,
+          },
+          scales,
+          settings,
+        ),
+  );
 
   $: penGhostPath = (() => {
     if (!penToolEnabled || !penIsDrawing || penStroke.length < 2 || $activePaths.length > 0) {
@@ -1520,510 +1021,130 @@
     return [ghost];
   })();
 
-  $: shapeElements = (() => {
-    if (!(settings?.experimentalFeatures?.obstacles ?? false)) {
-      return [];
-    }
-
-    let _shapes: Path[] = [];
-
-    shapes.forEach((shape, idx) => {
-      if (shape.vertices.length >= 3) {
-        // Create polygon from vertices - properly format for Two.js
-        let vertices = [];
-
-        // Start with move command for first vertex
-        vertices.push(
-          new Two.Anchor(
-            x(shape.vertices[0].x),
-            y(shape.vertices[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
-          ),
-        );
-
-        // Add line commands for remaining vertices
-        for (let i = 1; i < shape.vertices.length; i++) {
-          vertices.push(
-            new Two.Anchor(
-              x(shape.vertices[i].x),
-              y(shape.vertices[i].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-
-        // Close the shape
-        vertices.push(
-          new Two.Anchor(
-            x(shape.vertices[0].x),
-            y(shape.vertices[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.close,
-          ),
-        );
-
-        vertices.forEach((point) => (point.relative = false));
-
-        let shapeElement = new Two.Path(vertices);
+  $: shapeElements = !(settings?.experimentalFeatures?.obstacles ?? false)
+    ? []
+    : shapes.flatMap((shape, idx) => {
+        if (shape.vertices.length < 3) return [];
+        const shapeElement = buildClosedPolygon(shape.vertices, scales);
         shapeElement.id = `shape-${idx}`;
         shapeElement.stroke = shape.color;
         shapeElement.fill = shape.color;
         shapeElement.opacity = 0.4;
         shapeElement.linewidth = x(0.8);
-        shapeElement.automatic = false;
+        return [shapeElement];
+      });
 
-        _shapes.push(shapeElement);
-      }
-    });
-
-    return _shapes;
-  })();
-
-  $: ghostPathElement = (() => {
-    let ghostPath: Path | null = null;
-
-    // Don't show ghost paths in multi-path mode
-    if ($activePaths.length === 0 && settings.showGhostPaths && lines.length > 0) {
-      const ghostPoints = generateGhostPathPoints(
-        startPoint,
-        lines,
-        settings.rWidth,
-        settings.rHeight,
-        50,
-      );
-
-      if (ghostPoints.length >= 3) {
-        // Create polygon from ghost path points
-        let vertices = [];
-
-        // Start with move command for first point
-        vertices.push(
-          new Two.Anchor(
-            x(ghostPoints[0].x),
-            y(ghostPoints[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
+  // Don't show ghost paths in multi-path mode
+  $: ghostPathElement =
+    !isMultiPathMode && settings.showGhostPaths && lines.length > 0
+      ? buildGhostPath(
+          generateGhostPathPoints(
+            startPoint,
+            lines,
+            settings.rWidth,
+            settings.rHeight,
+            50,
           ),
-        );
-
-        // Add line commands for remaining points
-        for (let i = 1; i < ghostPoints.length; i++) {
-          vertices.push(
-            new Two.Anchor(
-              x(ghostPoints[i].x),
-              y(ghostPoints[i].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-
-        // Close the shape
-        vertices.push(
-          new Two.Anchor(
-            x(ghostPoints[0].x),
-            y(ghostPoints[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.close,
-          ),
-        );
-
-        vertices.forEach((point) => (point.relative = false));
-
-        ghostPath = new Two.Path(vertices);
-        ghostPath.id = "ghost-path";
-        ghostPath.stroke = "#a78bfa"; // Light purple/lavender
-        ghostPath.fill = "#a78bfa";
-        ghostPath.opacity = 0.15;
-        ghostPath.linewidth = x(0.5);
-        ghostPath.automatic = false;
-      }
-    }
-
-    return ghostPath;
-  })();
+          { id: "ghost-path", color: GHOST_COLOR },
+          scales,
+        )
+      : null;
 
   // Second ghost path for dual path mode
-  $: secondGhostPathElement = (() => {
-    let ghostPath: Path | null = null;
-
-    // Don't show second ghost path in multi-path mode
-    if ($activePaths.length === 0 && $dualPathMode && settings.showGhostPaths && secondLines.length > 0 && secondStartPoint) {
-      const ghostPoints = generateGhostPathPoints(
-        secondStartPoint,
-        secondLines,
-        settings.rWidth,
-        settings.rHeight,
-        50,
-      );
-
-      if (ghostPoints.length >= 3) {
-        let vertices = [];
-
-        vertices.push(
-          new Two.Anchor(
-            x(ghostPoints[0].x),
-            y(ghostPoints[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
+  $: secondGhostPathElement =
+    !isMultiPathMode &&
+    $dualPathMode &&
+    settings.showGhostPaths &&
+    secondLines.length > 0 &&
+    secondStartPoint
+      ? buildGhostPath(
+          generateGhostPathPoints(
+            secondStartPoint,
+            secondLines,
+            settings.rWidth,
+            settings.rHeight,
+            50,
           ),
-        );
-
-        for (let i = 1; i < ghostPoints.length; i++) {
-          vertices.push(
-            new Two.Anchor(
-              x(ghostPoints[i].x),
-              y(ghostPoints[i].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-
-        vertices.push(
-          new Two.Anchor(
-            x(ghostPoints[0].x),
-            y(ghostPoints[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.close,
-          ),
-        );
-
-        vertices.forEach((point) => (point.relative = false));
-
-        ghostPath = new Two.Path(vertices);
-        ghostPath.id = "ghost-path-2";
-        ghostPath.stroke = "#fca5a5"; // Light red/pink for second robot
-        ghostPath.fill = "#fca5a5";
-        ghostPath.opacity = 0.15;
-        ghostPath.linewidth = x(0.5);
-        ghostPath.automatic = false;
-      }
-    }
-
-    return ghostPath;
-  })();
+          { id: "ghost-path-2", color: SECOND_PATH_COLOR },
+          scales,
+        )
+      : null;
 
   // Ghost paths for additional paths in multi-path mode
-  $: additionalGhostPathElements = (() => {
-    let ghostPaths: Path[] = [];
-
-    if ($activePaths.length > 0 && settings.showGhostPaths) {
-      additionalPaths.forEach((pathData, pathIdx) => {
-        if (!pathData.startPoint || !pathData.lines.length) return;
-
-        const ghostPoints = generateGhostPathPoints(
-          pathData.startPoint,
-          pathData.lines,
-          settings.rWidth,
-          settings.rHeight,
-          50,
-        );
-
-        if (ghostPoints.length >= 3) {
-          let vertices = [];
-
-          vertices.push(
-            new Two.Anchor(
-              x(ghostPoints[0].x),
-              y(ghostPoints[0].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.move,
+  $: additionalGhostPathElements =
+    isMultiPathMode && settings.showGhostPaths
+      ? additionalPaths.flatMap((pathData, pathIdx) => {
+          if (!pathData.startPoint || !pathData.lines.length) return [];
+          const ghostPath = buildGhostPath(
+            generateGhostPathPoints(
+              pathData.startPoint,
+              pathData.lines,
+              settings.rWidth,
+              settings.rHeight,
+              50,
             ),
+            {
+              id: `ghost-path-additional-${pathIdx}`,
+              color: pathData.color || GHOST_COLOR,
+            },
+            scales,
           );
+          return ghostPath ? [ghostPath] : [];
+        })
+      : [];
 
-          for (let i = 1; i < ghostPoints.length; i++) {
-            vertices.push(
-              new Two.Anchor(
-                x(ghostPoints[i].x),
-                y(ghostPoints[i].y),
-                0,
-                0,
-                0,
-                0,
-                Two.Commands.line,
-              ),
-            );
-          }
-
-          vertices.push(
-            new Two.Anchor(
-              x(ghostPoints[0].x),
-              y(ghostPoints[0].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.close,
-            ),
-          );
-
-          vertices.forEach((point) => (point.relative = false));
-
-          const ghostPath = new Two.Path(vertices);
-          ghostPath.id = `ghost-path-additional-${pathIdx}`;
-          ghostPath.stroke = pathData.color || "#a78bfa";
-          ghostPath.fill = pathData.color || "#a78bfa";
-          ghostPath.opacity = 0.15;
-          ghostPath.linewidth = x(0.5);
-          ghostPath.automatic = false;
-          
-          ghostPaths.push(ghostPath);
-        }
-      });
-    }
-
-    return ghostPaths;
-  })();
-
-  $: onionLayerElements = (() => {
-    let onionLayers: Path[] = [];
-
-    // Don't show onion layers in multi-path mode
-    if ($activePaths.length === 0 && settings.showOnionLayers && lines.length > 0) {
-      const spacing = settings.onionLayerSpacing || 6;
-      let layers = generateOnionLayers(
-        startPoint,
-        lines,
-        settings.rWidth,
-        settings.rHeight,
-        spacing,
-      );
-
-      // If user requested onion layers only for the next point, filter to the relevant line
-      if (
-        settings.onionNextPointOnly &&
-        timePrediction &&
-        timePrediction.timeline
-      ) {
-        const currentTime = (timePrediction.totalTime || 0) * (percent / 100);
-        const travelEvents = (timePrediction.timeline || []).filter(
-          (ev) => ev.type === "travel",
-        );
-
-        let selectedLineIndex: number | null = null;
-
-        // Current travel segment
-        const currentTravel = travelEvents.find(
-          (ev) => ev.startTime <= currentTime && ev.endTime >= currentTime,
-        );
-        if (currentTravel) {
-          selectedLineIndex = currentTravel.lineIndex as number;
-        } else {
-          // Next upcoming travel segment
-          const nextTravel = travelEvents.find(
-            (ev) => ev.startTime > currentTime,
-          );
-          if (nextTravel) selectedLineIndex = nextTravel.lineIndex as number;
-          else if (travelEvents.length)
-            selectedLineIndex = travelEvents[travelEvents.length - 1]
-              .lineIndex as number;
-        }
-
-        if (selectedLineIndex !== null) {
-          layers = layers.filter((l: any) => l.lineIndex === selectedLineIndex);
-        }
-      }
-
-      layers.forEach((layer, idx) => {
-        // Create a rectangle from the robot corners
-        let vertices: any[] = [];
-
-        // Create path from corners: front-left -> front-right -> back-right -> back-left
-        vertices.push(
-          new Two.Anchor(
-            x(layer.corners[0].x),
-            y(layer.corners[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
+  // Don't show onion layers in multi-path mode
+  $: onionLayerElements =
+    !isMultiPathMode && settings.showOnionLayers && lines.length > 0
+      ? selectVisibleOnionLayers(
+          generateOnionLayers(
+            startPoint,
+            lines,
+            settings.rWidth,
+            settings.rHeight,
+            settings.onionLayerSpacing || 6,
           ),
-        );
-
-        for (let i = 1; i < layer.corners.length; i++) {
-          vertices.push(
-            new Two.Anchor(
-              x(layer.corners[i].x),
-              y(layer.corners[i].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-
-        // Close the path by returning to the first corner
-        vertices.push(
-          new Two.Anchor(
-            x(layer.corners[0].x),
-            y(layer.corners[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.close,
+          timePrediction,
+          percent,
+          settings.onionNextPointOnly,
+        ).map((layer, idx) =>
+          buildOnionLayer(
+            layer.corners,
+            {
+              id: `onion-layer-${idx}`,
+              color: settings.onionColor || "#dc2626",
+            },
+            scales,
           ),
-        );
-
-        vertices.forEach((point) => (point.relative = false));
-
-        let onionRect = new Two.Path(vertices);
-        onionRect.id = `onion-layer-${idx}`;
-        onionRect.stroke = settings.onionColor || "#dc2626";
-        onionRect.noFill();
-        // Increase opacity so colliders are more visible
-        onionRect.opacity = 0.9;
-        onionRect.linewidth = x(0.28);
-        onionRect.automatic = false;
-
-        onionLayers.push(onionRect);
-      });
-    }
-
-    return onionLayers;
-  })();
+        )
+      : [];
 
   // Second onion layers for dual path mode
-  $: secondOnionLayerElements = (() => {
-    let onionLayers: Path[] = [];
-
-    // Don't show second onion layers in multi-path mode
-    if ($activePaths.length === 0 && $dualPathMode && settings.showOnionLayers && secondLines.length > 0 && secondStartPoint) {
-      const spacing = settings.onionLayerSpacing || 6;
-      let layers = generateOnionLayers(
-        secondStartPoint,
-        secondLines,
-        settings.rWidth,
-        settings.rHeight,
-        spacing,
-      );
-
-      // If user requested onion layers only for the next point, filter to the relevant line
-      if (
-        settings.onionNextPointOnly &&
-        secondTimePrediction &&
-        secondTimePrediction.timeline
-      ) {
-        const currentTime = (secondTimePrediction.totalTime || 0) * (percent / 100);
-        const travelEvents = (secondTimePrediction.timeline || []).filter(
-          (ev) => ev.type === "travel",
-        );
-
-        let selectedLineIndex: number | null = null;
-
-        const currentTravel = travelEvents.find(
-          (ev) => ev.startTime <= currentTime && ev.endTime >= currentTime,
-        );
-        if (currentTravel) {
-          selectedLineIndex = currentTravel.lineIndex as number;
-        } else {
-          const nextTravel = travelEvents.find(
-            (ev) => ev.startTime > currentTime,
-          );
-          if (nextTravel) selectedLineIndex = nextTravel.lineIndex as number;
-          else if (travelEvents.length)
-            selectedLineIndex = travelEvents[travelEvents.length - 1]
-              .lineIndex as number;
-        }
-
-        if (selectedLineIndex !== null) {
-          layers = layers.filter((l: any) => l.lineIndex === selectedLineIndex);
-        }
-      }
-
-      layers.forEach((layer, idx) => {
-        let vertices: any[] = [];
-
-        vertices.push(
-          new Two.Anchor(
-            x(layer.corners[0].x),
-            y(layer.corners[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.move,
+  $: secondOnionLayerElements =
+    !isMultiPathMode &&
+    $dualPathMode &&
+    settings.showOnionLayers &&
+    secondLines.length > 0 &&
+    secondStartPoint
+      ? selectVisibleOnionLayers(
+          generateOnionLayers(
+            secondStartPoint,
+            secondLines,
+            settings.rWidth,
+            settings.rHeight,
+            settings.onionLayerSpacing || 6,
           ),
-        );
-
-        for (let i = 1; i < layer.corners.length; i++) {
-          vertices.push(
-            new Two.Anchor(
-              x(layer.corners[i].x),
-              y(layer.corners[i].y),
-              0,
-              0,
-              0,
-              0,
-              Two.Commands.line,
-            ),
-          );
-        }
-
-        vertices.push(
-          new Two.Anchor(
-            x(layer.corners[0].x),
-            y(layer.corners[0].y),
-            0,
-            0,
-            0,
-            0,
-            Two.Commands.close,
+          secondTimePrediction,
+          percent,
+          settings.onionNextPointOnly,
+        ).map((layer, idx) =>
+          buildOnionLayer(
+            layer.corners,
+            { id: `second-onion-layer-${idx}`, color: SECOND_PATH_COLOR },
+            scales,
           ),
-        );
-
-        vertices.forEach((point) => (point.relative = false));
-
-        let onionRect = new Two.Path(vertices);
-        onionRect.id = `second-onion-layer-${idx}`;
-        onionRect.stroke = "#fca5a5"; // Light red/pink for second path
-        onionRect.noFill();
-        onionRect.opacity = 0.9;
-        onionRect.linewidth = x(0.28);
-        onionRect.automatic = false;
-
-        onionLayers.push(onionRect);
-      });
-    }
-
-    return onionLayers;
-  })();
+        )
+      : [];
 
   let isLoaded = false;
   // Reactively trigger when any saveable data changes
