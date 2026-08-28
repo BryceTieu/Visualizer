@@ -3,8 +3,7 @@
   import Highlight from "svelte-highlight";
   import { java, kotlin, plaintext } from "svelte-highlight/languages";
   import codeStyle from "svelte-highlight/styles/androidstudio";
-  import { cubicInOut } from "svelte/easing";
-  import { fade, fly } from "svelte/transition";
+  import Modal from "./ui/Modal.svelte";
   import { currentFilePath } from "../../stores";
   import {
     generateJavaCode,
@@ -162,21 +161,11 @@
   {@html codeStyle}
 </svelte:head>
 
-{#if isOpen}
-  <div
-    transition:fade={{ duration: 500, easing: cubicInOut }}
-    class="bg-black/25 flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-1005"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Export code dialog"
-    tabindex="-1"
-  >
-    <div
-      transition:fly={{ duration: 500, easing: cubicInOut, y: 20 }}
-      class="flex flex-col justify-start items-start p-4 bg-white dark:bg-neutral-900 rounded-lg w-full max-w-4xl gap-2.5 max-h-[90vh]"
-      tabindex="-1"
-      role="document"
-    >
+<Modal
+  {isOpen}
+  onClose={() => (isOpen = false)}
+  panelClass="console-panel console-flat flex flex-col justify-start items-start p-4 w-full max-w-4xl gap-2.5 max-h-[90vh]"
+>
       <div class="flex flex-row justify-between items-center w-full">
         <p class="text-sm font-light text-neutral-700 dark:text-neutral-400">
           {#if exportFormat === "java"}
@@ -295,6 +284,4 @@
           </svg>
         </button>
       </div>
-    </div>
-  </div>
-{/if}
+</Modal>

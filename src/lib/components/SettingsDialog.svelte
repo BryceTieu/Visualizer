@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { cubicInOut } from "svelte/easing";
-  import { fade, fly } from "svelte/transition";
+  import Modal from "./ui/Modal.svelte";
+  import CollapsibleSection from "./ui/CollapsibleSection.svelte";
+  import NumberField from "./ui/NumberField.svelte";
   import { resetSettings } from "../../utils/settingsPersistence";
   import { AVAILABLE_FIELD_MAPS, DEFAULT_SETTINGS } from "../../config/defaults";
   import type { Settings } from "../../types";
@@ -111,18 +112,12 @@
   }
 </script>
 
-{#if isOpen}
-  <div
-    transition:fade={{ duration: 500, easing: cubicInOut }}
-    class="console-backdrop flex flex-col justify-center items-center absolute top-0 left-0 w-full h-full z-1005"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="settings-title"
-  >
-    <div
-      transition:fly={{ duration: 500, easing: cubicInOut, y: 20 }}
-      class="console-panel console-settings-shell flex flex-col justify-start items-start p-6 w-full max-w-2xl max-h-[80vh]"
-    >
+<Modal
+  {isOpen}
+  titleId="settings-title"
+  onClose={() => (isOpen = false)}
+  panelClass="console-panel console-flat flex flex-col justify-start items-start p-6 w-full max-w-2xl max-h-[80vh]"
+>
       <!-- Header -->
       <div class="flex flex-row justify-between items-center w-full mb-4">
         <h2
@@ -188,119 +183,47 @@
       <!-- Settings Content -->
       <div class="w-full flex-1 overflow-y-auto pr-2">
         <!-- Robot Settings Section -->
-        <div class="mb-4">
-          <button
-            on:click={() =>
-              (collapsedSections.robot = !collapsedSections.robot)}
-            class="console-trigger w-full justify-between transition-colors duration-250"
-            aria-expanded={!collapsedSections.robot}
-          >
-            <div class="flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width={1.5}
-                stroke="currentColor"
-                class="size-5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
-                />
-              </svg>
-              <span class="font-semibold">Robot Configuration</span>
-            </div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width={2}
-              stroke="currentColor"
-              class="size-5 transition-transform duration-200"
-              class:rotate-180={collapsedSections.robot}
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="m19.5 8.25-7.5 7.5-7.5-7.5"
-              />
-            </svg>
-          </button>
-
-          {#if !collapsedSections.robot}
+<CollapsibleSection
+  title="Robot Configuration"
+  iconPath="M9 17.25v1.007a3 3 0 0 1-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0 1 15 18.257V17.25m6-12V15a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 15V5.25A2.25 2.25 0 0 1 5.25 3h13.5A2.25 2.25 0 0 1 21 5.25Z"
+  collapsed={collapsedSections.robot}
+  onToggle={() => (collapsedSections.robot = !collapsedSections.robot)}
+>
             <div
               class="console-section mt-2 space-y-3 p-3"
             >
-              <div>
-                <label
-                  for="robot-width"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Robot Width (in)
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Width of the robot base
-                  </div>
-                </label>
-                <input
+                <NumberField
                   id="robot-width"
-                  type="number"
+                  label="Robot Width (in)"
+                  description="Width of the robot base"
                   value={settings.rWidth}
-                  min="1"
-                  max="36"
-                  step="0.5"
-                  on:input={(e) =>
-                    handleNumberInput(e.currentTarget.value, "rWidth", 1, 36)}
-                  class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={1}
+                  max={36}
+                  step={0.5}
+                  onInput={(v) => handleNumberInput(v, "rWidth", 1, 36)}
                 />
-              </div>
 
-              <div>
-                <label
-                  for="robot-height"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Robot Height (in)
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Height of the robot base
-                  </div>
-                </label>
-                <input
+                <NumberField
                   id="robot-height"
-                  type="number"
+                  label="Robot Height (in)"
+                  description="Height of the robot base"
                   value={settings.rHeight}
-                  min="1"
-                  max="36"
-                  step="0.5"
-                  on:input={(e) =>
-                    handleNumberInput(e.currentTarget.value, "rHeight", 1, 36)}
-                  class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={1}
+                  max={36}
+                  step={0.5}
+                  onInput={(v) => handleNumberInput(v, "rHeight", 1, 36)}
                 />
-              </div>
 
-              <div>
-                <label
-                  for="safety-margin"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Safety Margin (in)
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Buffer around obstacles
-                  </div>
-                </label>
-                <input
+                <NumberField
                   id="safety-margin"
-                  type="number"
+                  label="Safety Margin (in)"
+                  description="Buffer around obstacles"
                   value={settings.safetyMargin}
-                  min="0"
-                  max="24"
-                  step="0.5"
-                  on:input={(e) =>
-                    handleNumberInput(e.currentTarget.value, "safetyMargin", 0, 24)}
-                  class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  onInput={(v) => handleNumberInput(v, "safetyMargin", 0, 24)}
                 />
-              </div>
 
               <!-- Robot Image Upload -->
               <div>
@@ -524,94 +447,37 @@
                 </div>
               </div>
             </div>
-          {/if}
-        </div>
+</CollapsibleSection>
 
         <!-- Motion Settings Section -->
-        <div class="mb-4">
-          <button
-            on:click={() =>
-              (collapsedSections.motion = !collapsedSections.motion)}
-            class="console-trigger w-full justify-between transition-colors duration-250"
-            aria-expanded={!collapsedSections.motion}
-          >
-            <div class="flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width={1.5}
-                stroke="currentColor"
-                class="size-5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-                />
-              </svg>
-              <span class="font-semibold">Motion Parameters</span>
-            </div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width={2}
-              stroke="currentColor"
-              class="size-5 transition-transform duration-200"
-              class:rotate-180={collapsedSections.motion}
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="m19.5 8.25-7.5 7.5-7.5-7.5"
-              />
-            </svg>
-          </button>
-
-          {#if !collapsedSections.motion}
+<CollapsibleSection
+  title="Motion Parameters"
+  iconPath="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
+  collapsed={collapsedSections.motion}
+  onToggle={() => (collapsedSections.motion = !collapsedSections.motion)}
+>
             <div
               class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
             >
               <!-- Velocity Settings -->
               <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label
-                    for="x-velocity"
-                    class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                  >
-                    X Velocity (in/s)
-                  </label>
-                  <input
-                    id="x-velocity"
-                    type="number"
-                    value={settings.xVelocity}
-                    min="0"
-                    step="1"
-                    on:input={(e) =>
-                      handleNumberInput(e.currentTarget.value, "xVelocity", 0)}
-                    class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <NumberField
+                  id="x-velocity"
+                  label="X Velocity (in/s)"
+                  value={settings.xVelocity}
+                  min={0}
+                  step={1}
+                  onInput={(v) => handleNumberInput(v, "xVelocity", 0)}
+                />
 
-                <div>
-                  <label
-                    for="y-velocity"
-                    class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                  >
-                    Y Velocity (in/s)
-                  </label>
-                  <input
-                    id="y-velocity"
-                    type="number"
-                    value={settings.yVelocity}
-                    min="0"
-                    step="1"
-                    on:input={(e) =>
-                      handleNumberInput(e.currentTarget.value, "yVelocity", 0)}
-                    class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <NumberField
+                  id="y-velocity"
+                  label="Y Velocity (in/s)"
+                  value={settings.yVelocity}
+                  min={0}
+                  step={1}
+                  onInput={(v) => handleNumberInput(v, "yVelocity", 0)}
+                />
               </div>
 
               <!-- Angular Velocity -->
@@ -637,135 +503,56 @@
               </div>
 
               <!-- Velocity Limits -->
-              <div>
-                <label
-                  for="max-velocity"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Max Velocity (in/s)
-                </label>
-                <input
+                <NumberField
                   id="max-velocity"
-                  type="number"
+                  label="Max Velocity (in/s)"
                   value={settings.maxVelocity}
-                  min="0"
-                  step="1"
-                  on:input={(e) =>
-                    handleNumberInput(e.currentTarget.value, "maxVelocity", 0)}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={0}
+                  step={1}
+                  onInput={(v) => handleNumberInput(v, "maxVelocity", 0)}
                 />
-              </div>
 
               <!-- Acceleration Limits -->
               <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label
-                    for="max-acceleration"
-                    class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                  >
-                    Max Acceleration (in/s²)
-                  </label>
-                  <input
-                    id="max-acceleration"
-                    type="number"
-                    value={settings.maxAcceleration}
-                    min="0"
-                    step="1"
-                    on:input={(e) =>
-                      handleNumberInput(e.currentTarget.value, "maxAcceleration", 0)}
-                    class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <NumberField
+                  id="max-acceleration"
+                  label="Max Acceleration (in/s²)"
+                  value={settings.maxAcceleration}
+                  min={0}
+                  step={1}
+                  onInput={(v) => handleNumberInput(v, "maxAcceleration", 0)}
+                />
 
-                <div>
-                  <label
-                    for="max-deceleration"
-                    class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                  >
-                    Max Deceleration (in/s²)
-                  </label>
-                  <input
-                    id="max-deceleration"
-                    type="number"
-                    value={settings.maxDeceleration || settings.maxAcceleration}
-                    min="0"
-                    step="1"
-                    on:input={(e) =>
-                      handleNumberInput(e.currentTarget.value, "maxDeceleration", 0)}
-                    class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
+                <NumberField
+                  id="max-deceleration"
+                  label="Max Deceleration (in/s²)"
+                  value={settings.maxDeceleration || settings.maxAcceleration}
+                  min={0}
+                  step={1}
+                  onInput={(v) => handleNumberInput(v, "maxDeceleration", 0)}
+                />
               </div>
 
               <!-- Friction -->
-              <div>
-                <label
-                  for="friction-coefficient"
-                  class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
-                >
-                  Friction Coefficient
-                  <div class="text-xs text-neutral-500 dark:text-neutral-400">
-                    Higher values = more resistance
-                  </div>
-                </label>
-                <input
+                <NumberField
                   id="friction-coefficient"
-                  type="number"
+                  label="Friction Coefficient"
+                  description="Higher values = more resistance"
                   value={settings.kFriction}
-                  min="0"
-                  step="0.1"
-                  on:input={(e) =>
-                    handleNumberInput(e.currentTarget.value, "kFriction", 0)}
-                  class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  min={0}
+                  step={0.1}
+                  onInput={(v) => handleNumberInput(v, "kFriction", 0)}
                 />
-              </div>
             </div>
-          {/if}
-        </div>
+</CollapsibleSection>
 
         <!-- Field Settings Section -->
-        <div class="mb-4">
-          <button
-            on:click={() =>
-              (collapsedSections.interface = !collapsedSections.interface)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
-            aria-expanded={!collapsedSections.interface}
-          >
-            <div class="flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width={1.5}
-                stroke="currentColor"
-                class="size-5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42"
-                />
-              </svg>
-              <span class="font-semibold">Interface Settings</span>
-            </div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width={2}
-              stroke="currentColor"
-              class="size-5 transition-transform duration-200"
-              class:rotate-180={collapsedSections.interface}
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="m19.5 8.25-7.5 7.5-7.5-7.5"
-              />
-            </svg>
-          </button>
-
-          {#if !collapsedSections.interface}
+<CollapsibleSection
+  title="Interface Settings"
+  iconPath="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.395m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42"
+  collapsed={collapsedSections.interface}
+  onToggle={() => (collapsedSections.interface = !collapsedSections.interface)}
+>
             <div
               class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
             >
@@ -904,52 +691,15 @@
                 {/if}
               </div>
             </div>
-          {/if}
-        </div>
+</CollapsibleSection>
 
         <!-- Advanced Settings Section (for future expansion) -->
-        <div class="mb-4">
-          <button
-            on:click={() =>
-              (collapsedSections.advanced = !collapsedSections.advanced)}
-            class="flex items-center justify-between w-full py-2 px-3 bg-[#2a2a2a] dark:bg-[#2a2a2a] border border-[#333333] rounded-none transition-colors duration-250"
-            aria-expanded={!collapsedSections.advanced}
-          >
-            <div class="flex items-center gap-2">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke-width={1.5}
-                stroke="currentColor"
-                class="size-5"
-              >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z"
-                />
-              </svg>
-              <span class="font-semibold">Advanced Settings</span>
-            </div>
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width={2}
-              stroke="currentColor"
-              class="size-5 transition-transform duration-200"
-              class:rotate-180={collapsedSections.advanced}
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="m19.5 8.25-7.5 7.5-7.5-7.5"
-              />
-            </svg>
-          </button>
-
-          {#if !collapsedSections.advanced}
+<CollapsibleSection
+  title="Advanced Settings"
+  iconPath="M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z"
+  collapsed={collapsedSections.advanced}
+  onToggle={() => (collapsedSections.advanced = !collapsedSections.advanced)}
+>
             <div
               class="mt-2 space-y-3 p-3 bg-neutral-50 dark:bg-neutral-800/50 rounded-lg"
             >
@@ -1253,8 +1003,7 @@
                 so much more!
               </p>
             </div>
-          {/if}
-        </div>
+</CollapsibleSection>
       </div>
 
       <!-- Footer Buttons -->
@@ -1290,26 +1039,9 @@
           Close
         </button>
       </div>
-    </div>
-  </div>
-{/if}
+</Modal>
 
 <style>
-  .console-settings-shell :global(.rounded),
-  .console-settings-shell :global(.rounded-md),
-  .console-settings-shell :global(.rounded-lg),
-  .console-settings-shell :global(.rounded-full) {
-    border-radius: 0 !important;
-  }
-
-  .console-settings-shell :global(.shadow-sm),
-  .console-settings-shell :global(.shadow-md),
-  .console-settings-shell :global(.shadow-lg),
-  .console-settings-shell :global(.shadow-xl),
-  .console-settings-shell :global(.shadow-2xl) {
-    box-shadow: none !important;
-  }
-
   .potato-tooltip {
     position: relative;
   }

@@ -1,6 +1,5 @@
 <script lang="ts">
-  import { cubicInOut } from "svelte/easing";
-  import { fade, fly } from "svelte/transition";
+  import Modal from "./ui/Modal.svelte";
   import * as browserFileStore from "../../utils/browserFileStore";
   import { activePaths } from "../../stores";
 
@@ -63,28 +62,12 @@
   $: showPerformanceWarning = selectedPaths.length > PERFORMANCE_WARNING_THRESHOLD;
 </script>
 
-{#if isOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-  <div
-    transition:fade={{ duration: 200, easing: cubicInOut }}
-    class="console-backdrop fixed inset-0 flex items-center justify-center z-2000"
-    on:click={handleClose}
-    role="presentation"
-  >
-    <!-- svelte-ignore a11y_click_events_have_key_events -->
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-    <div
-      transition:fly={{ duration: 300, easing: cubicInOut, y: -20 }}
-      class="console-panel console-multipaths-shell p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
-      on:click|stopPropagation
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="multipaths-title"
-      tabindex="-1"
-    >
+<Modal
+  {isOpen}
+  titleId="multipaths-title"
+  onClose={handleClose}
+  panelClass="console-panel console-flat p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
+>
       <h2
         id="multipaths-title"
         class="text-2xl font-semibold text-neutral-900 dark:text-neutral-100 mb-2"
@@ -230,26 +213,9 @@
           Apply ({selectedPaths.length} path{selectedPaths.length !== 1 ? "s" : ""})
         </button>
       </div>
-    </div>
-  </div>
-{/if}
+</Modal>
 
 <style>
-  .console-multipaths-shell :global(.rounded),
-  .console-multipaths-shell :global(.rounded-md),
-  .console-multipaths-shell :global(.rounded-lg),
-  .console-multipaths-shell :global(.rounded-full) {
-    border-radius: 0 !important;
-  }
-
-  .console-multipaths-shell :global(.shadow-sm),
-  .console-multipaths-shell :global(.shadow-md),
-  .console-multipaths-shell :global(.shadow-lg),
-  .console-multipaths-shell :global(.shadow-xl),
-  .console-multipaths-shell :global(.shadow-2xl) {
-    box-shadow: none !important;
-  }
-
   :global(.dark) .dark-selected {
     background-color: rgb(88 28 135 / 0.2); /* purple-900/20 */
   }

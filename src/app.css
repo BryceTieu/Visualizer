@@ -339,6 +339,23 @@ img[alt="Robot"] {
   border-radius: 999rem;
 }
 
+/* Flatten Tailwind rounding/shadows inside console surfaces so nested
+   utility-styled markup matches the squared-off console look. */
+.console-flat .rounded,
+.console-flat .rounded-md,
+.console-flat .rounded-lg,
+.console-flat .rounded-full {
+  border-radius: 0 !important;
+}
+
+.console-flat .shadow-sm,
+.console-flat .shadow-md,
+.console-flat .shadow-lg,
+.console-flat .shadow-xl,
+.console-flat .shadow-2xl {
+  box-shadow: none !important;
+}
+
 body {
   background: radial-gradient(circle at 20% -15%, #1a1a1a 0%, var(--ui-bg) 46%);
   color: var(--ui-text);

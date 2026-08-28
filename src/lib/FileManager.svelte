@@ -815,7 +815,7 @@
 
   <!-- Sidebar -->
   <div
-    class="console-panel console-file-manager-shell w-80 md:w-96 h-full bg-[#1a1a1a] dark:bg-[#1a1a1a] transform transition-transform duration-300 ease-in-out flex flex-col"
+    class="console-panel console-flat w-80 md:w-96 h-full bg-[#1a1a1a] dark:bg-[#1a1a1a] transform transition-transform duration-300 ease-in-out flex flex-col"
     class:translate-x-0={isOpen}
     class:-translate-x-full={!isOpen}
   >
@@ -1284,20 +1284,5 @@
   .file-item:hover {
     transform: translateX(2px);
   }
-  .console-file-manager-shell :global(.rounded),
-  .console-file-manager-shell :global(.rounded-md),
-  .console-file-manager-shell :global(.rounded-lg),
-  .console-file-manager-shell :global(.rounded-full) {
-    border-radius: 0 !important;
-  }
-
-  .console-file-manager-shell :global(.shadow-sm),
-  .console-file-manager-shell :global(.shadow-md),
-  .console-file-manager-shell :global(.shadow-lg),
-  .console-file-manager-shell :global(.shadow-xl),
-  .console-file-manager-shell :global(.shadow-2xl) {
-    box-shadow: none !important;
-  }
-
 </style>
 
