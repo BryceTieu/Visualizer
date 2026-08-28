@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
   import type { FieldPoint, Point, Line, Shape, Settings, SequenceItem } from "../types";
   import { onMount, onDestroy } from "svelte";
   import {
@@ -25,64 +27,94 @@
   import ViewToggles from "./components/ViewToggles.svelte";
   import html2canvas from "html2canvas";
 
-  export let loadFile: (evt: any) => any;
 
-  export let startPoint: Point;
-  export let lines: Line[];
-  export let shapes: Shape[];
-  export let sequence: SequenceItem[];
-  export let fieldPoints: FieldPoint[] = [];
-  export let secondStartPoint: Point | null = null;
-  export let secondLines: Line[] = [];
-  export let secondShapes: Shape[] = [];
-  export let secondSequence: SequenceItem[] = [];
-  export let percent: number = 0;
-  export let robotWidth: number;
-  export let robotHeight: number;
-  export let settings: Settings;
 
-  export let saveProject: () => any;
-  export let saveFileAs: () => any;
-  export let undoAction: () => any;
-  export let redoAction: () => any;
-  export let recordChange: () => any;
-  export let canUndo: boolean;
-  export let canRedo: boolean;
-  export let optimizeAllLines: () => Promise<void>;
-  export let optimizingAll: boolean = false;
-  export let twoElement: HTMLDivElement | null = null;
-  export let exportPathAsGif: () => Promise<void>;
+  interface Props {
+    loadFile: (evt: any) => any;
+    startPoint: Point;
+    lines: Line[];
+    shapes: Shape[];
+    sequence: SequenceItem[];
+    fieldPoints?: FieldPoint[];
+    secondStartPoint?: Point | null;
+    secondLines?: Line[];
+    secondShapes?: Shape[];
+    secondSequence?: SequenceItem[];
+    percent?: number;
+    settings: Settings;
+    saveProject: () => any;
+    saveFileAs: () => any;
+    undoAction: () => any;
+    redoAction: () => any;
+    recordChange: () => any;
+    canUndo: boolean;
+    canRedo: boolean;
+    optimizeAllLines: () => Promise<void>;
+    optimizingAll?: boolean;
+    twoElement?: HTMLDivElement | null;
+    exportPathAsGif: () => Promise<void>;
+  }
 
-  let fileManagerOpen = false;
-  let settingsOpen = false;
-  let exportMenuOpen = false;
-  let exportDialogOpen = false;
-  let exportDialog: ExportCodeDialog;
-  let multiplePathsDialogOpen = false;
+  let {
+    loadFile,
+    startPoint = $bindable(),
+    lines = $bindable(),
+    shapes = $bindable(),
+    sequence = $bindable(),
+    fieldPoints = $bindable([]),
+    secondStartPoint = $bindable(null),
+    secondLines = $bindable([]),
+    secondShapes = $bindable([]),
+    secondSequence = $bindable([]),
+    percent = 0,
+    settings = $bindable(),
+    saveProject,
+    saveFileAs,
+    undoAction,
+    redoAction,
+    recordChange,
+    canUndo,
+    canRedo,
+    optimizeAllLines,
+    optimizingAll = false,
+    twoElement = null,
+    exportPathAsGif
+  }: Props = $props();
+
+  let fileManagerOpen = $state(false);
+  let settingsOpen = $state(false);
+  let exportMenuOpen = $state(false);
+  let exportDialogOpen = $state(false);
+  let exportDialog = $state<ExportCodeDialog>()!;
+  let multiplePathsDialogOpen = $state(false);
   // Hide sequential export UI by default; backend generator remains available
   const showSequentialExport = false;
 
-  let saveDropdownOpen = false;
-  let saveDropdownRef: HTMLElement;
-  let saveButtonRef: HTMLElement;
-  let exportMenuRef: HTMLElement;
-  let exportButtonRef: HTMLElement;
+  let saveDropdownOpen = $state(false);
+  let saveDropdownRef = $state<HTMLElement>();
+  let saveButtonRef = $state<HTMLElement>();
+  let exportMenuRef = $state<HTMLElement>();
+  let exportButtonRef = $state<HTMLElement>();
 
-  let selectedGridSize = 12;
+  let selectedGridSize = $state(12);
   const gridSizeOptions = [0, 1, 3, 6, 12];
 
   // Ensure File Manager and Export dialog are mutually exclusive
-  $: if (fileManagerOpen && exportDialogOpen) {
-    exportDialogOpen = false;
-  }
+  run(() => {
+    if (fileManagerOpen && exportDialogOpen) {
+      exportDialogOpen = false;
+    }
+  });
 
   // Ensure save dropdown and export menu are mutually exclusive
-  $: if (saveDropdownOpen && exportMenuOpen) {
-    exportMenuOpen = false;
-  }
+  run(() => {
+    if (saveDropdownOpen && exportMenuOpen) {
+      exportMenuOpen = false;
+    }
+  });
 
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
-  $: elapsedSeconds = (percent / 100) * (timePrediction?.totalTime || 0);
+  let timePrediction = $derived(calculatePathTime(startPoint, lines, settings, sequence));
+  let elapsedSeconds = $derived((percent / 100) * (timePrediction?.totalTime || 0));
 
   onMount(() => {
     const unsubscribeGridSize = gridSize.subscribe((value) => {
@@ -197,11 +229,6 @@
     }
   }
 
-  $: if (settings) {
-    settings.rHeight = robotHeight;
-    settings.rWidth = robotWidth;
-  }
-
   function isOutside(event: MouseEvent, ...refs: (HTMLElement | undefined)[]) {
     return refs.every((ref) => ref && !ref.contains(event.target as Node));
   }
@@ -252,9 +279,9 @@
 <ExportCodeDialog
   bind:this={exportDialog}
   bind:isOpen={exportDialogOpen}
-  bind:startPoint
-  bind:lines
-  bind:sequence
+  {startPoint}
+  {lines}
+  {sequence}
 />
 
 <SettingsDialog bind:isOpen={settingsOpen} bind:settings />
@@ -268,7 +295,7 @@
       <!-- File manager button -->
       <button
         title="File Manager"
-        on:click={() => {
+        onclick={() => {
           exportDialogOpen = false;
           fileManagerOpen = true;
         }}
@@ -346,7 +373,7 @@
         <button
           class="console-trigger console-trigger--accent relative text-sm disabled:opacity-50 disabled:cursor-not-allowed"
           title="Optimize all paths"
-          on:click={optimizeAllLines}
+          onclick={optimizeAllLines}
           disabled={optimizingAll}
         >
           {optimizingAll ? "Optimizing All…" : "Optimize All"}
@@ -357,7 +384,7 @@
       <div class="flex items-center gap-2">
         <button
           title="Undo"
-          on:click={undoAction}
+          onclick={undoAction}
           disabled={!canUndo}
           class:opacity-50={!canUndo}
           class="console-icon-button disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
@@ -379,7 +406,7 @@
         </button>
         <button
           title="Redo"
-          on:click={redoAction}
+          onclick={redoAction}
           disabled={!canRedo}
           class:opacity-50={!canRedo}
           class="console-icon-button disabled:cursor-not-allowed transition-all duration-250 hover:scale-105 active:scale-98"
@@ -410,7 +437,7 @@
     <!-- Multiple Paths Toggle -->
     <button
       title="Manage Multiple Paths Visualization"
-      on:click={() => (multiplePathsDialogOpen = true)}
+      onclick={() => (multiplePathsDialogOpen = true)}
         class="console-trigger relative text-sm"
         class:console-trigger--active={$activePaths.length > 0}
         class:console-trigger--muted={$activePaths.length === 0}
@@ -445,7 +472,7 @@
         id="file-input"
         type="file"
         accept=".pp"
-        on:change={loadFile}
+        onchange={loadFile}
         class="hidden"
       />
       <label
@@ -474,7 +501,7 @@
         <button
           bind:this={saveButtonRef}
           title="Save options"
-          on:click={() => (saveDropdownOpen = !saveDropdownOpen)}
+          onclick={() => (saveDropdownOpen = !saveDropdownOpen)}
           class="console-icon-button"
           aria-expanded={saveDropdownOpen}
           aria-label="Save options"
@@ -504,7 +531,7 @@
           >
             <!-- Save option -->
             <button
-              on:click={() => {
+              onclick={() => {
                 saveProject();
                 saveDropdownOpen = false;
               }}
@@ -540,7 +567,7 @@
 
             <!-- Save As option -->
             <button
-              on:click={() => {
+              onclick={() => {
                 saveFileAs();
                 saveDropdownOpen = false;
               }}
@@ -577,7 +604,7 @@
         <button
           bind:this={exportButtonRef}
           title="Export path"
-          on:click={() => (exportMenuOpen = !exportMenuOpen)}
+          onclick={() => (exportMenuOpen = !exportMenuOpen)}
           class="console-icon-button"
         >
           <svg
@@ -602,39 +629,39 @@
             class="console-panel console-menu absolute right-0 mt-2 w-48 z-50"
           >
             <button
-              on:click={() => handleExport("java")}
+              onclick={() => handleExport("java")}
               class="console-menu-item"
             >
               Java Code
             </button>
             <button
-              on:click={() => handleExport("kotlin")}
+              onclick={() => handleExport("kotlin")}
               class="console-menu-item"
             >
               Kotlin Code
             </button>
             <button
-              on:click={() => handleExport("points")}
+              onclick={() => handleExport("points")}
               class="console-menu-item"
             >
               Points Array
             </button>
             {#if showSequentialExport}
               <button
-                on:click={() => handleExport("sequential")}
+                onclick={() => handleExport("sequential")}
                 class="console-menu-item"
               >
                 Sequential Command
               </button>
             {/if}
             <button
-              on:click={exportFieldAsImage}
+              onclick={exportFieldAsImage}
               class="console-menu-item"
             >
               Field as Image
             </button>
             <button
-              on:click={async () => {
+              onclick={async () => {
                 exportMenuOpen = false;
                 await exportPathAsGif();
               }}
@@ -653,7 +680,7 @@
       <!-- Delete/Reset path -->
       <button
         title="Delete/Reset path"
-        on:click={handleResetPathWithConfirmation}
+        onclick={handleResetPathWithConfirmation}
         class="console-icon-button relative group"
       >
         <svg
@@ -680,7 +707,7 @@
       </button>
 
       <!-- Settings button -->
-      <button title="Open Settings" on:click={() => (settingsOpen = true)} class="console-icon-button">
+      <button title="Open Settings" onclick={() => (settingsOpen = true)} class="console-icon-button">
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"

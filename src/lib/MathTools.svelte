@@ -5,10 +5,19 @@
   import ProtractorOverlay from "./components/mathtools/ProtractorOverlay.svelte";
   import type * as d3 from "d3";
 
-  export let x: d3.ScaleLinear<number, number>;
-  export let y: d3.ScaleLinear<number, number>;
-  export let twoElement: HTMLDivElement;
-  export let robotXY: { x: number; y: number };
+  interface Props {
+    x: d3.ScaleLinear<number, number>;
+    y: d3.ScaleLinear<number, number>;
+    twoElement: HTMLDivElement;
+    robotXY: { x: number; y: number };
+  }
+
+  let {
+    x,
+    y,
+    twoElement,
+    robotXY
+  }: Props = $props();
 </script>
 
 {#if $showGrid}

@@ -3,21 +3,20 @@
   import * as browserFileStore from "../../utils/browserFileStore";
   import { activePaths } from "../../stores";
 
-  export let isOpen = false;
+  interface Props {
+    isOpen?: boolean;
+  }
 
-  let files: browserFileStore.FileInfo[] = [];
-  let selectedPaths: string[] = [];
-  let loading = false;
-  let errorMessage = "";
+  let { isOpen = $bindable(false) }: Props = $props();
+
+  let files: browserFileStore.FileInfo[] = $state([]);
+  let selectedPaths: string[] = $state([]);
+  let loading = $state(false);
+  let errorMessage = $state("");
 
   const MAX_PATHS = 4;
   const PERFORMANCE_WARNING_THRESHOLD = 2;
 
-  // Load files when dialog opens
-  $: if (isOpen) {
-    loadFiles();
-    selectedPaths = $activePaths;
-  }
 
   async function loadFiles() {
     loading = true;
@@ -59,7 +58,14 @@
     selectedPaths = [];
   }
 
-  $: showPerformanceWarning = selectedPaths.length > PERFORMANCE_WARNING_THRESHOLD;
+  // Load files when dialog opens
+  $effect.pre(() => {
+    if (isOpen) {
+      loadFiles();
+      selectedPaths = $activePaths;
+    }
+  });
+  let showPerformanceWarning = $derived(selectedPaths.length > PERFORMANCE_WARNING_THRESHOLD);
 </script>
 
 <Modal
@@ -122,7 +128,7 @@
         </div>
         {#if selectedPaths.length > 0}
           <button
-            on:click={clearAll}
+            onclick={clearAll}
             class="text-sm text-neutral-600 dark:text-neutral-400 hover:text-red-600 dark:hover:text-red-400 transition-colors underline"
           >
             Clear All
@@ -150,7 +156,7 @@
               {@const isSelected = selectedPaths.includes(file.path)}
               {@const selectionIndex = selectedPaths.indexOf(file.path)}
               <button
-                on:click={() => togglePath(file.path)}
+                onclick={() => togglePath(file.path)}
                 class="w-full px-4 py-3 flex items-center gap-3 transition-all hover:bg-neutral-50 dark:hover:bg-neutral-700/50"
                 class:bg-purple-50={isSelected}
                 class:dark-selected={isSelected}
@@ -201,13 +207,13 @@
       <!-- Actions -->
       <div class="flex justify-end gap-3">
         <button
-          on:click={handleClose}
+          onclick={handleClose}
           class="console-action px-4 py-2 text-neutral-700 dark:text-neutral-300 bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors font-medium"
         >
           Cancel
         </button>
         <button
-          on:click={handleApply}
+          onclick={handleApply}
           class="console-action px-4 py-2 text-white bg-purple-600 hover:bg-purple-700 transition-colors font-medium"
         >
           Apply ({selectedPaths.length} path{selectedPaths.length !== 1 ? "s" : ""})

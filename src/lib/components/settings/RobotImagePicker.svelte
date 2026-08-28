@@ -3,18 +3,22 @@
   import { imageToBase64 } from "../../../utils/file";
   import { showToast } from "../../toast";
 
-  export let settings: Settings;
+  interface Props {
+    settings: Settings;
+  }
+
+  let { settings = $bindable() }: Props = $props();
 
   const DEFAULT_ROBOT_IMAGE = "/robot.png";
   const POTATO_IMAGE = "/JefferyThePotato.png";
   const DUCK_IMAGE = "/MecanumDuck.png";
 
   // Narrowed value so the template can use it without optional checks.
-  $: customImage =
-    settings.robotImage && settings.robotImage !== DEFAULT_ROBOT_IMAGE
+  let customImage =
+    $derived(settings.robotImage && settings.robotImage !== DEFAULT_ROBOT_IMAGE
       ? settings.robotImage
-      : null;
-  $: isCustom = customImage !== null;
+      : null);
+  let isCustom = $derived(customImage !== null);
 
   function setImage(src: string) {
     settings.robotImage = src;
@@ -57,14 +61,14 @@
         src={settings.robotImage || DEFAULT_ROBOT_IMAGE}
         alt="Robot Preview"
         class="w-full h-full object-contain"
-        on:error={(e) => {
+        onerror={(e) => {
           console.error("Failed to load robot image:", settings.robotImage);
           (e.currentTarget as HTMLImageElement).src = DEFAULT_ROBOT_IMAGE;
         }}
       />
       {#if isCustom}
         <button
-          on:click={() => setImage(DEFAULT_ROBOT_IMAGE)}
+          onclick={() => setImage(DEFAULT_ROBOT_IMAGE)}
           class="console-action absolute top-1 right-1 p-1 bg-red-500 text-white hover:bg-red-600 transition-colors"
           title="Remove custom image"
         >
@@ -119,10 +123,10 @@
         type="file"
         accept="image/*"
         class="hidden"
-        on:change={handleUpload}
+        onchange={handleUpload}
       />
       <button
-        on:click={() => document.getElementById("robot-image-input")?.click()}
+        onclick={() => document.getElementById("robot-image-input")?.click()}
         class="console-action px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-2"
       >
         <svg
@@ -143,7 +147,7 @@
       </button>
 
       <button
-        on:click={() => setImage(DEFAULT_ROBOT_IMAGE)}
+        onclick={() => setImage(DEFAULT_ROBOT_IMAGE)}
         class="console-action px-4 py-2 text-sm bg-neutral-500 hover:bg-neutral-600 text-white transition-colors"
         disabled={!isCustom}
       >
@@ -151,7 +155,7 @@
       </button>
 
       <button
-        on:click={() => setImage(POTATO_IMAGE)}
+        onclick={() => setImage(POTATO_IMAGE)}
         class="potato-tooltip console-action px-4 py-2 text-sm bg-amber-700 hover:bg-amber-800 text-white transition-colors flex items-center justify-center gap-2 group relative overflow-hidden"
         style="background-image: linear-gradient(45deg, #a16207 25%, #ca8a04 25%, #ca8a04 50%, #a16207 50%, #a16207 75%, #ca8a04 75%, #ca8a04 100%); background-size: 20px 20px;"
         title="Transform your robot into Jeffery the Potato!"
@@ -167,7 +171,7 @@
       </button>
 
       <button
-        on:click={() => setImage(DUCK_IMAGE)}
+        onclick={() => setImage(DUCK_IMAGE)}
         class="console-action px-4 py-2 text-sm text-white transition-colors flex items-center justify-center gap-2"
         style="background-image: linear-gradient(45deg, #eab308 25%, #f59e0b 25%, #f59e0b 50%, #eab308 50%, #eab308 75%, #f59e0b 75%, #f59e0b 100%); background-size: 18px 18px;"
         title="Use the Mecanum Duck robot image"

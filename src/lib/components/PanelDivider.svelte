@@ -1,12 +1,21 @@
 <script lang="ts">
-  export let side: "left" | "right";
-  export let hidden = false;
-  export let onResizeStart: (side: "left" | "right", event: MouseEvent) => void;
-  export let onRestore: () => void;
+  interface Props {
+    side: "left" | "right";
+    hidden?: boolean;
+    onResizeStart: (side: "left" | "right", event: MouseEvent) => void;
+    onRestore: () => void;
+  }
 
-  $: label = side === "left" ? "left" : "right";
+  let {
+    side,
+    hidden = false,
+    onResizeStart,
+    onRestore
+  }: Props = $props();
+
+  let label = $derived(side === "left" ? "left" : "right");
   // The chevron points toward the direction the panel would reappear from.
-  $: collapsedGlyph = side === "left" ? "›" : "‹";
+  let collapsedGlyph = $derived(side === "left" ? "›" : "‹");
 </script>
 
 <div class="panel-divider panel-divider--{side}">
@@ -17,8 +26,8 @@
     title={hidden
       ? `Click to restore the ${label} panel`
       : `Drag to resize the ${label} panel`}
-    on:mousedown={(event) => onResizeStart(side, event)}
-    on:click={() => {
+    onmousedown={(event) => onResizeStart(side, event)}
+    onclick={() => {
       if (hidden) onRestore();
     }}
   >

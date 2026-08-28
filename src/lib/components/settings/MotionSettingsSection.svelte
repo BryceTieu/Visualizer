@@ -6,9 +6,13 @@
     type NumericSettingKey,
   } from "../../settings/numericSetting";
 
-  export let settings: Settings;
+  interface Props {
+    settings: Settings;
+  }
 
-  $: angularVelocityDisplay = settings ? settings.aVelocity / Math.PI : 1;
+  let { settings = $bindable() }: Props = $props();
+
+  let angularVelocityDisplay = $derived(settings ? settings.aVelocity / Math.PI : 1);
 
   function setNumber(
     value: string,

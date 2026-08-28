@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
   import type { Point, Line, SequenceItem } from "../../types";
   import Highlight from "svelte-highlight";
   import { java, kotlin, plaintext } from "svelte-highlight/languages";
@@ -13,34 +15,45 @@
   } from "../../utils/codeExporter";
   import { basename } from "../../utils/filename";
 
-  export let isOpen = false;
-  export let startPoint: Point;
-  export let lines: Line[];
-  export let sequence: SequenceItem[];
+  interface Props {
+    isOpen?: boolean;
+    startPoint: Point;
+    lines: Line[];
+    sequence: SequenceItem[];
+  }
 
-  let exportMode: "full" | "class" | "coordinates" = "class";
-  let exportFormat: "java" | "kotlin" | "points" | "sequential" = "java";
-  let sequentialClassName = "AutoPath";
-  let mirrorHorizontally = false;
-  let exportedCode = "";
-  let currentLanguage: typeof java | typeof kotlin | typeof plaintext = java;
-  let copied = false;
+  let {
+    isOpen = $bindable(false),
+    startPoint,
+    lines,
+    sequence
+  }: Props = $props();
+
+  let exportMode: "full" | "class" | "coordinates" = $state("class");
+  let exportFormat: "java" | "kotlin" | "points" | "sequential" = $state("java");
+  let sequentialClassName = $state("AutoPath");
+  let mirrorHorizontally = $state(false);
+  let exportedCode = $state("");
+  let currentLanguage: typeof java | typeof kotlin | typeof plaintext = $state(java);
+  let copied = $state(false);
 
   // Update sequential class name when file changes
-  $: if ($currentFilePath) {
-    const fileName = basename($currentFilePath);
-    if (fileName) {
-      const baseName = fileName
-        .replace(".pp", "")
-        .replace(/[^a-zA-Z0-9]/g, "_");
-      if (
-        sequentialClassName === "AutoPath" ||
-        sequentialClassName === baseName
-      ) {
-        sequentialClassName = baseName;
+  run(() => {
+    if ($currentFilePath) {
+      const fileName = basename($currentFilePath);
+      if (fileName) {
+        const baseName = fileName
+          .replace(".pp", "")
+          .replace(/[^a-zA-Z0-9]/g, "_");
+        if (
+          sequentialClassName === "AutoPath" ||
+          sequentialClassName === baseName
+        ) {
+          sequentialClassName = baseName;
+        }
       }
     }
-  }
+  });
 
   export async function openWithFormat(
     format: "java" | "kotlin" | "points" | "sequential",
@@ -188,7 +201,7 @@
             <select
               id="export-mode"
               bind:value={exportMode}
-              on:change={handleExportModeChange}
+              onchange={handleExportModeChange}
               class="px-2 py-1 text-sm rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="coordinates">Coordinates Only</option>
@@ -204,7 +217,7 @@
                   id="mirror-horizontal"
                   type="checkbox"
                   bind:checked={mirrorHorizontally}
-                  on:change={handleMirrorChange}
+                  onchange={handleMirrorChange}
                   class="cursor-pointer"
                 />
                 Mirror Horizontally
@@ -221,14 +234,14 @@
                 id="class-name"
                 type="text"
                 bind:value={sequentialClassName}
-                on:input={refreshSequentialCode}
+                oninput={refreshSequentialCode}
                 class="px-2 py-1 text-sm rounded-md bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-blue-500 w-32"
                 placeholder="AutoPath"
               />
             </div>
           {/if}
           <button
-            on:click={() => (isOpen = false)}
+            onclick={() => (isOpen = false)}
             aria-label="Close export dialog"
           >
             <svg
@@ -257,7 +270,7 @@
         />
         <button
           title={copied ? "Copied" : "Copy code to clipboard"}
-          on:click={async () => {
+          onclick={async () => {
             try {
               await navigator.clipboard.writeText(exportedCode || "");
               copied = true;

@@ -1,7 +1,11 @@
 <script lang="ts">
-  export let className = "size-5";
-  export let strokeWidth = 2;
-  export let rotated = false;
+  interface Props {
+    className?: string;
+    strokeWidth?: number;
+    rotated?: boolean;
+  }
+
+  let { className = "size-5", strokeWidth = 2, rotated = false }: Props = $props();
 </script>
 
 <svg

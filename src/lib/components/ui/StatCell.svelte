@@ -1,8 +1,19 @@
 <script lang="ts">
-  export let label: string;
-  /** Roomier padding for cells that hold controls rather than a bare value. */
-  export let roomy = false;
-  export let valueClass = "font-medium text-gray-100";
+  
+  interface Props {
+    label: string;
+    /** Roomier padding for cells that hold controls rather than a bare value. */
+    roomy?: boolean;
+    valueClass?: string;
+    children?: import('svelte').Snippet;
+  }
+
+  let {
+    label,
+    roomy = false,
+    valueClass = "font-medium text-gray-100",
+    children
+  }: Props = $props();
 </script>
 
 <div
@@ -12,5 +23,5 @@
   class:leading-tight={roomy}
 >
   <div class="text-gray-500">{label}</div>
-  <div class={valueClass}><slot /></div>
+  <div class={valueClass}>{@render children?.()}</div>
 </div>

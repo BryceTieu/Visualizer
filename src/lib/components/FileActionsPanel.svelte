@@ -4,15 +4,29 @@
   import TrashIcon from "./icons/TrashIcon.svelte";
   import PlusIcon from "./icons/PlusIcon.svelte";
 
-  export let selectedFile: FileInfo | null;
-  export let onRename: (file: FileInfo) => void;
-  export let onDelete: (file: FileInfo) => void;
-  export let onDuplicate: () => void;
-  export let onDuplicateAndMirror: () => void;
-  export let onOverwrite: () => void;
-  export let onNew: () => void;
-  export let onDownload: () => void;
-  export let onSaveToLocalFile: () => void;
+  interface Props {
+    selectedFile: FileInfo | null;
+    onRename: (file: FileInfo) => void;
+    onDelete: (file: FileInfo) => void;
+    onDuplicate: () => void;
+    onDuplicateAndMirror: () => void;
+    onOverwrite: () => void;
+    onNew: () => void;
+    onDownload: () => void;
+    onSaveToLocalFile: () => void;
+  }
+
+  let {
+    selectedFile,
+    onRename,
+    onDelete,
+    onDuplicate,
+    onDuplicateAndMirror,
+    onOverwrite,
+    onNew,
+    onDownload,
+    onSaveToLocalFile
+  }: Props = $props();
 
   const ICON_BTN =
     "px-2 py-1.5 text-xs text-white rounded transition-colors flex items-center justify-center gap-1";
@@ -31,7 +45,7 @@
     <!-- File Operations (Rename, Delete, Duplicate) -->
     <div class="grid grid-cols-3 gap-1">
       <button
-        on:click={() => selectedFile && onRename(selectedFile)}
+        onclick={() => selectedFile && onRename(selectedFile)}
         class="{ICON_BTN} bg-amber-500 hover:bg-amber-600"
         title="Rename this file"
       >
@@ -39,7 +53,7 @@
       </button>
 
       <button
-        on:click={() => selectedFile && onDelete(selectedFile)}
+        onclick={() => selectedFile && onDelete(selectedFile)}
         class="{ICON_BTN} bg-red-500 hover:bg-red-600"
         title="Delete this file"
       >
@@ -47,7 +61,7 @@
       </button>
 
       <button
-        on:click={onDuplicate}
+        onclick={onDuplicate}
         class="{ICON_BTN} bg-blue-500 hover:bg-blue-600"
         title="Duplicate this file"
       >
@@ -70,7 +84,7 @@
 
     <!-- Mirror Button - Full Width -->
     <button
-      on:click={onDuplicateAndMirror}
+      onclick={onDuplicateAndMirror}
       class="w-full px-3 py-2.5 text-sm font-medium bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
       title="Create a mirrored copy of this path"
     >
@@ -98,7 +112,7 @@
       </div>
       <div class="grid grid-cols-2 gap-1">
         <button
-          on:click={onOverwrite}
+          onclick={onOverwrite}
           class="{SAVE_BTN} bg-emerald-600 hover:bg-emerald-700"
           disabled={!selectedFile}
           title="Save into selected file (overwrite)"
@@ -109,7 +123,7 @@
           Overwrite
         </button>
         <button
-          on:click={onNew}
+          onclick={onNew}
           class="{SAVE_BTN} bg-green-500 hover:bg-green-600"
           title="Create new file and save"
         >
@@ -117,7 +131,7 @@
           New
         </button>
         <button
-          on:click={onDownload}
+          onclick={onDownload}
           class="{SAVE_BTN} bg-blue-600 hover:bg-blue-700"
           title="Download .pp to computer"
         >
@@ -127,7 +141,7 @@
           Download
         </button>
         <button
-          on:click={onSaveToLocalFile}
+          onclick={onSaveToLocalFile}
           class="{SAVE_BTN} bg-indigo-600 hover:bg-indigo-700"
           title="Save to local file"
         >

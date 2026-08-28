@@ -3,22 +3,43 @@
   import StatCell from "./ui/StatCell.svelte";
   import SelectedPointEditor from "./SelectedPointEditor.svelte";
 
-  export let selectedLine: Line | null;
-  export let selectedLinePathIndex: number;
-  export let selectedPoint: BasePoint | null;
-  export let selectedPointIndex: number;
-  export let selectedPointLabel: string;
-  export let lineCount: number;
-  export let settings: Settings;
-  export let curveTension: number;
-  export let onNameInput: (name: string) => void;
-  export let onLinesChanged: () => void;
-  export let onRecordChange: () => void;
-  export let onCurveFromSelected: (tension: number) => void;
-  export let onDeleteSelectedLine: () => void;
-  export let onDeleteControlPoint: () => void;
-  export let onToggleLock: () => void;
-  export let onCommitPointChange: () => void;
+  interface Props {
+    selectedLine: Line | null;
+    selectedLinePathIndex: number;
+    selectedPoint: BasePoint | null;
+    selectedPointIndex: number;
+    selectedPointLabel: string;
+    lineCount: number;
+    settings: Settings;
+    curveTension: number;
+    onNameInput: (name: string) => void;
+    onLinesChanged: () => void;
+    onRecordChange: () => void;
+    onCurveFromSelected: (tension: number) => void;
+    onDeleteSelectedLine: () => void;
+    onDeleteControlPoint: () => void;
+    onToggleLock: () => void;
+    onCommitPointChange: () => void;
+  }
+
+  let {
+    selectedLine,
+    selectedLinePathIndex,
+    selectedPoint,
+    selectedPointIndex = $bindable(),
+    selectedPointLabel,
+    lineCount,
+    settings,
+    curveTension = $bindable(),
+    onNameInput,
+    onLinesChanged,
+    onRecordChange,
+    onCurveFromSelected,
+    onDeleteSelectedLine,
+    onDeleteControlPoint,
+    onToggleLock,
+    onCommitPointChange
+  }: Props = $props();
 </script>
 
 <div
@@ -47,7 +68,7 @@
         />
         <button
           class="rounded border border-[#444444] bg-[#2b2b2b] px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-[#333333] disabled:cursor-not-allowed disabled:opacity-50"
-          on:click={() => onCurveFromSelected(curveTension)}
+          onclick={() => onCurveFromSelected(curveTension)}
           disabled={selectedLine.controlPoints.length === 0}
           title="Convert this path to a smooth cubic Bezier"
         >
@@ -56,7 +77,7 @@
       {/if}
       <button
         class="rounded border border-red-700 bg-red-600 px-2 py-1 text-[10px] font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
-        on:click={onDeleteSelectedLine}
+        onclick={onDeleteSelectedLine}
         disabled={!selectedLine || lineCount <= 1}
         title={lineCount <= 1
           ? "At least one path must remain"
@@ -78,8 +99,8 @@
           type="text"
           class="w-full bg-transparent font-medium text-gray-100 border-none outline-none focus:ring-1 focus:ring-green-500 rounded px-0 py-0.5"
           disabled={selectedLine.locked}
-          on:input={(e) => onNameInput(e.currentTarget.value)}
-          on:change={onRecordChange}
+          oninput={(e) => onNameInput(e.currentTarget.value)}
+          onchange={onRecordChange}
         />
       </div>
       <StatCell label="Endpoint">

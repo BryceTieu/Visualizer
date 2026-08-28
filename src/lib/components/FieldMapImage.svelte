@@ -1,7 +1,11 @@
 <script lang="ts">
-  export let src: string;
-  export let fieldMapName: string | undefined;
-  export let onSettled: () => void = () => {};
+  interface Props {
+    src: string;
+    fieldMapName: string | undefined;
+    onSettled?: () => void;
+  }
+
+  let { src, fieldMapName, onSettled = () => {} }: Props = $props();
 
   const FALLBACK_FIELD_MAP = "/fields/decode.webp";
 </script>
@@ -26,12 +30,12 @@
     -o-user-drag: none;
   "
   draggable="false"
-  on:load={onSettled}
-  on:error={(e) => {
+  onload={onSettled}
+  onerror={(e) => {
     console.error("Failed to load field map:", fieldMapName);
     onSettled();
     (e.currentTarget as HTMLImageElement).src = FALLBACK_FIELD_MAP;
   }}
-  on:dragstart={(e) => e.preventDefault()}
-  on:selectstart={(e) => e.preventDefault()}
+  ondragstart={(e) => e.preventDefault()}
+  onselectstart={(e) => e.preventDefault()}
 />

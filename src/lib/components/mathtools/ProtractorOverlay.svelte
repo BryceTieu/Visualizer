@@ -4,34 +4,43 @@
   import { clamp } from "../../../utils/math";
   import type * as d3 from "d3";
 
-  export let x: d3.ScaleLinear<number, number>;
-  export let y: d3.ScaleLinear<number, number>;
-  export let twoElement: HTMLDivElement;
-  export let robotXY: { x: number; y: number };
+  interface Props {
+    x: d3.ScaleLinear<number, number>;
+    y: d3.ScaleLinear<number, number>;
+    twoElement: HTMLDivElement;
+    robotXY: { x: number; y: number };
+  }
+
+  let {
+    x,
+    y,
+    twoElement,
+    robotXY
+  }: Props = $props();
 
   const MIN_PROTRACTOR_RADIUS = 30;
   const MAX_PROTRACTOR_RADIUS = 150;
 
-  let protractorPos = { x: 72, y: 72 };
-  let radiusAngle = 0;
+  let protractorPos = $state({ x: 72, y: 72 });
+  let radiusAngle = $state(0);
   let dragging: "move" | "rotate" | "resize" | null = null;
   let rotateStart = 0;
-  let radius = 60;
-  let resizeAngle = -60;
+  let radius = $state(60);
+  let resizeAngle = $state(-60);
 
   // Lock to the robot when enabled, otherwise use the dragged position
-  $: center = $protractorLockToRobot
+  let center = $derived($protractorLockToRobot
     ? { x: x.invert(robotXY.x), y: y.invert(robotXY.y) }
-    : protractorPos;
+    : protractorPos);
 
-  $: normalizedAngle = Math.round(
+  let normalizedAngle = $derived(Math.round(
     radiusAngle < 0 ? 360 + radiusAngle : radiusAngle,
-  );
-  $: resizeHandleRadians = (resizeAngle * Math.PI) / 180;
-  $: resizeHandlePosition = {
+  ));
+  let resizeHandleRadians = $derived((resizeAngle * Math.PI) / 180);
+  let resizeHandlePosition = $derived({
     x: Math.cos(resizeHandleRadians) * radius,
     y: -Math.sin(resizeHandleRadians) * radius,
-  };
+  });
 
   function localMouse(event: MouseEvent) {
     const rect = twoElement.getBoundingClientRect();
@@ -90,7 +99,7 @@
   }
 </script>
 
-<svelte:window on:mousemove={handleMouseMove} on:mouseup={handleMouseUp} />
+<svelte:window onmousemove={handleMouseMove} onmouseup={handleMouseUp} />
 
 <svg class="absolute top-0 left-0 w-full h-full z-40 pointer-events-none">
   <g transform="translate({x(center.x)}, {y(center.y)})">
@@ -160,7 +169,7 @@
         role="button"
         tabindex="0"
         aria-label="Drag to rotate radius line"
-        on:mousedown={(e) => handleMouseDown(e, "rotate")}
+        onmousedown={(e) => handleMouseDown(e, "rotate")}
       />
       <text
         x={radius}
@@ -193,7 +202,7 @@
         role="button"
         tabindex="0"
         aria-label="Drag to resize protractor"
-        on:mousedown={(e) => handleMouseDown(e, "resize")}
+        onmousedown={(e) => handleMouseDown(e, "resize")}
       />
       <text
         x={resizeHandlePosition.x}
@@ -221,7 +230,7 @@
       aria-label={$protractorLockToRobot
         ? "Click to unlock from robot"
         : "Drag to move protractor"}
-      on:mousedown={(e) => {
+      onmousedown={(e) => {
         if ($protractorLockToRobot) {
           // Locked: center click does nothing; unlock via navbar toggle only
           e.stopPropagation();

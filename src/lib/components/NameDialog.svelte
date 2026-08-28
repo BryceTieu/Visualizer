@@ -1,28 +1,44 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
   import Modal from "./ui/Modal.svelte";
 
-  export let isOpen = false;
-  export let title = "Enter Name";
-  export let defaultValue = "";
-  export let placeholder = "Enter name...";
-  export let onConfirm: (name: string) => void = () => {};
-  export let onCancel: () => void = () => {};
+  interface Props {
+    isOpen?: boolean;
+    title?: string;
+    defaultValue?: string;
+    placeholder?: string;
+    onConfirm?: (name: string) => void;
+    onCancel?: () => void;
+  }
 
-  let inputValue = defaultValue;
-  let inputElement: HTMLInputElement;
-  let lastOpenState = false;
+  let {
+    isOpen = $bindable(false),
+    title = "Enter Name",
+    defaultValue = "",
+    placeholder = "Enter name...",
+    onConfirm = () => {},
+    onCancel = () => {}
+  }: Props = $props();
+
+  // Seeded from `defaultValue` each time the dialog opens (see below).
+  let inputValue = $state("");
+  let inputElement = $state<HTMLInputElement>();
+  let lastOpenState = $state(false);
 
   // Only initialize when dialog first opens, not on every reactive update
-  $: if (isOpen && !lastOpenState) {
-    lastOpenState = true;
-    inputValue = defaultValue;
-    setTimeout(() => {
-      inputElement?.focus();
-      inputElement?.select();
-    }, 100);
-  } else if (!isOpen) {
-    lastOpenState = false;
-  }
+  run(() => {
+    if (isOpen && !lastOpenState) {
+      lastOpenState = true;
+      inputValue = defaultValue;
+      setTimeout(() => {
+        inputElement?.focus();
+        inputElement?.select();
+      }, 100);
+    } else if (!isOpen) {
+      lastOpenState = false;
+    }
+  });
 
   function handleConfirm() {
     const trimmed = inputValue.trim();
@@ -54,7 +70,7 @@
     <input
       bind:this={inputElement}
       bind:value={inputValue}
-      on:keydown={handleKeydown}
+      onkeydown={handleKeydown}
       type="text"
       {placeholder}
       class="console-input px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -62,9 +78,9 @@
   </div>
 
   <div class="flex justify-end gap-3">
-    <button on:click={handleCancel} class="console-action">Cancel</button>
+    <button onclick={handleCancel} class="console-action">Cancel</button>
     <button
-      on:click={handleConfirm}
+      onclick={handleConfirm}
       disabled={!inputValue.trim()}
       class="px-4 py-2 rounded-lg text-white bg-blue-600 hover:bg-blue-700 disabled:bg-neutral-600 disabled:cursor-not-allowed transition-colors font-medium"
     >

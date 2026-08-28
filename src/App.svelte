@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
   import type {
     Line,
     BasePoint,
@@ -134,42 +136,40 @@
   // localStorage. Electron-specific APIs have been removed.
 
   // Canvas state
-  let two: Two;
-  let twoElement: HTMLDivElement;
-  let fieldPointsCanvas: HTMLCanvasElement;
-  let width = 0;
-  let height = 0;
-  let leftPanelWidth = DEFAULT_SETTINGS.leftPanelWidth || 370;
-  let rightPanelWidth = DEFAULT_SETTINGS.rightPanelWidth || 620;
-  let leftPanelHidden = false;
-  let rightPanelHidden = false;
+  let two = $state<Two>()!;
+  let twoElement = $state<HTMLDivElement>()!;
+  let fieldPointsCanvas = $state<HTMLCanvasElement>()!;
+  let width = $state(0);
+  let height = $state(0);
+  let leftPanelWidth = $state(DEFAULT_SETTINGS.leftPanelWidth || 370);
+  let rightPanelWidth = $state(DEFAULT_SETTINGS.rightPanelWidth || 620);
+  let leftPanelHidden = $state(false);
+  let rightPanelHidden = $state(false);
   let panelResizeState:
     | { side: "left"; startX: number; startWidth: number }
     | { side: "right"; startX: number; startWidth: number }
     | null = null;
-  // Robot state
-  $: robotWidth = settings?.rWidth || DEFAULT_ROBOT_WIDTH;
-  $: robotHeight = settings?.rHeight || DEFAULT_ROBOT_HEIGHT;
-  let robotXY: BasePoint = { x: 0, y: 0 };
-  let robotHeading: number = 0;
-  let robotT: number | null = null;
+  let robotXY: BasePoint = $state({ x: 0, y: 0 });
+  let robotHeading: number = $state(0);
+  let robotT: number | null = $state(null);
   // Animation state
-  let percent: number = 0;
-  let playing = false;
+  let percent: number = $state(0);
+  let playing = $state(false);
   // Save dialog state
-  let showSaveDialog = false;
-  let showDualPathSaveDialog = false;
-  let isSaving = false;
+  let showSaveDialog = $state(false);
+  let showDualPathSaveDialog = $state(false);
+  let isSaving = $state(false);
   // GIF export state
-  let exportingGif = false;
-  let gifExportProgress = 0;
-  let gifExportStatus = "Preparing...";
-  let cancelGifExport = false;
+  let exportingGif = $state(false);
+  let gifExportProgress = $state(0);
+  let gifExportStatus = $state("Preparing...");
+  let cancelGifExport = $state(false);
   // Path data
-  let settings: Settings = { ...DEFAULT_SETTINGS };
-  let startPoint: Point = getDefaultStartPoint();
-  let lines: Line[] = normalizeLines(getDefaultLines());
-  let fieldPoints: FieldPoint[] = [];
+  let settings: Settings = $state({ ...DEFAULT_SETTINGS });
+  let startPoint: Point = $state(getDefaultStartPoint());
+  const initialLines = normalizeLines(getDefaultLines());
+  let lines: Line[] = $state(initialLines);
+  let fieldPoints: FieldPoint[] = $state([]);
 
   function detectMobileDevice() {
     if (typeof window === "undefined" || typeof navigator === "undefined") {
@@ -195,38 +195,26 @@
   }
 
 
-  $: fieldMapSrc =
-    settings.fieldMap === "custom"
-      ? settings.customFieldImage || "/fields/decode.webp"
-      : settings.fieldMap
-        ? `/fields/${settings.fieldMap}`
-        : "/fields/decode.webp";
-  let sequence: SequenceItem[] = lines.map((ln) => ({
+  let sequence: SequenceItem[] = $state(initialLines.map((ln) => ({
     kind: "path",
     lineId: ln.id!,
-  }));
-  let selectedLineIndex = 0;
-  let selectedPointIndex = 0;
-  let selectedLine: Line | null = null;
-  let selectedPoint: BasePoint | null = null;
-  let penToolEnabled = false;
-  let penStroke: BasePoint[] = [];
-  let penIsDrawing = false;
-  let penGhostPath: (Path | PathLine)[] = [];
-  let fieldMapLoaded = false;
-  let robotImageLoaded = false;
-  let lastFieldMapSrc = "";
-  let lastRobotImageSrc = "";
-  let isMobileBlocked = false;
-  let effectiveSize = FIELD_SIZE;
-  let fieldStageWidth = FIELD_SIZE;
-  let fieldStageHeight = FIELD_SIZE;
-  $: fieldPixelSize = Math.max(
-    1,
-    Math.floor(
-      Math.min(fieldStageWidth || FIELD_SIZE, fieldStageHeight || FIELD_SIZE) - 16,
-    ),
+  })));
+  let selectedLineIndex = $state(0);
+  let selectedPointIndex = $state(0);
+  let penToolEnabled = $state(false);
+  let penStroke: BasePoint[] = $state([]);
+  let penIsDrawing = $state(false);
+  let fieldMapLoaded = $state(false);
+  let robotImageLoaded = $state(false);
+  let lastFieldMapSrc = $state("");
+  let lastRobotImageSrc = $state("");
+  let isMobileBlocked = $state(false);
+  // Match the smallest of width/height so the field image and grid stay aligned
+  let effectiveSize = $derived(
+    Math.min(width || FIELD_SIZE, height || FIELD_SIZE),
   );
+  let fieldStageWidth = $state(FIELD_SIZE);
+  let fieldStageHeight = $state(FIELD_SIZE);
 
   if (typeof window !== "undefined") {
     // Initial detection
@@ -250,37 +238,18 @@
       window.removeEventListener("orientationchange", updateMobile);
     };
   });
-  $: if (fieldMapSrc !== lastFieldMapSrc) {
-    fieldMapLoaded = false;
-    lastFieldMapSrc = fieldMapSrc;
-  }
 
-  $: if ((settings.robotImage || "/robot.png") !== lastRobotImageSrc) {
-    robotImageLoaded = false;
-    lastRobotImageSrc = settings.robotImage || "/robot.png";
-  }
 
-  $: initialAssetsReady = fieldMapLoaded && robotImageLoaded;
-  $: if (lines.length > 0 && selectedLineIndex >= lines.length) {
-    selectedLineIndex = lines.length - 1;
-  }
 
-  $: selectedLine = lines[selectedLineIndex] || null;
-  $: selectedPoint =
-    selectedLine && selectedPointIndex >= 0
-      ? selectedPointIndex === 0
-        ? selectedLine.endPoint
-        : selectedLine.controlPoints[selectedPointIndex - 1] || null
-      : null;
-  let shapes: Shape[] = getDefaultShapes();
+  let shapes: Shape[] = $state(getDefaultShapes());
   let optimizingLineIds: Record<string, boolean> = {};
-  let optimizingAll = false;
+  let optimizingAll = $state(false);
 
   // Second path data (for alliance coordination) - DEPRECATED, use additionalPaths
-  let secondStartPoint: Point | null = null;
-  let secondLines: Line[] = [];
-  let secondSequence: SequenceItem[] = [];
-  let secondShapes: Shape[] = [];
+  let secondStartPoint: Point | null = $state(null);
+  let secondLines: Line[] = $state([]);
+  let secondSequence: SequenceItem[] = $state([]);
+  let secondShapes: Shape[] = $state([]);
 
   // Multiple paths data (new system - supports up to 4 paths total)
   interface AdditionalPathData {
@@ -292,7 +261,7 @@
     settings: Settings;
     color?: string; // Optional custom color for this path
   }
-  let additionalPaths: AdditionalPathData[] = [];
+  let additionalPaths: AdditionalPathData[] = $state([]);
 
   const formatPathPoint = (value: number) =>
     Number.isInteger(value) ? value.toFixed(0) : value.toFixed(1);
@@ -350,38 +319,7 @@
     }
   }
 
-  // Reactive center width calculation for the field constraint
-  $: centerWidth = getCenterWidth(
-    leftPanelWidth,
-    rightPanelWidth,
-    leftPanelHidden,
-    rightPanelHidden,
-  );
 
-  // Keep panels inside the space left over once the centre stage is square.
-  // This only ever shrinks a panel that no longer fits; it must not grow one
-  // back toward its saved width, or the left panel would reclaim any space
-  // freed by dragging the right panel smaller and the right panel could never
-  // take it back. Saved widths are applied once on load instead.
-  $: {
-    const availableForPanels =
-      getTotalAvailableWidth() - getMinCenterWidthForSquare();
-    const rightMinWidth = getRightPanelMinWidth(settings);
-
-    if (!leftPanelHidden) {
-      const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
-      const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
-      const nextLeft = clamp(leftPanelWidth, SIDE_PANEL_MIN_WIDTH, maxLeft);
-      if (nextLeft !== leftPanelWidth) leftPanelWidth = nextLeft;
-    }
-
-    if (!rightPanelHidden) {
-      const leftWidth = leftPanelHidden ? 0 : leftPanelWidth;
-      const maxRight = Math.max(rightMinWidth, availableForPanels - leftWidth);
-      const nextRight = clamp(rightPanelWidth, rightMinWidth, maxRight);
-      if (nextRight !== rightPanelWidth) rightPanelWidth = nextRight;
-    }
-  }
 
   function beginPanelResize(side: "left" | "right", event: MouseEvent) {
     event.preventDefault();
@@ -491,9 +429,6 @@
     };
   }
 
-  // Use the stores for reactivity
-  $: canUndo = $canUndoStore;
-  $: canRedo = $canRedoStore;
 
   function recordChange() {
     history.record(getAppState());
@@ -529,70 +464,14 @@
     }
   }
 
-  $: {
-    // Ensure arrays are reactive when items are added/removed
-    lines = lines;
-    shapes = shapes;
-  }
-
-  // Two.js groups
-  // Coordinate converters
-  let x: d3.ScaleLinear<number, number>;
 
   // Animation controller
-  let loopAnimation = true;
-  let animationController: ReturnType<typeof createAnimationController>;
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
-  $: animationDuration = getAnimationDuration(timePrediction.totalTime / 1000);
+  let loopAnimation = $state(true);
+  let animationController = $state<ReturnType<typeof createAnimationController>>()!;
   
-  // Second path timeline (for dual path mode)
-  $: secondTimePrediction = $dualPathMode && secondStartPoint && secondLines.length > 0 
-    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
-    : null;
   
-  // Calculate max duration across all paths for playbar scaling
-  $: effectiveAnimationDuration = (() => {
-    // In multi-path mode, only use additional paths for duration
-    if ($activePaths.length > 0) {
-      let maxTime = 0;
-      additionalPaths.forEach((pathData) => {
-        if (pathData.startPoint && pathData.lines.length > 0) {
-          const pathTime = calculatePathTime(
-            pathData.startPoint,
-            pathData.lines,
-            pathData.settings,
-            pathData.sequence
-          );
-          if (pathTime) {
-            maxTime = Math.max(maxTime, pathTime.totalTime);
-          }
-        }
-      });
-      return maxTime > 0 ? getAnimationDuration(maxTime / 1000) : animationDuration;
-    }
-    
-    // In normal/dual mode, check main path and second path
-    let maxTime = timePrediction.totalTime;
-    
-    if ($dualPathMode && secondTimePrediction) {
-      maxTime = Math.max(maxTime, secondTimePrediction.totalTime);
-    }
-    
-    return getAnimationDuration(maxTime / 1000);
-  })();
 
-  $: pathPreviewItems = lines.slice(0, 14).map((line, idx) => ({
-    index: idx + 1,
-    lineIndex: idx,
-    name: line.name || `Path ${idx + 1}`,
-    x: formatPathPoint(line.endPoint.x),
-    y: formatPathPoint(line.endPoint.y),
-  }));
   
-  // Load additional paths when activePaths changes
-  $: {
-    loadAdditionalPaths($activePaths);
-  }
 
   async function loadAdditionalPaths(paths: string[]) {
     const newAdditionalPaths: AdditionalPathData[] = [];
@@ -680,280 +559,22 @@
     return true;
   }
   
-  let secondRobotXY: BasePoint = { x: 0, y: 0 };
-  let secondRobotHeading: number = 0;
-  /**
-   * Converter for X axis from inches to pixels.
-   */
-  $: x = d3
-    .scaleLinear()
-    .domain([0, FIELD_SIZE])
-    .range([0, effectiveSize || FIELD_SIZE]);
-  /**
-   * Converter for Y axis from inches to pixels.
-   */
-  $: y = d3
-    .scaleLinear()
-    .domain([0, FIELD_SIZE])
-    .range([effectiveSize || FIELD_SIZE, 0]);
-  $: {
-    // Ensure effectiveSize matches the smallest of width/height so the field image and grid align
-    effectiveSize = Math.min(width || FIELD_SIZE, height || FIELD_SIZE);
-  }
-  $: isMultiPathMode = $activePaths.length > 0;
-  $: scales = { x, y };
+  let secondRobotXY: BasePoint = $state({ x: 0, y: 0 });
+  let secondRobotHeading: number = $state(0);
   const GHOST_COLOR = "#a78bfa"; // Light purple/lavender
   const SECOND_PATH_COLOR = "#fca5a5"; // Light red/pink for the second robot
-  $: pointSelection = { lineIndex: selectedLineIndex, pointIndex: selectedPointIndex };
-  $: points = [
-    // Only show main path points when NOT in multi-path mode
-    ...(isMultiPathMode
-      ? []
-      : [
-          ...buildPathPointMarkers(startPoint, lines, scales, {
-            idPrefix: "point",
-            selection: pointSelection,
-          }),
-          ...buildSelectedPointRing(lines, pointSelection, scales),
-        ]),
-    // Draggable obstacle vertices
-    ...(settings?.experimentalFeatures?.obstacles
-      ? buildObstacleVertexMarkers(shapes, scales)
-      : []),
-    // Second path points (dual path mode) - not in multi-path mode
-    ...(!isMultiPathMode &&
-    $dualPathMode &&
-    secondStartPoint &&
-    secondLines.length > 0
-      ? buildPathPointMarkers(secondStartPoint, secondLines, scales, {
-          idPrefix: "second-point",
-        })
-      : []),
-    // All control points for additional paths (full editing support)
-    ...(isMultiPathMode
-      ? additionalPaths.flatMap((pathData, pathIdx) =>
-          !pathData.startPoint || !pathData.lines.length
-            ? []
-            : buildPathPointMarkers(
-                pathData.startPoint,
-                pathData.lines,
-                scales,
-                {
-                  idPrefix: `additional-path-${pathIdx}-point`,
-                  color: pathData.color,
-                  radiusScale: 0.9,
-                  textSize: 1.4,
-                  opacity: 0.8,
-                },
-              ),
-        )
-      : []),
-  ];
 
-  // Hide main path when in multi-path mode (isolated visualization)
-  $: path = isMultiPathMode
-    ? []
-    : buildPathElements(
-        { startPoint, lines, idPrefix: "line" },
-        scales,
-        settings,
-      );
 
-  // Second path rendering (for dual path mode); not shown in multi-path mode
-  $: secondPath =
-    isMultiPathMode || !$dualPathMode || !secondStartPoint || secondLines.length === 0
-      ? []
-      : buildPathElements(
-          {
-            startPoint: secondStartPoint,
-            lines: secondLines,
-            idPrefix: "second-line",
-          },
-          scales,
-          settings,
-        );
 
-  // Render all additional paths; only slight opacity variation between them
-  $: additionalPathElements = additionalPaths.map((pathData, pathIdx) =>
-    !pathData.startPoint || pathData.lines.length === 0
-      ? []
-      : buildPathElements(
-          {
-            startPoint: pathData.startPoint,
-            lines: pathData.lines,
-            idPrefix: `additional-path-${pathIdx}-line`,
-            color: pathData.color,
-            opacityScale: 1.0 - pathIdx * 0.1,
-            honorLocked: false,
-          },
-          scales,
-          settings,
-        ),
-  );
 
-  $: penGhostPath = (() => {
-    if (!penToolEnabled || !penIsDrawing || penStroke.length < 2 || $activePaths.length > 0) {
-      return [];
-    }
 
-    const anchors = penStroke.map(
-      (point, index) =>
-        new Two.Anchor(
-          x(point.x),
-          y(point.y),
-          0,
-          0,
-          0,
-          0,
-          index === 0 ? Two.Commands.move : Two.Commands.line,
-        ),
-    );
-    anchors.forEach((anchor) => (anchor.relative = false));
 
-    const ghost = new Two.Path(anchors);
-    ghost.automatic = false;
-    ghost.stroke = "#facc15";
-    ghost.fill = "transparent";
-    ghost.linewidth = x(LINE_WIDTH * 0.9);
-    ghost.opacity = 0.35;
-    ghost.dashes = [x(0.6), x(0.6)];
-    ghost.id = "pen-ghost-path";
 
-    return [ghost];
-  })();
 
-  $: shapeElements = !(settings?.experimentalFeatures?.obstacles ?? false)
-    ? []
-    : shapes.flatMap((shape, idx) => {
-        if (shape.vertices.length < 3) return [];
-        const shapeElement = buildClosedPolygon(shape.vertices, scales);
-        shapeElement.id = `shape-${idx}`;
-        shapeElement.stroke = shape.color;
-        shapeElement.fill = shape.color;
-        shapeElement.opacity = 0.4;
-        shapeElement.linewidth = x(0.8);
-        return [shapeElement];
-      });
 
-  // Don't show ghost paths in multi-path mode
-  $: ghostPathElement =
-    !isMultiPathMode && settings.showGhostPaths && lines.length > 0
-      ? buildGhostPath(
-          generateGhostPathPoints(
-            startPoint,
-            lines,
-            settings.rWidth,
-            settings.rHeight,
-            50,
-          ),
-          { id: "ghost-path", color: GHOST_COLOR },
-          scales,
-        )
-      : null;
 
-  // Second ghost path for dual path mode
-  $: secondGhostPathElement =
-    !isMultiPathMode &&
-    $dualPathMode &&
-    settings.showGhostPaths &&
-    secondLines.length > 0 &&
-    secondStartPoint
-      ? buildGhostPath(
-          generateGhostPathPoints(
-            secondStartPoint,
-            secondLines,
-            settings.rWidth,
-            settings.rHeight,
-            50,
-          ),
-          { id: "ghost-path-2", color: SECOND_PATH_COLOR },
-          scales,
-        )
-      : null;
 
-  // Ghost paths for additional paths in multi-path mode
-  $: additionalGhostPathElements =
-    isMultiPathMode && settings.showGhostPaths
-      ? additionalPaths.flatMap((pathData, pathIdx) => {
-          if (!pathData.startPoint || !pathData.lines.length) return [];
-          const ghostPath = buildGhostPath(
-            generateGhostPathPoints(
-              pathData.startPoint,
-              pathData.lines,
-              settings.rWidth,
-              settings.rHeight,
-              50,
-            ),
-            {
-              id: `ghost-path-additional-${pathIdx}`,
-              color: pathData.color || GHOST_COLOR,
-            },
-            scales,
-          );
-          return ghostPath ? [ghostPath] : [];
-        })
-      : [];
-
-  // Don't show onion layers in multi-path mode
-  $: onionLayerElements =
-    !isMultiPathMode && settings.showOnionLayers && lines.length > 0
-      ? selectVisibleOnionLayers(
-          generateOnionLayers(
-            startPoint,
-            lines,
-            settings.rWidth,
-            settings.rHeight,
-            settings.onionLayerSpacing || 6,
-          ),
-          timePrediction,
-          percent,
-          settings.onionNextPointOnly,
-        ).map((layer, idx) =>
-          buildOnionLayer(
-            layer.corners,
-            {
-              id: `onion-layer-${idx}`,
-              color: settings.onionColor || "#dc2626",
-            },
-            scales,
-          ),
-        )
-      : [];
-
-  // Second onion layers for dual path mode
-  $: secondOnionLayerElements =
-    !isMultiPathMode &&
-    $dualPathMode &&
-    settings.showOnionLayers &&
-    secondLines.length > 0 &&
-    secondStartPoint
-      ? selectVisibleOnionLayers(
-          generateOnionLayers(
-            secondStartPoint,
-            secondLines,
-            settings.rWidth,
-            settings.rHeight,
-            settings.onionLayerSpacing || 6,
-          ),
-          secondTimePrediction,
-          percent,
-          settings.onionNextPointOnly,
-        ).map((layer, idx) =>
-          buildOnionLayer(
-            layer.corners,
-            { id: `second-onion-layer-${idx}`, color: SECOND_PATH_COLOR },
-            scales,
-          ),
-        )
-      : [];
-
-  let isLoaded = false;
-  // Reactively trigger when any saveable data changes
-  $: {
-    if (isLoaded && (lines || shapes || startPoint || settings)) {
-      isUnsaved.set(true);
-    }
-  }
+  let isLoaded = $state(false);
 
   // Allow the app to stabilize before tracking changes
   onMount(() => {
@@ -976,9 +597,7 @@
       console.info("Recovered previous unsaved session.");
     }
 
-    // Update robot dimensions from loaded settings
-    robotWidth = settings.rWidth;
-    robotHeight = settings.rHeight;
+    // robotWidth/robotHeight derive from settings, so loading settings is enough.
     // Apply the saved panel widths, then clamp them to the current viewport.
     // This is the only place saved widths are restored — the reactive clamp
     // above deliberately never grows a panel back on its own.
@@ -1020,18 +639,7 @@
 
   const debouncedSaveSession = debounce(saveSessionSnapshot, 750);
 
-  // Watch for settings changes and save
-  $: {
-    if (settings) {
-      debouncedSaveSettings(settings);
-    }
-  }
 
-  $: {
-    if (isLoaded) {
-      debouncedSaveSession(buildSessionSnapshot());
-    }
-  }
 
   onDestroy(() => {
     debouncedSaveSession.cancel();
@@ -1055,15 +663,7 @@
       },
     );
   });
-  $: if (animationController) {
-    animationController.setDuration(effectiveAnimationDuration);
-  }
 
-  $: if (animationController) {
-    animationController.setLoop(loopAnimation);
-    // Sync UI state with controller
-    playing = animationController.isPlaying();
-  }
 
   // Save Function
   // Save the current project into the browser-backed store (or download)
@@ -1283,74 +883,7 @@
     }
   }
   const robotPerf = createPerfSampler("robot-state");
-  $: {
-    // This handles both 'travel' (movement) and 'wait' (stationary rotation) events.
-    // Don't show main robot in multi-path mode
-    if ($activePaths.length === 0 && timePrediction && timePrediction.timeline && lines.length > 0) {
-      const t0 = performance.now();
-      const state = calculateRobotState(
-        percent,
-        timePrediction.timeline,
-        lines,
-        startPoint,
-        settings,
-        x,
-        y,
-      );
-      robotPerf.sample(t0);
-      robotXY = { x: state.x, y: state.y };
-      robotHeading = state.heading;
-      robotT = state.t ?? null;
-    } else {
-      // Fallback for initialization or empty state
-      robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
-      robotT = null;
-      // Calculate initial heading based on start point settings
-      if (startPoint.heading === "linear") robotHeading = -startPoint.startDeg;
-      else if (startPoint.heading === "constant")
-        robotHeading = -startPoint.degrees;
-      else robotHeading = 0;
-    }
-  }
 
-  // Second robot state calculation (for dual path mode)
-  $: {
-    // Don't show second robot in multi-path mode
-    if (
-      $activePaths.length === 0 &&
-      $dualPathMode &&
-      timePrediction &&
-      secondTimePrediction &&
-      secondTimePrediction.timeline &&
-      secondLines.length > 0 &&
-      secondStartPoint
-    ) {
-      // Calculate actual percent for this path based on max duration
-      const maxDuration = effectiveAnimationDuration;
-      const thisDuration = getAnimationDuration(secondTimePrediction.totalTime / 1000);
-      const completionPercent = (thisDuration / maxDuration) * 100;
-      
-      // If this path should be complete, cap at 100% (robot waits at end)
-      const actualPercent = Math.min(percent, completionPercent);
-      const normalizedPercent = completionPercent > 0 ? (actualPercent / completionPercent) * 100 : 0;
-
-      const state = calculateRobotState(
-        normalizedPercent,
-        secondTimePrediction.timeline,
-        secondLines,
-        secondStartPoint,
-        settings,
-        x,
-        y,
-      );
-      secondRobotXY = { x: state.x, y: state.y };
-      secondRobotHeading = state.heading;
-    } else {
-      // Fallback or not in dual mode
-      secondRobotXY = { x: 0, y: 0 };
-      secondRobotHeading = 0;
-    }
-  }
 
   // Precompute per-additional-path time predictions and their animation
   // scaling ONCE per edit (keyed by the additionalPaths array reference)
@@ -1359,80 +892,14 @@
     prediction: ReturnType<typeof calculatePathTime>;
     completionPercent: number;
   };
-  let additionalPathCache = new Map<
+  let additionalPathCache = $state(new Map<
     AdditionalPathData,
     AdditionalPathEntry | null
-  >();
-  let additionalPathCacheKey: AdditionalPathData[] | null = null;
-  $: {
-    if (additionalPathCacheKey !== additionalPaths) {
-      additionalPathCacheKey = additionalPaths;
-      const cache = new Map<AdditionalPathData, AdditionalPathEntry | null>();
-      additionalPaths.forEach((pathData) => {
-        if (!pathData.startPoint) {
-          cache.set(pathData, null);
-          return;
-        }
-        const prediction = calculatePathTime(
-          pathData.startPoint,
-          pathData.lines,
-          pathData.settings,
-          pathData.sequence,
-        );
-        if (
-          !prediction ||
-          !prediction.timeline ||
-          pathData.lines.length === 0
-        ) {
-          cache.set(pathData, null);
-          return;
-        }
-        const maxDuration = effectiveAnimationDuration;
-        const thisDuration = getAnimationDuration(prediction.totalTime / 1000);
-        const completionPercent =
-          maxDuration > 0 ? (thisDuration / maxDuration) * 100 : 100;
-        cache.set(pathData, { prediction, completionPercent });
-      });
-      additionalPathCache = cache;
-    }
-  }
+  >());
+  let additionalPathCacheKey: AdditionalPathData[] | null = $state(null);
 
   // Calculate robot states for all additional paths (cheap: uses the cached
   // per-path predictions above, only evaluating positions for the current %).
-  let additionalRobotStates: Array<{ xy: BasePoint; heading: number }> = [];
-  $: {
-    additionalRobotStates = additionalPaths.map((pathData) => {
-      const entry = additionalPathCache.get(pathData);
-      if (!entry || !pathData.startPoint) {
-        return {
-          xy: { x: 0, y: 0 },
-          heading: 0,
-        };
-      }
-
-      // If this path should be complete, cap at 100% (robot waits at end)
-      const actualPercent = Math.min(percent, entry.completionPercent);
-      const normalizedPercent =
-        entry.completionPercent > 0
-          ? (actualPercent / entry.completionPercent) * 100
-          : 0;
-
-      const state = calculateRobotState(
-        normalizedPercent,
-        entry.prediction.timeline,
-        pathData.lines,
-        pathData.startPoint,
-        pathData.settings,
-        x,
-        y,
-      );
-
-      return {
-        xy: { x: state.x, y: state.y },
-        heading: state.heading,
-      };
-    });
-  }
 
   // Event markers removed: no runtime visualization created
 
@@ -1546,34 +1013,7 @@
     });
   }
 
-  $: {
-    // Reference every piece of scene state so this block re-runs (and reschedules
-    // the coalesced render) whenever any of it changes.
-    const sceneDeps: unknown[] = [
-      two,
-      shapeElements,
-      ghostPathElement,
-      secondGhostPathElement,
-      additionalGhostPathElements,
-      onionLayerElements,
-      secondOnionLayerElements,
-      penGhostPath,
-      path,
-      secondPath,
-      additionalPathElements,
-      points,
-      $dualPathMode,
-      $activePaths,
-    ];
-    void sceneDeps;
-    if (two) {
-      scheduleSceneRender();
-    }
-  }
 
-  $: if (fieldPointsCanvas && width > 0 && height > 0) {
-    renderFieldPoints(fieldPointsCanvas, fieldPoints, x, y, width, height);
-  }
 
   async function saveFileAs() {
     const win: any = window as any;
@@ -2026,8 +1466,6 @@
       // Load settings (including robot size) if present
       if (data.settings) {
         settings = { ...settings, ...data.settings };
-        robotWidth = settings.rWidth;
-        robotHeight = settings.rHeight;
       }
 
       activePaths.set(Array.isArray(data.activePaths) ? data.activePaths : []);
@@ -2340,12 +1778,573 @@
       window.removeEventListener("saveDualPath", handleDualPathSave);
     };
   });
+  // Robot state
+  let robotWidth = $derived(settings?.rWidth || DEFAULT_ROBOT_WIDTH);
+  let robotHeight = $derived(settings?.rHeight || DEFAULT_ROBOT_HEIGHT);
+  let fieldMapSrc =
+    $derived(settings.fieldMap === "custom"
+      ? settings.customFieldImage || "/fields/decode.webp"
+      : settings.fieldMap
+        ? `/fields/${settings.fieldMap}`
+        : "/fields/decode.webp");
+  let fieldPixelSize = $derived(Math.max(
+    1,
+    Math.floor(
+      Math.min(fieldStageWidth || FIELD_SIZE, fieldStageHeight || FIELD_SIZE) - 16,
+    ),
+  ));
+  run(() => {
+    if (fieldMapSrc !== lastFieldMapSrc) {
+      fieldMapLoaded = false;
+      lastFieldMapSrc = fieldMapSrc;
+    }
+  });
+  run(() => {
+    if ((settings.robotImage || "/robot.png") !== lastRobotImageSrc) {
+      robotImageLoaded = false;
+      lastRobotImageSrc = settings.robotImage || "/robot.png";
+    }
+  });
+  let initialAssetsReady = $derived(fieldMapLoaded && robotImageLoaded);
+  run(() => {
+    if (lines.length > 0 && selectedLineIndex >= lines.length) {
+      selectedLineIndex = lines.length - 1;
+    }
+  });
+  let selectedLine = $derived(lines[selectedLineIndex] || null);
+  let selectedPoint = $derived.by(() => {
+    const line = selectedLine;
+    if (!line || selectedPointIndex < 0) return null;
+    return selectedPointIndex === 0
+      ? line.endPoint
+      : line.controlPoints[selectedPointIndex - 1] || null;
+  });
+  // Keep panels inside the space left over once the centre stage is square.
+  // This only ever shrinks a panel that no longer fits; it must not grow one
+  // back toward its saved width, or the left panel would reclaim any space
+  // freed by dragging the right panel smaller and the right panel could never
+  // take it back. Saved widths are applied once on load instead.
+  run(() => {
+    const availableForPanels =
+      getTotalAvailableWidth() - getMinCenterWidthForSquare();
+    const rightMinWidth = getRightPanelMinWidth(settings);
+
+    if (!leftPanelHidden) {
+      const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
+      const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
+      const nextLeft = clamp(leftPanelWidth, SIDE_PANEL_MIN_WIDTH, maxLeft);
+      if (nextLeft !== leftPanelWidth) leftPanelWidth = nextLeft;
+    }
+
+    if (!rightPanelHidden) {
+      const leftWidth = leftPanelHidden ? 0 : leftPanelWidth;
+      const maxRight = Math.max(rightMinWidth, availableForPanels - leftWidth);
+      const nextRight = clamp(rightPanelWidth, rightMinWidth, maxRight);
+      if (nextRight !== rightPanelWidth) rightPanelWidth = nextRight;
+    }
+  });
+  // Reactive center width calculation for the field constraint
+  let centerWidth = $derived(getCenterWidth(
+    leftPanelWidth,
+    rightPanelWidth,
+    leftPanelHidden,
+    rightPanelHidden,
+  ));
+  // Use the stores for reactivity
+  let canUndo = $derived($canUndoStore);
+  let canRedo = $derived($canRedoStore);
+  let timePrediction = $derived(calculatePathTime(startPoint, lines, settings, sequence));
+  let animationDuration = $derived(getAnimationDuration(timePrediction.totalTime / 1000));
+  // Second path timeline (for dual path mode)
+  let secondTimePrediction = $derived($dualPathMode && secondStartPoint && secondLines.length > 0 
+    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
+    : null);
+  // Calculate max duration across all paths for playbar scaling
+  let effectiveAnimationDuration = $derived((() => {
+    // In multi-path mode, only use additional paths for duration
+    if ($activePaths.length > 0) {
+      let maxTime = 0;
+      additionalPaths.forEach((pathData) => {
+        if (pathData.startPoint && pathData.lines.length > 0) {
+          const pathTime = calculatePathTime(
+            pathData.startPoint,
+            pathData.lines,
+            pathData.settings,
+            pathData.sequence
+          );
+          if (pathTime) {
+            maxTime = Math.max(maxTime, pathTime.totalTime);
+          }
+        }
+      });
+      return maxTime > 0 ? getAnimationDuration(maxTime / 1000) : animationDuration;
+    }
+    
+    // In normal/dual mode, check main path and second path
+    let maxTime = timePrediction.totalTime;
+    
+    if ($dualPathMode && secondTimePrediction) {
+      maxTime = Math.max(maxTime, secondTimePrediction.totalTime);
+    }
+    
+    return getAnimationDuration(maxTime / 1000);
+  })());
+  let pathPreviewItems = $derived(lines.slice(0, 14).map((line, idx) => ({
+    index: idx + 1,
+    lineIndex: idx,
+    name: line.name || `Path ${idx + 1}`,
+    x: formatPathPoint(line.endPoint.x),
+    y: formatPathPoint(line.endPoint.y),
+  })));
+  // Load additional paths when activePaths changes
+  $effect.pre(() => {
+    loadAdditionalPaths($activePaths);
+  });
+  /**
+   * Converter for X axis from inches to pixels.
+   */
+  let x = $derived(d3
+    .scaleLinear()
+    .domain([0, FIELD_SIZE])
+    .range([0, effectiveSize || FIELD_SIZE]));
+  /**
+   * Converter for Y axis from inches to pixels.
+   */
+  let y = $derived(d3
+    .scaleLinear()
+    .domain([0, FIELD_SIZE])
+    .range([effectiveSize || FIELD_SIZE, 0]));
+  let isMultiPathMode = $derived($activePaths.length > 0);
+  let scales = $derived({ x, y });
+  let pointSelection = $derived({ lineIndex: selectedLineIndex, pointIndex: selectedPointIndex });
+  let points = $derived([
+    // Only show main path points when NOT in multi-path mode
+    ...(isMultiPathMode
+      ? []
+      : [
+          ...buildPathPointMarkers(startPoint, lines, scales, {
+            idPrefix: "point",
+            selection: pointSelection,
+          }),
+          ...buildSelectedPointRing(lines, pointSelection, scales),
+        ]),
+    // Draggable obstacle vertices
+    ...(settings?.experimentalFeatures?.obstacles
+      ? buildObstacleVertexMarkers(shapes, scales)
+      : []),
+    // Second path points (dual path mode) - not in multi-path mode
+    ...(!isMultiPathMode &&
+    $dualPathMode &&
+    secondStartPoint &&
+    secondLines.length > 0
+      ? buildPathPointMarkers(secondStartPoint, secondLines, scales, {
+          idPrefix: "second-point",
+        })
+      : []),
+    // All control points for additional paths (full editing support)
+    ...(isMultiPathMode
+      ? additionalPaths.flatMap((pathData, pathIdx) =>
+          !pathData.startPoint || !pathData.lines.length
+            ? []
+            : buildPathPointMarkers(
+                pathData.startPoint,
+                pathData.lines,
+                scales,
+                {
+                  idPrefix: `additional-path-${pathIdx}-point`,
+                  color: pathData.color,
+                  radiusScale: 0.9,
+                  textSize: 1.4,
+                  opacity: 0.8,
+                },
+              ),
+        )
+      : []),
+  ]);
+  // Hide main path when in multi-path mode (isolated visualization)
+  let path = $derived(isMultiPathMode
+    ? []
+    : buildPathElements(
+        { startPoint, lines, idPrefix: "line" },
+        scales,
+        settings,
+      ));
+  // Second path rendering (for dual path mode); not shown in multi-path mode
+  let secondPath =
+    $derived(isMultiPathMode || !$dualPathMode || !secondStartPoint || secondLines.length === 0
+      ? []
+      : buildPathElements(
+          {
+            startPoint: secondStartPoint,
+            lines: secondLines,
+            idPrefix: "second-line",
+          },
+          scales,
+          settings,
+        ));
+  // Render all additional paths; only slight opacity variation between them
+  let additionalPathElements = $derived(additionalPaths.map((pathData, pathIdx) =>
+    !pathData.startPoint || pathData.lines.length === 0
+      ? []
+      : buildPathElements(
+          {
+            startPoint: pathData.startPoint,
+            lines: pathData.lines,
+            idPrefix: `additional-path-${pathIdx}-line`,
+            color: pathData.color,
+            opacityScale: 1.0 - pathIdx * 0.1,
+            honorLocked: false,
+          },
+          scales,
+          settings,
+        ),
+  ));
+  let penGhostPath: (Path | PathLine)[] = $derived.by(() => {
+    if (!penToolEnabled || !penIsDrawing || penStroke.length < 2 || isMultiPathMode) {
+      return [];
+    }
+
+    const anchors = penStroke.map(
+      (point, index) =>
+        new Two.Anchor(
+          x(point.x),
+          y(point.y),
+          0,
+          0,
+          0,
+          0,
+          index === 0 ? Two.Commands.move : Two.Commands.line,
+        ),
+    );
+    anchors.forEach((anchor) => (anchor.relative = false));
+
+    const ghost = new Two.Path(anchors);
+    ghost.automatic = false;
+    ghost.stroke = "#facc15";
+    ghost.fill = "transparent";
+    ghost.linewidth = x(LINE_WIDTH * 0.9);
+    ghost.opacity = 0.35;
+    ghost.dashes = [x(0.6), x(0.6)];
+    ghost.id = "pen-ghost-path";
+
+    return [ghost];
+  });
+  let shapeElements = $derived(!(settings?.experimentalFeatures?.obstacles ?? false)
+    ? []
+    : shapes.flatMap((shape, idx) => {
+        if (shape.vertices.length < 3) return [];
+        const shapeElement = buildClosedPolygon(shape.vertices, scales);
+        shapeElement.id = `shape-${idx}`;
+        shapeElement.stroke = shape.color;
+        shapeElement.fill = shape.color;
+        shapeElement.opacity = 0.4;
+        shapeElement.linewidth = x(0.8);
+        return [shapeElement];
+      }));
+  // Don't show ghost paths in multi-path mode
+  let ghostPathElement =
+    $derived(!isMultiPathMode && settings.showGhostPaths && lines.length > 0
+      ? buildGhostPath(
+          generateGhostPathPoints(
+            startPoint,
+            lines,
+            settings.rWidth,
+            settings.rHeight,
+            50,
+          ),
+          { id: "ghost-path", color: GHOST_COLOR },
+          scales,
+        )
+      : null);
+  // Second ghost path for dual path mode
+  let secondGhostPathElement =
+    $derived(!isMultiPathMode &&
+    $dualPathMode &&
+    settings.showGhostPaths &&
+    secondLines.length > 0 &&
+    secondStartPoint
+      ? buildGhostPath(
+          generateGhostPathPoints(
+            secondStartPoint,
+            secondLines,
+            settings.rWidth,
+            settings.rHeight,
+            50,
+          ),
+          { id: "ghost-path-2", color: SECOND_PATH_COLOR },
+          scales,
+        )
+      : null);
+  // Ghost paths for additional paths in multi-path mode
+  let additionalGhostPathElements =
+    $derived(isMultiPathMode && settings.showGhostPaths
+      ? additionalPaths.flatMap((pathData, pathIdx) => {
+          if (!pathData.startPoint || !pathData.lines.length) return [];
+          const ghostPath = buildGhostPath(
+            generateGhostPathPoints(
+              pathData.startPoint,
+              pathData.lines,
+              settings.rWidth,
+              settings.rHeight,
+              50,
+            ),
+            {
+              id: `ghost-path-additional-${pathIdx}`,
+              color: pathData.color || GHOST_COLOR,
+            },
+            scales,
+          );
+          return ghostPath ? [ghostPath] : [];
+        })
+      : []);
+  // Don't show onion layers in multi-path mode
+  let onionLayerElements =
+    $derived(!isMultiPathMode && settings.showOnionLayers && lines.length > 0
+      ? selectVisibleOnionLayers(
+          generateOnionLayers(
+            startPoint,
+            lines,
+            settings.rWidth,
+            settings.rHeight,
+            settings.onionLayerSpacing || 6,
+          ),
+          timePrediction,
+          percent,
+          settings.onionNextPointOnly,
+        ).map((layer, idx) =>
+          buildOnionLayer(
+            layer.corners,
+            {
+              id: `onion-layer-${idx}`,
+              color: settings.onionColor || "#dc2626",
+            },
+            scales,
+          ),
+        )
+      : []);
+  // Second onion layers for dual path mode
+  let secondOnionLayerElements =
+    $derived(!isMultiPathMode &&
+    $dualPathMode &&
+    settings.showOnionLayers &&
+    secondLines.length > 0 &&
+    secondStartPoint
+      ? selectVisibleOnionLayers(
+          generateOnionLayers(
+            secondStartPoint,
+            secondLines,
+            settings.rWidth,
+            settings.rHeight,
+            settings.onionLayerSpacing || 6,
+          ),
+          secondTimePrediction,
+          percent,
+          settings.onionNextPointOnly,
+        ).map((layer, idx) =>
+          buildOnionLayer(
+            layer.corners,
+            { id: `second-onion-layer-${idx}`, color: SECOND_PATH_COLOR },
+            scales,
+          ),
+        )
+      : []);
+  // Reactively trigger when any saveable data changes
+  $effect.pre(() => {
+    if (isLoaded && (lines || shapes || startPoint || settings)) {
+      isUnsaved.set(true);
+    }
+  });
+  // Watch for settings changes and save
+  $effect.pre(() => {
+    if (settings) {
+      debouncedSaveSettings(settings);
+    }
+  });
+  $effect.pre(() => {
+    if (isLoaded) {
+      debouncedSaveSession(buildSessionSnapshot());
+    }
+  });
+  $effect.pre(() => {
+    if (animationController) {
+      animationController.setDuration(effectiveAnimationDuration);
+    }
+  });
+  $effect.pre(() => {
+    if (animationController) {
+      animationController.setLoop(loopAnimation);
+      // Sync UI state with controller
+      playing = animationController.isPlaying();
+    }
+  });
+  $effect.pre(() => {
+    // This handles both 'travel' (movement) and 'wait' (stationary rotation) events.
+    // Don't show main robot in multi-path mode
+    if ($activePaths.length === 0 && timePrediction && timePrediction.timeline && lines.length > 0) {
+      const t0 = performance.now();
+      const state = calculateRobotState(
+        percent,
+        timePrediction.timeline,
+        lines,
+        startPoint,
+        settings,
+        x,
+        y,
+      );
+      robotPerf.sample(t0);
+      robotXY = { x: state.x, y: state.y };
+      robotHeading = state.heading;
+      robotT = state.t ?? null;
+    } else {
+      // Fallback for initialization or empty state
+      robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
+      robotT = null;
+      // Calculate initial heading based on start point settings
+      if (startPoint.heading === "linear") robotHeading = -startPoint.startDeg;
+      else if (startPoint.heading === "constant")
+        robotHeading = -startPoint.degrees;
+      else robotHeading = 0;
+    }
+  });
+  // Second robot state calculation (for dual path mode)
+  $effect.pre(() => {
+    // Don't show second robot in multi-path mode
+    if (
+      $activePaths.length === 0 &&
+      $dualPathMode &&
+      timePrediction &&
+      secondTimePrediction &&
+      secondTimePrediction.timeline &&
+      secondLines.length > 0 &&
+      secondStartPoint
+    ) {
+      // Calculate actual percent for this path based on max duration
+      const maxDuration = effectiveAnimationDuration;
+      const thisDuration = getAnimationDuration(secondTimePrediction.totalTime / 1000);
+      const completionPercent = (thisDuration / maxDuration) * 100;
+      
+      // If this path should be complete, cap at 100% (robot waits at end)
+      const actualPercent = Math.min(percent, completionPercent);
+      const normalizedPercent = completionPercent > 0 ? (actualPercent / completionPercent) * 100 : 0;
+
+      const state = calculateRobotState(
+        normalizedPercent,
+        secondTimePrediction.timeline,
+        secondLines,
+        secondStartPoint,
+        settings,
+        x,
+        y,
+      );
+      secondRobotXY = { x: state.x, y: state.y };
+      secondRobotHeading = state.heading;
+    } else {
+      // Fallback or not in dual mode
+      secondRobotXY = { x: 0, y: 0 };
+      secondRobotHeading = 0;
+    }
+  });
+  run(() => {
+    if (additionalPathCacheKey !== additionalPaths) {
+      additionalPathCacheKey = additionalPaths;
+      const cache = new Map<AdditionalPathData, AdditionalPathEntry | null>();
+      additionalPaths.forEach((pathData) => {
+        if (!pathData.startPoint) {
+          cache.set(pathData, null);
+          return;
+        }
+        const prediction = calculatePathTime(
+          pathData.startPoint,
+          pathData.lines,
+          pathData.settings,
+          pathData.sequence,
+        );
+        if (
+          !prediction ||
+          !prediction.timeline ||
+          pathData.lines.length === 0
+        ) {
+          cache.set(pathData, null);
+          return;
+        }
+        const maxDuration = effectiveAnimationDuration;
+        const thisDuration = getAnimationDuration(prediction.totalTime / 1000);
+        const completionPercent =
+          maxDuration > 0 ? (thisDuration / maxDuration) * 100 : 100;
+        cache.set(pathData, { prediction, completionPercent });
+      });
+      additionalPathCache = cache;
+    }
+  });
+  let additionalRobotStates: Array<{ xy: BasePoint; heading: number }> =
+    $derived.by(() =>
+      additionalPaths.map((pathData) => {
+      const entry = additionalPathCache.get(pathData);
+      if (!entry || !pathData.startPoint) {
+        return {
+          xy: { x: 0, y: 0 },
+          heading: 0,
+        };
+      }
+
+      // If this path should be complete, cap at 100% (robot waits at end)
+      const actualPercent = Math.min(percent, entry.completionPercent);
+      const normalizedPercent =
+        entry.completionPercent > 0
+          ? (actualPercent / entry.completionPercent) * 100
+          : 0;
+
+      const state = calculateRobotState(
+        normalizedPercent,
+        entry.prediction.timeline,
+        pathData.lines,
+        pathData.startPoint,
+        pathData.settings,
+        x,
+        y,
+      );
+
+      return {
+        xy: { x: state.x, y: state.y },
+        heading: state.heading,
+      };
+      }),
+    );
+  $effect.pre(() => {
+    // Reference every piece of scene state so this block re-runs (and reschedules
+    // the coalesced render) whenever any of it changes.
+    const sceneDeps: unknown[] = [
+      two,
+      shapeElements,
+      ghostPathElement,
+      secondGhostPathElement,
+      additionalGhostPathElements,
+      onionLayerElements,
+      secondOnionLayerElements,
+      penGhostPath,
+      path,
+      secondPath,
+      additionalPathElements,
+      points,
+      $dualPathMode,
+      $activePaths,
+    ];
+    void sceneDeps;
+    if (two) {
+      scheduleSceneRender();
+    }
+  });
+  $effect.pre(() => {
+    if (fieldPointsCanvas && width > 0 && height > 0) {
+      renderFieldPoints(fieldPointsCanvas, fieldPoints, x, y, width, height);
+    }
+  });
 </script>
 
 <svelte:window
-  on:mousemove={handlePanelResize}
-  on:mouseup={endPanelResize}
-  on:blur={endPanelResize}
+  onmousemove={handlePanelResize}
+  onmouseup={endPanelResize}
+  onblur={endPanelResize}
 />
 
 {#if isMobileBlocked}
@@ -2363,8 +2362,6 @@
   bind:secondSequence
   bind:fieldPoints
   bind:settings
-  bind:robotWidth
-  bind:robotHeight
   {percent}
   {saveProject}
   {saveFileAs}
@@ -2382,14 +2379,14 @@
 
 <SaveDialog
   bind:isOpen={showSaveDialog}
-  bind:isSaving
+  {isSaving}
   fileName={pathStem($currentFilePath) || "my_path"}
 />
 
 <DualPathSaveDialog bind:isOpen={showDualPathSaveDialog} />
 
 <ProgressDialog
-  bind:isOpen={exportingGif}
+  isOpen={exportingGif}
   progress={gifExportProgress}
   statusMessage={gifExportStatus}
   onCancel={() => {
@@ -2452,9 +2449,9 @@
           class="bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
           role="application"
           style={`width: ${fieldPixelSize}px; height: ${fieldPixelSize}px; max-width: 100%; max-height: 100%; aspect-ratio: 1 / 1; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-drag: none; -webkit-user-drag: none; -khtml-user-drag: none; -moz-user-drag: none; -ms-user-drag: none; -o-user-drag: none;`}
-          on:contextmenu={(e) => e.preventDefault()}
-      on:dragstart={(e) => e.preventDefault()}
-      on:selectstart={(e) => e.preventDefault()}
+          oncontextmenu={(e) => e.preventDefault()}
+      ondragstart={(e) => e.preventDefault()}
+      onselectstart={(e) => e.preventDefault()}
       tabindex="-1"
         >
       <FieldMapImage
@@ -2544,7 +2541,7 @@
           <button
             class="panel-toggle-btn"
             type="button"
-            on:click={toggleRightPanelVisibility}
+            onclick={toggleRightPanelVisibility}
             aria-label={rightPanelHidden ? "Show right panel" : "Hide right panel"}
             title={rightPanelHidden ? "Show right panel" : "Hide right panel"}
           >
@@ -2561,10 +2558,10 @@
         bind:sequence
         bind:selectedLineIndex
         bind:selectedPointIndex
-        bind:settings
+        {settings}
         bind:percent
-        bind:robotXY
-        bind:robotHeading
+        {robotXY}
+        {robotHeading}
         bind:shapes
         {x}
         {y}

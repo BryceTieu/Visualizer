@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
   import type {
     Point,
     Line,
@@ -16,54 +18,83 @@
   import SelectedPathInspector from "./components/SelectedPathInspector.svelte";
   import { curveThroughPoints } from "../utils/math";
 
-  export let percent: number;
-  export let playing: boolean;
-  export let play: () => any;
-  export let pause: () => any;
-  export let startPoint: Point;
-  export let lines: Line[];
-  export let sequence: SequenceItem[];
-  export let selectedLineIndex: number = 0;
-  export let selectedPointIndex: number = 0;
-  export let robotXY: BasePoint;
-  export let robotHeading: number;
-  export let x: d3.ScaleLinear<number, number>;
-  export let y: d3.ScaleLinear<number, number>;
-  export let settings: Settings;
-  export let handleSeek: (percent: number) => void;
-  export let loopAnimation: boolean;
 
-  export let shapes: Shape[];
-  export let recordChange: () => void;
-
-  let selectedLine: Line | null = null;
-  let selectedLinePathIndex = -1;
-  let selectedPoint: BasePoint | null = null;
-  let selectedPointLabel = "Endpoint";
-  let curveTension = 1.0;
-  let obstaclesOpen = true;
-
-
-  $: selectedLine = lines[selectedLineIndex] || lines[0] || null;
-  $: selectedLinePathIndex = selectedLine ? lines.findIndex((line) => line.id === selectedLine.id) : -1;
-  $: selectedPoint =
-    selectedLine
-      ? selectedPointIndex === 0
-        ? selectedLine.endPoint
-        : selectedLine.controlPoints[selectedPointIndex - 1] || null
-      : null;
-  $: if (selectedLine && selectedPointIndex > selectedLine.controlPoints.length) {
-    selectedPointIndex = selectedLine.controlPoints.length;
+  interface Props {
+    percent: number;
+    playing: boolean;
+    play: () => any;
+    pause: () => any;
+    startPoint: Point;
+    lines: Line[];
+    sequence: SequenceItem[];
+    selectedLineIndex?: number;
+    selectedPointIndex?: number;
+    robotXY: BasePoint;
+    robotHeading: number;
+    x: d3.ScaleLinear<number, number>;
+    y: d3.ScaleLinear<number, number>;
+    settings: Settings;
+    handleSeek: (percent: number) => void;
+    loopAnimation: boolean;
+    shapes: Shape[];
+    recordChange: () => void;
   }
-  $: if (selectedPointIndex < 0) {
-    selectedPointIndex = 0;
-  }
-  $: selectedPointLabel =
+
+  let {
+    percent = $bindable(),
+    playing = $bindable(),
+    play,
+    pause,
+    startPoint = $bindable(),
+    lines = $bindable(),
+    sequence = $bindable(),
+    selectedLineIndex = $bindable(0),
+    selectedPointIndex = $bindable(0),
+    robotXY,
+    robotHeading,
+    x,
+    y,
+    settings,
+    handleSeek,
+    loopAnimation = $bindable(),
+    shapes = $bindable(),
+    recordChange
+  }: Props = $props();
+
+  let curveTension = $state(1.0);
+  let obstaclesOpen = $state(true);
+
+  let selectedLine: Line | null = $derived(
+    lines[selectedLineIndex] || lines[0] || null,
+  );
+  let selectedLinePathIndex = $derived.by(() => {
+    const line = selectedLine;
+    return line ? lines.findIndex((candidate) => candidate.id === line.id) : -1;
+  });
+  let selectedPoint: BasePoint | null = $derived.by(() => {
+    const line = selectedLine;
+    if (!line) return null;
+    return selectedPointIndex === 0
+      ? line.endPoint
+      : line.controlPoints[selectedPointIndex - 1] || null;
+  });
+  let selectedPointLabel = $derived(
     selectedLine && selectedPoint
       ? selectedPointIndex === 0
         ? "Endpoint"
         : `Control Point ${selectedPointIndex}`
-      : "Selected Point";
+      : "Selected Point",
+  );
+
+  // Keep the selected point index inside the current line's range.
+  run(() => {
+    if (selectedLine && selectedPointIndex > selectedLine.controlPoints.length) {
+      selectedPointIndex = selectedLine.controlPoints.length;
+    }
+    if (selectedPointIndex < 0) {
+      selectedPointIndex = 0;
+    }
+  });
 
   function commitSelectedPointChange() {
     lines = [...lines];
@@ -78,8 +109,8 @@
   }
 
   // Compute timeline markers for the UI (start of each travel segment)
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
-  $: markers = (() => {
+  let timePrediction = $derived(calculatePathTime(startPoint, lines, settings, sequence));
+  let markers = $derived((() => {
     const _markers: { percent: number; color: string; name: string }[] = [];
     if (
       !timePrediction ||
@@ -101,16 +132,18 @@
     });
 
     return _markers;
-  })();
+  })());
 
 
   // Collapsed state for obstacles (default collapsed)
-  let collapsedObstacles = shapes.map(() => true);
+  let collapsedObstacles = $state(shapes.map(() => true));
 
   // Keep obstacle collapse state aligned with shapes list
-  $: if (shapes.length !== collapsedObstacles.length) {
-    collapsedObstacles = shapes.map(() => true);
-  }
+  run(() => {
+    if (shapes.length !== collapsedObstacles.length) {
+      collapsedObstacles = shapes.map(() => true);
+    }
+  });
 
   // Convert selected line to cubic Bezier curve using a Catmull-Rom through-points approach.
   // This replaces controlPoints with two control points (cubic) computed from adjacent points.
@@ -207,7 +240,7 @@
       {#if settings.experimentalFeatures?.obstacles}
         <button
           class="flex items-center justify-between gap-2 w-full border border-[#333333] bg-[#222222] px-3 py-2 text-xs text-gray-200"
-          on:click={() => (obstaclesOpen = !obstaclesOpen)}
+          onclick={() => (obstaclesOpen = !obstaclesOpen)}
           title={obstaclesOpen ? "Hide obstacle editor" : "Show obstacle editor"}
         >
           <span class="font-semibold uppercase tracking-wide">Obstacles</span>
@@ -252,7 +285,7 @@
   </div>
 
   <PlaybackControls
-    bind:playing
+    {playing}
     {play}
     {pause}
     bind:percent

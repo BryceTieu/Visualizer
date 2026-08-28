@@ -9,20 +9,24 @@
   import { AVAILABLE_FIELD_MAPS, DEFAULT_SETTINGS } from "../../config/defaults";
   import type { Settings } from "../../types";
 
-  export let isOpen = false;
-  export let settings: Settings;
+  interface Props {
+    isOpen?: boolean;
+    settings: Settings;
+  }
+
+  let { isOpen = $bindable(false), settings = $bindable() }: Props = $props();
 
   // Track which sections are collapsed
-  let collapsedSections = {
+  let collapsedSections = $state({
     robot: true,
     motion: true,
     advanced: true,
     interface: true,
-  };
+  });
 
   // Get version from package. json
   // Display value for angular velocity (user inputs this, gets multiplied by PI)
-  $: angularVelocityDisplay = settings ? settings.aVelocity / Math.PI : 1;
+  let angularVelocityDisplay = $derived(settings ? settings.aVelocity / Math.PI : 1);
 
   function handleAngularVelocityInput(value: string) {
     const parsed = parseFloat(value);
@@ -113,7 +117,7 @@
           Pedro Pathing Visualizer
         </span>
         <button
-          on:click={() => (isOpen = false)}
+          onclick={() => (isOpen = false)}
           aria-label="Close settings"
           class="console-icon-button"
         >
@@ -296,7 +300,7 @@
                       id="custom-field-upload"
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
-                      on:change={handleCustomFieldUpload}
+                      onchange={handleCustomFieldUpload}
                       class="w-full text-sm text-neutral-700 dark:text-neutral-300 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 file:cursor-pointer"
                     />
                     {#if settings.customFieldImage}
@@ -564,7 +568,7 @@
                     <input
                       type="checkbox"
                       checked={settings.experimentalFeatures?.optimize ?? false}
-                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), optimize: e.currentTarget.checked })}
+                      onchange={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), optimize: e.currentTarget.checked })}
                       class="h-4 w-4"
                     />
                     <span class="text-sm">Enable Optimize button</span>
@@ -573,7 +577,7 @@
                     <input
                       type="checkbox"
                       checked={settings.experimentalFeatures?.curveThrough ?? false}
-                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), curveThrough: e.currentTarget.checked })}
+                      onchange={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), curveThrough: e.currentTarget.checked })}
                       class="h-4 w-4"
                     />
                     <span class="text-sm">Enable Curve Through features</span>
@@ -582,7 +586,7 @@
                     <input
                       type="checkbox"
                       checked={settings.experimentalFeatures?.obstacles ?? false}
-                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), obstacles: e.currentTarget.checked })}
+                      onchange={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), obstacles: e.currentTarget.checked })}
                       class="h-4 w-4"
                     />
                     <span class="text-sm">Enable Obstacles</span>
@@ -628,7 +632,7 @@
         class="flex justify-between items-center w-full pt-4 mt-4 border-t border-neutral-200 dark:border-neutral-700"
       >
         <button
-          on:click={handleReset}
+          onclick={handleReset}
           class="px-4 py-2 text-sm bg-red-500 hover:bg-red-600 text-white rounded-md transition-colors flex items-center gap-2"
           title="Reset all settings to default values"
         >
@@ -650,7 +654,7 @@
         </button>
 
         <button
-          on:click={() => (isOpen = false)}
+          onclick={() => (isOpen = false)}
           class="px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors"
         >
           Close

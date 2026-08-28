@@ -1,18 +1,31 @@
 <script lang="ts">
-  export let hidden = false;
-  export let fileName: string;
-  export let version: string;
-  export let lineCount: number;
-  export let pathPreviewItems: {
+  interface Props {
+    hidden?: boolean;
+    fileName: string;
+    version: string;
+    lineCount: number;
+    pathPreviewItems: {
     index: number;
     lineIndex: number;
     name: string;
     x: string;
     y: string;
   }[];
-  export let selectedLineIndex: number;
-  export let onToggleVisibility: () => void;
-  export let onSelectLine: (lineIndex: number) => void;
+    selectedLineIndex: number;
+    onToggleVisibility: () => void;
+    onSelectLine: (lineIndex: number) => void;
+  }
+
+  let {
+    hidden = false,
+    fileName,
+    version,
+    lineCount,
+    pathPreviewItems,
+    selectedLineIndex,
+    onToggleVisibility,
+    onSelectLine
+  }: Props = $props();
 </script>
 
 <aside
@@ -27,7 +40,7 @@
         <button
           class="panel-toggle-btn"
           type="button"
-          on:click={onToggleVisibility}
+          onclick={onToggleVisibility}
           aria-label={hidden ? "Show left panel" : "Hide left panel"}
           title={hidden ? "Show left panel" : "Hide left panel"}
         >
@@ -51,7 +64,7 @@
         <button
           class="list-item-box compact text-left"
           class:list-item-box--selected={selectedLineIndex === item.lineIndex}
-          on:click={() => onSelectLine(item.lineIndex)}
+          onclick={() => onSelectLine(item.lineIndex)}
         >
           <div class="list-item-top">
             <span class="list-item-name">{item.name}</span>

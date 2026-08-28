@@ -1,25 +1,43 @@
 <script lang="ts">
   import type { BasePoint, Settings } from "../../types";
 
-  export let xy: BasePoint;
-  export let heading: number;
-  export let widthPx: number;
-  export let heightPx: number;
-  export let settings: Settings;
-  export let alt = "Robot";
-  export let zIndex = 20;
-  export let arrowZIndex = 21;
-  export let opacity = 1;
-  export let arrowId = "arrowhead-main";
-  export let showTValue = false;
-  export let tValue: number | null = null;
-  export let onImageSettled: () => void = () => {};
+  interface Props {
+    xy: BasePoint;
+    heading: number;
+    widthPx: number;
+    heightPx: number;
+    settings: Settings;
+    alt?: string;
+    zIndex?: number;
+    arrowZIndex?: number;
+    opacity?: number;
+    arrowId?: string;
+    showTValue?: boolean;
+    tValue?: number | null;
+    onImageSettled?: () => void;
+  }
+
+  let {
+    xy,
+    heading,
+    widthPx,
+    heightPx,
+    settings,
+    alt = "Robot",
+    zIndex = 20,
+    arrowZIndex = 21,
+    opacity = 1,
+    arrowId = "arrowhead-main",
+    showTValue = false,
+    tValue = null,
+    onImageSettled = () => {}
+  }: Props = $props();
 
   const DEFAULT_ROBOT_IMAGE = "/robot.png";
 
-  $: arrowLength = settings.headingArrowLength || 50;
-  $: arrowColor = settings.headingArrowColor || "#ffffff";
-  $: arrowRadians = (-heading * Math.PI) / 180;
+  let arrowLength = $derived(settings.headingArrowLength || 50);
+  let arrowColor = $derived(settings.headingArrowColor || "#ffffff");
+  let arrowRadians = $derived((-heading * Math.PI) / 180);
 </script>
 
 <img
@@ -29,14 +47,14 @@
 left: ${xy.x}px; transform: translate(-50%, -50%) rotate(${heading}deg); z-index: ${zIndex}; width: ${widthPx}px; height: ${heightPx}px;user-select: none; -webkit-user-select: none; -moz-user-select: none;-ms-user-select: none;
 pointer-events: none; opacity: ${opacity};`}
   draggable="false"
-  on:load={onImageSettled}
-  on:error={(e) => {
+  onload={onImageSettled}
+  onerror={(e) => {
     console.error("Failed to load robot image:", settings.robotImage);
     onImageSettled();
     (e.currentTarget as HTMLImageElement).src = DEFAULT_ROBOT_IMAGE;
   }}
-  on:dragstart={(e) => e.preventDefault()}
-  on:selectstart={(e) => e.preventDefault()}
+  ondragstart={(e) => e.preventDefault()}
+  onselectstart={(e) => e.preventDefault()}
 />
 
 {#if showTValue && tValue !== null}

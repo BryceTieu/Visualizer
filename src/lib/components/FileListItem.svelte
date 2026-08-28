@@ -1,20 +1,39 @@
 <script lang="ts">
+  import { stopPropagation } from 'svelte/legacy';
+
   import type { FileInfo } from "../../types";
   import PencilIcon from "./icons/PencilIcon.svelte";
   import TrashIcon from "./icons/TrashIcon.svelte";
 
-  export let file: FileInfo;
-  export let isPrimary = false;
-  export let isSecondary = false;
-  export let renaming = false;
-  export let renameValue = "";
-  export let formatFileSize: (bytes: number) => string;
-  export let formatDate: (date: Date) => string;
-  export let onActivate: (file: FileInfo) => void;
-  export let onStartRename: (file: FileInfo) => void;
-  export let onConfirmRename: () => void;
-  export let onCancelRename: () => void;
-  export let onDelete: (file: FileInfo) => void;
+  interface Props {
+    file: FileInfo;
+    isPrimary?: boolean;
+    isSecondary?: boolean;
+    renaming?: boolean;
+    renameValue?: string;
+    formatFileSize: (bytes: number) => string;
+    formatDate: (date: Date) => string;
+    onActivate: (file: FileInfo) => void;
+    onStartRename: (file: FileInfo) => void;
+    onConfirmRename: () => void;
+    onCancelRename: () => void;
+    onDelete: (file: FileInfo) => void;
+  }
+
+  let {
+    file,
+    isPrimary = false,
+    isSecondary = false,
+    renaming = false,
+    renameValue = $bindable(""),
+    formatFileSize,
+    formatDate,
+    onActivate,
+    onStartRename,
+    onConfirmRename,
+    onCancelRename,
+    onDelete
+  }: Props = $props();
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter" || event.key === " ") onActivate(file);
@@ -28,8 +47,8 @@
 
 <div
   class="px-3 py-1.5 border-b border-neutral-200 dark:border-neutral-700 transition-colors duration-250 cursor-pointer file-item group"
-  on:click={() => onActivate(file)}
-  on:keydown={handleKeydown}
+  onclick={() => onActivate(file)}
+  onkeydown={handleKeydown}
   role="button"
   tabindex="0"
   aria-label={`Open ${file.name}`}
@@ -44,17 +63,17 @@
       <input
         bind:value={renameValue}
         class="w-full px-2 py-1 text-sm border border-blue-300 dark:border-blue-600 rounded bg-white dark:bg-neutral-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        on:keydown={handleRenameKeydown}
+        onkeydown={handleRenameKeydown}
       />
       <div class="flex gap-2">
         <button
-          on:click|stopPropagation={onConfirmRename}
+          onclick={stopPropagation(onConfirmRename)}
           class="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
         >
           Save
         </button>
         <button
-          on:click|stopPropagation={onCancelRename}
+          onclick={stopPropagation(onCancelRename)}
           class="px-2 py-1 text-xs bg-neutral-500 hover:bg-neutral-600 text-white rounded transition-colors"
         >
           Cancel
@@ -86,7 +105,7 @@
         class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         <button
-          on:click|stopPropagation={() => onStartRename(file)}
+          onclick={stopPropagation(() => onStartRename(file))}
           class="p-1.5 rounded hover:bg-blue-500 hover:text-white transition-colors shrink-0"
           title="Rename file"
         >
@@ -94,7 +113,7 @@
         </button>
 
         <button
-          on:click|stopPropagation={() => onDelete(file)}
+          onclick={stopPropagation(() => onDelete(file))}
           class="p-1.5 rounded hover:bg-red-500 hover:text-white transition-colors shrink-0"
           title="Delete file"
         >

@@ -1,12 +1,21 @@
 <script lang="ts">
   import Modal from "./ui/Modal.svelte";
 
-  export let isOpen = false;
-  export let progress = 0;
-  export let statusMessage = "Processing...";
-  export let onCancel: () => void = () => {};
+  interface Props {
+    isOpen?: boolean;
+    progress?: number;
+    statusMessage?: string;
+    onCancel?: () => void;
+  }
 
-  $: progressPercentage = Math.round(progress * 100);
+  let {
+    isOpen = false,
+    progress = 0,
+    statusMessage = "Processing...",
+    onCancel = () => {}
+  }: Props = $props();
+
+  let progressPercentage = $derived(Math.round(progress * 100));
 </script>
 
 <Modal
@@ -37,6 +46,6 @@
   </div>
 
   <div class="flex justify-end">
-    <button on:click={onCancel} class="console-action">Cancel</button>
+    <button onclick={onCancel} class="console-action">Cancel</button>
   </div>
 </Modal>

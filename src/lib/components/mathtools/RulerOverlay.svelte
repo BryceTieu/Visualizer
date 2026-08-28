@@ -3,18 +3,22 @@
   import { clamp } from "../../../utils/math";
   import type * as d3 from "d3";
 
-  export let x: d3.ScaleLinear<number, number>;
-  export let y: d3.ScaleLinear<number, number>;
-  export let twoElement: HTMLDivElement;
+  interface Props {
+    x: d3.ScaleLinear<number, number>;
+    y: d3.ScaleLinear<number, number>;
+    twoElement: HTMLDivElement;
+  }
 
-  let rulerStart = { x: 20, y: 72 };
-  let rulerEnd = { x: 80, y: 72 };
+  let { x, y, twoElement }: Props = $props();
+
+  let rulerStart = $state({ x: 20, y: 72 });
+  let rulerEnd = $state({ x: 80, y: 72 });
   let dragging: "start" | "end" | null = null;
 
-  $: rulerLength = Math.hypot(
+  let rulerLength = $derived(Math.hypot(
     rulerEnd.x - rulerStart.x,
     rulerEnd.y - rulerStart.y,
-  );
+  ));
 
   function handleMouseDown(event: MouseEvent, which: "start" | "end") {
     event.stopPropagation();
@@ -39,7 +43,7 @@
   }
 </script>
 
-<svelte:window on:mousemove={handleMouseMove} on:mouseup={handleMouseUp} />
+<svelte:window onmousemove={handleMouseMove} onmouseup={handleMouseUp} />
 
 <svg class="absolute top-0 left-0 w-full h-full z-40 pointer-events-none">
   <!-- Ruler line -->
@@ -63,7 +67,7 @@
     role="button"
     tabindex="0"
     aria-label="Ruler start point"
-    on:mousedown={(e) => handleMouseDown(e, "start")}
+    onmousedown={(e) => handleMouseDown(e, "start")}
   />
 
   <!-- End handle -->
@@ -76,7 +80,7 @@
     role="button"
     tabindex="0"
     aria-label="Ruler end point"
-    on:mousedown={(e) => handleMouseDown(e, "end")}
+    onmousedown={(e) => handleMouseDown(e, "end")}
   />
 
   <!-- Length label -->

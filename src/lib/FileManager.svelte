@@ -17,36 +17,51 @@
   import FileListItem from "./components/FileListItem.svelte";
   import FileActionsPanel from "./components/FileActionsPanel.svelte";
 
-  export let isOpen = false;
-  export let startPoint: Point;
-  export let lines: Line[];
-  export let shapes: Shape[];
-  export let sequence: SequenceItem[];
-  export let secondStartPoint: Point | null = null;
-  export let secondLines: Line[] = [];
-  export let secondShapes: Shape[] = [];
-  export let secondSequence: SequenceItem[] = [];
-  export let fieldPoints: FieldPoint[] = [];
+  interface Props {
+    isOpen?: boolean;
+    startPoint: Point;
+    lines: Line[];
+    shapes: Shape[];
+    sequence: SequenceItem[];
+    secondStartPoint?: Point | null;
+    secondLines?: Line[];
+    secondShapes?: Shape[];
+    secondSequence?: SequenceItem[];
+    fieldPoints?: FieldPoint[];
+  }
 
-  let files: FileInfo[] = [];
-  let selectedFile2: FileInfo | null = null;
-  let loading = false;
-  let newFileName = "";
-  let creatingNewFile = false;
-  let selectedFile: FileInfo | null = null;
-  let errorMessage = "";
+  let {
+    isOpen = $bindable(false),
+    startPoint = $bindable(),
+    lines = $bindable(),
+    shapes = $bindable(),
+    sequence = $bindable(),
+    secondStartPoint = $bindable(null),
+    secondLines = $bindable([]),
+    secondShapes = $bindable([]),
+    secondSequence = $bindable([]),
+    fieldPoints = $bindable([])
+  }: Props = $props();
+
+  let files: FileInfo[] = $state([]);
+  let selectedFile2: FileInfo | null = $state(null);
+  let loading = $state(false);
+  let newFileName = $state("");
+  let creatingNewFile = $state(false);
+  let selectedFile: FileInfo | null = $state(null);
+  let errorMessage = $state("");
 
   // Add renaming state
-  let renamingFile: FileInfo | null = null;
-  let renameInputValue = "";
+  let renamingFile: FileInfo | null = $state(null);
+  let renameInputValue = $state("");
 
   // Add file type filtering
   const supportedFileTypes = [".pp", ".json"];
 
   // Name dialog state
-  let nameDialogOpen = false;
-  let nameDialogTitle = "";
-  let nameDialogDefault = "";
+  let nameDialogOpen = $state(false);
+  let nameDialogTitle = $state("");
+  let nameDialogDefault = $state("");
   let pendingMirrorData: any = null;
 
 
@@ -736,11 +751,11 @@
     <div
       transition:fade={{ duration: 300 }}
       class="fixed inset-0 bg-black/50"
-      on:click={() => (isOpen = false)}
+      onclick={() => (isOpen = false)}
       role="button"
       tabindex="0"
       aria-label="Close file manager backdrop"
-      on:keydown={(e) => {
+      onkeydown={(e) => {
         if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
           isOpen = false;
         }
@@ -763,7 +778,7 @@
           Files
         </h2>
         <button
-          on:click={() => (isOpen = false)}
+          onclick={() => (isOpen = false)}
           class="console-icon-button"
           title="Close"
         >
@@ -805,17 +820,17 @@
             bind:value={newFileName}
             placeholder="Enter file name (e.g., my_path.pp)..."
             class="w-full px-2 py-1.5 text-sm border border-neutral-300 dark:border-neutral-600 rounded-md bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            on:keydown={(e) => e.key === "Enter" && createNewFile()}
+            onkeydown={(e) => e.key === "Enter" && createNewFile()}
           />
           <div class="flex gap-2">
             <button
-              on:click={createNewFile}
+              onclick={createNewFile}
               class="flex-1 px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors"
             >
               Create
             </button>
             <button
-              on:click={() => {
+              onclick={() => {
                 creatingNewFile = false;
                 newFileName = "";
               }}
@@ -827,7 +842,7 @@
         </div>
       {:else}
         <button
-          on:click={() => (creatingNewFile = true)}
+          onclick={() => (creatingNewFile = true)}
           class="w-full px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white rounded-md transition-colors flex items-center justify-center gap-2"
         >
           <svg
@@ -900,7 +915,7 @@
             No files yet
           </div>
           <button
-            on:click={() => (creatingNewFile = true)}
+            onclick={() => (creatingNewFile = true)}
             class="px-2 py-1 text-xs bg-green-500 hover:bg-green-600 text-white rounded transition-colors"
           >
             Create First

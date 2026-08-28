@@ -7,7 +7,11 @@
     type NumericSettingKey,
   } from "../../settings/numericSetting";
 
-  export let settings: Settings;
+  interface Props {
+    settings: Settings;
+  }
+
+  let { settings = $bindable() }: Props = $props();
 
   function setNumber(
     value: string,

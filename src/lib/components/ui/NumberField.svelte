@@ -1,23 +1,41 @@
 <script lang="ts">
-  export let id: string;
-  export let label: string;
-  export let description = "";
-  export let value: number | undefined;
-  export let min: number | undefined = undefined;
-  export let max: number | undefined = undefined;
-  export let step: number | string | undefined = undefined;
-  export let suffix = "";
-  export let disabled = false;
-  export let inputClass = "console-input px-3 py-2";
-  export let onInput: (rawValue: string) => void;
+  interface Props {
+    id: string;
+    label: string;
+    description?: string;
+    value: number | undefined;
+    min?: number | undefined;
+    max?: number | undefined;
+    step?: number | string | undefined;
+    suffix?: string;
+    disabled?: boolean;
+    inputClass?: string;
+    onInput: (rawValue: string) => void;
+  }
 
-  let focused = false;
-  let text = "";
+  let {
+    id,
+    label,
+    description = "",
+    value,
+    min = undefined,
+    max = undefined,
+    step = undefined,
+    suffix = "",
+    disabled = false,
+    inputClass = "console-input px-3 py-2",
+    onInput
+  }: Props = $props();
+
+  let focused = $state(false);
+  let text = $state("");
 
   // Mirror the prop while the user is not editing. During editing the field
   // owns its text so partial input ("8" on a min-180 field) is not clamped
   // out from under the caret.
-  $: if (!focused) text = value === undefined ? "" : String(value);
+  $effect.pre(() => {
+    if (!focused) text = value === undefined ? "" : String(value);
+  });
 
   function inRange(n: number): boolean {
     if (Number.isNaN(n)) return false;
@@ -74,10 +92,10 @@
       {max}
       {step}
       {disabled}
-      on:input={handleInput}
-      on:focus={() => (focused = true)}
-      on:blur={handleBlur}
-      on:keydown={handleKeydown}
+      oninput={handleInput}
+      onfocus={() => (focused = true)}
+      onblur={handleBlur}
+      onkeydown={handleKeydown}
       class="{inputClass} focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
     {#if suffix}

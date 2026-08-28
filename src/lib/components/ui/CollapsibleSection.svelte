@@ -1,16 +1,28 @@
 <script lang="ts">
   import ChevronDownIcon from "../icons/ChevronDownIcon.svelte";
 
-  export let title: string;
-  export let collapsed = true;
-  /** Heroicon `d` path for the leading icon; omit to render title only. */
-  export let iconPath = "";
-  export let onToggle: () => void;
+  
+  interface Props {
+    title: string;
+    collapsed?: boolean;
+    /** Heroicon `d` path for the leading icon; omit to render title only. */
+    iconPath?: string;
+    onToggle: () => void;
+    children?: import('svelte').Snippet;
+  }
+
+  let {
+    title,
+    collapsed = true,
+    iconPath = "",
+    onToggle,
+    children
+  }: Props = $props();
 </script>
 
 <div class="mb-4">
   <button
-    on:click={onToggle}
+    onclick={onToggle}
     class="console-trigger w-full justify-between transition-colors duration-250"
     aria-expanded={!collapsed}
   >
@@ -36,6 +48,6 @@
   </button>
 
   {#if !collapsed}
-    <slot />
+    {@render children?.()}
   {/if}
 </div>

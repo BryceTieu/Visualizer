@@ -7,8 +7,12 @@
     protractorLockToRobot,
   } from "../../stores";
 
-  export let selectedGridSize: number;
-  export let onCycleGridSize: () => void;
+  interface Props {
+    selectedGridSize: number;
+    onCycleGridSize: () => void;
+  }
+
+  let { selectedGridSize, onCycleGridSize }: Props = $props();
 
   const SVG_PROPS = {
     xmlns: "http://www.w3.org/2000/svg",
@@ -22,7 +26,7 @@
 {#if $showGrid}
   <button
     title={$snapToGrid ? "Disable Snap to Grid" : "Enable Snap to Grid"}
-    on:click={() => snapToGrid.update((v) => !v)}
+    onclick={() => snapToGrid.update((v) => !v)}
     class:text-[#888888]={$snapToGrid && $showGrid}
     class:text-gray-400={!$showGrid}
     class:opacity-50={!$showGrid}
@@ -55,7 +59,7 @@
 <!-- Grid toggle -->
 <button
   title={$showGrid ? `Grid: ${selectedGridSize}" (click to cycle)` : "Toggle Grid"}
-  on:click={onCycleGridSize}
+  onclick={onCycleGridSize}
   class:text-blue-500={$showGrid}
   class="console-icon-button relative"
 >
@@ -85,7 +89,7 @@
 <!-- Ruler toggle -->
 <button
   title="Toggle Ruler"
-  on:click={() => showRuler.update((v) => !v)}
+  onclick={() => showRuler.update((v) => !v)}
   class:text-blue-500={$showRuler}
   class="console-icon-button"
 >
@@ -113,7 +117,7 @@
     title={$protractorLockToRobot
       ? "Unlock Protractor from Robot"
       : "Lock Protractor to Robot"}
-    on:click={() => protractorLockToRobot.update((v) => !v)}
+    onclick={() => protractorLockToRobot.update((v) => !v)}
     class:text-amber-500={$protractorLockToRobot}
     class="console-icon-button"
   >
@@ -138,7 +142,7 @@
 <!-- Protractor toggle -->
 <button
   title="Toggle Protractor"
-  on:click={() => showProtractor.update((v) => !v)}
+  onclick={() => showProtractor.update((v) => !v)}
   class:text-blue-500={$showProtractor}
   class="console-icon-button"
 >

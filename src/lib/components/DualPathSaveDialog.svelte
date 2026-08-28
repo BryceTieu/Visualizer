@@ -1,7 +1,11 @@
 <script lang="ts">
   import Modal from "./ui/Modal.svelte";
 
-  export let isOpen = false;
+  interface Props {
+    isOpen?: boolean;
+  }
+
+  let { isOpen = $bindable(false) }: Props = $props();
 
   function dispatchSave(target: "first" | "second" | "both") {
     window.dispatchEvent(new CustomEvent("saveDualPath", { detail: { target } }));
@@ -22,27 +26,27 @@
 
   <div class="space-y-3">
     <button
-      on:click={() => dispatchSave("first")}
+      onclick={() => dispatchSave("first")}
       class="w-full px-4 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors text-sm font-medium"
     >
       Save First Path Only
     </button>
 
     <button
-      on:click={() => dispatchSave("second")}
+      onclick={() => dispatchSave("second")}
       class="w-full px-4 py-3 bg-purple-500 hover:bg-purple-600 text-white rounded-lg transition-colors text-sm font-medium"
     >
       Save Second Path Only
     </button>
 
     <button
-      on:click={() => dispatchSave("both")}
+      onclick={() => dispatchSave("both")}
       class="w-full px-4 py-3 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors text-sm font-medium"
     >
       Save Both Paths
     </button>
 
-    <button on:click={close} class="console-action w-full justify-center py-3">
+    <button onclick={close} class="console-action w-full justify-center py-3">
       Cancel
     </button>
   </div>

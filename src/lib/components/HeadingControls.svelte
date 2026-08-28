@@ -1,14 +1,18 @@
 <script lang="ts">
   import { createEventDispatcher } from "svelte";
   import { createDefaultPiecewiseHeadingInterpolation } from "../../utils/headingInterpolation";
-  export let endPoint: any;
-  export let locked: boolean = false;
+  interface Props {
+    endPoint: any;
+    locked?: boolean;
+  }
+
+  let { endPoint = $bindable(), locked = false }: Props = $props();
   const dispatch = createEventDispatcher();
 </script>
 
 <select
   bind:value={endPoint.heading}
-  on:change={() => {
+  onchange={() => {
     // Initialize missing properties based on the selected heading type
     if (endPoint.heading === "constant" && endPoint.degrees === undefined) {
       endPoint.degrees = 0;
@@ -47,8 +51,8 @@ With tangential heading, the heading follows the direction of the line."
       min="-180"
       max="180"
       bind:value={endPoint.startDeg}
-      on:input={() => dispatch("change")}
-      on:blur={() => dispatch("commit")}
+      oninput={() => dispatch("change")}
+      onblur={() => dispatch("commit")}
       title="The heading the robot starts this line at (in degrees)"
       disabled={locked}
     />
@@ -61,8 +65,8 @@ With tangential heading, the heading follows the direction of the line."
       min="-180"
       max="180"
       bind:value={endPoint.endDeg}
-      on:input={() => dispatch("change")}
-      on:blur={() => dispatch("commit")}
+      oninput={() => dispatch("change")}
+      onblur={() => dispatch("commit")}
       title="The heading the robot ends this line at (in degrees)"
       disabled={locked}
     />
@@ -77,7 +81,7 @@ With tangential heading, the heading follows the direction of the line."
       min="-180"
       max="180"
       value={endPoint.degrees || 0}
-      on:input={(e) => {
+      oninput={(e) => {
         const value = parseFloat(e.currentTarget.value);
         if (!isNaN(value)) {
           endPoint.degrees = value;
@@ -88,7 +92,7 @@ With tangential heading, the heading follows the direction of the line."
         }
         dispatch("change");
       }}
-      on:blur={(e) => {
+      onblur={(e) => {
         if (e.currentTarget.value === "" || isNaN(parseFloat(e.currentTarget.value))) {
           endPoint.degrees = 0;
           e.currentTarget.value = "0";
@@ -104,8 +108,8 @@ With tangential heading, the heading follows the direction of the line."
   <input
     type="checkbox"
     bind:checked={endPoint.reverse}
-    on:change={() => dispatch("change")}
-    on:blur={() => dispatch("commit")}
+    onchange={() => dispatch("change")}
+    onblur={() => dispatch("commit")}
     title="Reverse the direction the robot faces along the tangential path"
     disabled={locked}
   />

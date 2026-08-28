@@ -4,18 +4,32 @@
   import { FIELD_SIZE } from "../../config";
   import HeadingControls from "./HeadingControls.svelte";
 
-  export let selectedLine: Line;
-  export let selectedPoint: BasePoint;
-  export let selectedPointIndex: number;
-  export let selectedPointLabel: string;
-  export let onCommit: () => void;
-  export let onLinesChanged: () => void;
-  export let onRecordChange: () => void;
-  export let onDeleteControlPoint: () => void;
-  export let onToggleLock: () => void;
+  interface Props {
+    selectedLine: Line;
+    selectedPoint: BasePoint;
+    selectedPointIndex: number;
+    selectedPointLabel: string;
+    onCommit: () => void;
+    onLinesChanged: () => void;
+    onRecordChange: () => void;
+    onDeleteControlPoint: () => void;
+    onToggleLock: () => void;
+  }
 
-  $: disabled = selectedLine.locked || Boolean(selectedPoint.locked);
-  $: coordinateStep = $snapToGrid && $showGrid ? $gridSize : 0.1;
+  let {
+    selectedLine,
+    selectedPoint = $bindable(),
+    selectedPointIndex = $bindable(),
+    selectedPointLabel,
+    onCommit,
+    onLinesChanged,
+    onRecordChange,
+    onDeleteControlPoint,
+    onToggleLock
+  }: Props = $props();
+
+  let disabled = $derived(selectedLine.locked || Boolean(selectedPoint.locked));
+  let coordinateStep = $derived($snapToGrid && $showGrid ? $gridSize : 0.1);
 
   const FIELD_CLASS =
     "w-24 rounded border border-[#444444] bg-[#111111] px-2 py-1 text-gray-100 focus:outline-none focus:ring-1 focus:ring-green-500 disabled:cursor-not-allowed disabled:opacity-50";
@@ -34,14 +48,14 @@
     <div class="flex flex-wrap gap-1">
       <button
         class="{CHIP_CLASS} {selectedPointIndex === 0 ? 'bg-[#2f2f2f]' : ''}"
-        on:click={() => (selectedPointIndex = 0)}
+        onclick={() => (selectedPointIndex = 0)}
       >
         Endpoint
       </button>
       {#each selectedLine.controlPoints as _, pointIdx}
         <button
           class="{CHIP_CLASS} {selectedPointIndex === pointIdx + 1 ? 'bg-[#2f2f2f]' : ''}"
-          on:click={() => (selectedPointIndex = pointIdx + 1)}
+          onclick={() => (selectedPointIndex = pointIdx + 1)}
         >
           CP{pointIdx + 1}
         </button>
@@ -59,7 +73,7 @@
         max={FIELD_SIZE}
         step={coordinateStep}
         class={FIELD_CLASS}
-        on:change={onCommit}
+        onchange={onCommit}
         {disabled}
       />
     </label>
@@ -72,7 +86,7 @@
         max={FIELD_SIZE}
         step={coordinateStep}
         class={FIELD_CLASS}
-        on:change={onCommit}
+        onchange={onCommit}
         {disabled}
       />
     </label>
@@ -102,7 +116,7 @@
     <div class="flex items-center gap-2">
       <button
         class={ACTION_CLASS}
-        on:click={onDeleteControlPoint}
+        onclick={onDeleteControlPoint}
         disabled={selectedLine.locked ||
           selectedPointIndex === 0 ||
           selectedLine.controlPoints.length === 0}
@@ -114,7 +128,7 @@
       </button>
       <button
         class={ACTION_CLASS}
-        on:click={onToggleLock}
+        onclick={onToggleLock}
         disabled={selectedLine.locked}
       >
         {selectedPoint.locked ? "Unlock Point" : "Lock Point"}

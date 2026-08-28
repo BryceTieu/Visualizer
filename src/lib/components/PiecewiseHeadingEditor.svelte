@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { run } from 'svelte/legacy';
+
   import { createEventDispatcher } from "svelte";
   import type {
     PiecewiseHeadingInterpolation,
@@ -12,14 +14,18 @@
     validatePiecewiseHeadingInterpolation,
   } from "../../utils/headingInterpolation";
 
-  export let config: PiecewiseHeadingInterpolation;
-  export let locked: boolean = false;
+  interface Props {
+    config: PiecewiseHeadingInterpolation;
+    locked?: boolean;
+  }
+
+  let { config = $bindable(), locked = false }: Props = $props();
 
   const dispatch = createEventDispatcher();
 
-  let advancedMode = false;
+  let advancedMode = $state(false);
   let activeBoundaryIndex: number | null = null;
-  let validationMessage = "";
+  let validationMessage = $state("");
 
   const interpolationOptions: Array<{
     value: PiecewiseHeadingInterpolationType;
@@ -44,8 +50,12 @@
     }
   }
 
-  $: ensureConfig();
-  $: validationMessage = validatePiecewiseHeadingInterpolation(config) || "";
+  run(() => {
+    ensureConfig();
+  });
+  run(() => {
+    validationMessage = validatePiecewiseHeadingInterpolation(config) || "";
+  });
 
   function notifyChange(commit = false) {
     config = normalizePiecewiseHeadingInterpolation(config);
@@ -227,7 +237,7 @@
     role="button"
     tabindex="0"
     aria-label="Piecewise progress timeline"
-    on:pointerdown={handleTimelineClick}
+    onpointerdown={handleTimelineClick}
   >
     {#each normalizePiecewiseHeadingInterpolation(config).segments as segment, index}
       <div
@@ -239,7 +249,7 @@
           type="button"
           class="absolute top-1/2 z-10 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/70 bg-white shadow"
           style={`left:${segment.startProgress * 100}%`}
-          on:pointerdown={(event) => beginBoundaryDrag(index, event)}
+          onpointerdown={(event) => beginBoundaryDrag(index, event)}
           disabled={locked}
           aria-label={`Drag boundary ${index}`}
 ></button>
@@ -258,7 +268,7 @@
       <div class="rounded border border-neutral-700 bg-neutral-900/80 p-2">
         <div class="flex items-center justify-between gap-2">
           <div class="text-[11px] font-semibold text-neutral-100">Segment {index + 1}</div>
-          <button class="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800 disabled:opacity-40" on:click={() => removeSegment(index)} disabled={locked || normalizePiecewiseHeadingInterpolation(config).segments.length <= 1}>
+          <button class="rounded border border-neutral-700 px-2 py-1 text-[10px] text-neutral-200 hover:bg-neutral-800 disabled:opacity-40" onclick={() => removeSegment(index)} disabled={locked || normalizePiecewiseHeadingInterpolation(config).segments.length <= 1}>
             Delete
           </button>
         </div>
@@ -275,7 +285,7 @@
               value={segment.startProgress.toFixed(3)}
               readonly={!advancedMode}
               disabled={locked}
-              on:change={(event) => updateSegment(index, { startProgress: Number((event.currentTarget as HTMLInputElement).value) })}
+              onchange={(event) => updateSegment(index, { startProgress: Number((event.currentTarget as HTMLInputElement).value) })}
             />
           </label>
           <label class="space-y-1">
@@ -289,7 +299,7 @@
               value={segment.endProgress.toFixed(3)}
               readonly={!advancedMode}
               disabled={locked}
-              on:change={(event) => updateSegment(index, { endProgress: Number((event.currentTarget as HTMLInputElement).value) })}
+              onchange={(event) => updateSegment(index, { endProgress: Number((event.currentTarget as HTMLInputElement).value) })}
             />
           </label>
         </div>
@@ -301,7 +311,7 @@
               class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
               bind:value={segment.interpolationType}
               disabled={locked}
-              on:change={(event) => setInterpolationType(index, (event.currentTarget as HTMLSelectElement).value as PiecewiseHeadingInterpolationType)}
+              onchange={(event) => setInterpolationType(index, (event.currentTarget as HTMLSelectElement).value as PiecewiseHeadingInterpolationType)}
             >
               {#each interpolationOptions as option}
                 <option value={option.value}>{option.label}</option>
@@ -315,7 +325,7 @@
                 type="checkbox"
                 checked={!!segment.reversed}
                 disabled={locked}
-                on:change={(event) => updateSegment(index, { reversed: (event.currentTarget as HTMLInputElement).checked })}
+                onchange={(event) => updateSegment(index, { reversed: (event.currentTarget as HTMLInputElement).checked })}
               />
               Reverse
             </label>
@@ -332,7 +342,7 @@
                 class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
                 value={segment.parameters?.startDeg ?? 0}
                 disabled={locked}
-                on:change={(event) => updateSegment(index, { parameters: { startDeg: Number((event.currentTarget as HTMLInputElement).value) } })}
+                onchange={(event) => updateSegment(index, { parameters: { startDeg: Number((event.currentTarget as HTMLInputElement).value) } })}
               />
             </label>
             <label class="space-y-1">
@@ -343,7 +353,7 @@
                 class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
                 value={segment.parameters?.endDeg ?? 0}
                 disabled={locked}
-                on:change={(event) => updateSegment(index, { parameters: { endDeg: Number((event.currentTarget as HTMLInputElement).value) } })}
+                onchange={(event) => updateSegment(index, { parameters: { endDeg: Number((event.currentTarget as HTMLInputElement).value) } })}
               />
             </label>
           </div>
@@ -357,7 +367,7 @@
                 class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
                 value={segment.parameters?.degrees ?? 0}
                 disabled={locked}
-                on:change={(event) => updateSegment(index, { parameters: { degrees: Number((event.currentTarget as HTMLInputElement).value) } })}
+                onchange={(event) => updateSegment(index, { parameters: { degrees: Number((event.currentTarget as HTMLInputElement).value) } })}
               />
             </label>
           </div>
@@ -371,7 +381,7 @@
                 class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
                 value={segment.parameters?.point?.x ?? 0}
                 disabled={locked}
-                on:change={(event) => updateSegment(index, { parameters: { point: { x: Number((event.currentTarget as HTMLInputElement).value), y: segment.parameters?.point?.y ?? 0 } } })}
+                onchange={(event) => updateSegment(index, { parameters: { point: { x: Number((event.currentTarget as HTMLInputElement).value), y: segment.parameters?.point?.y ?? 0 } } })}
               />
             </label>
             <label class="space-y-1">
@@ -382,7 +392,7 @@
                 class="w-full rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-neutral-100"
                 value={segment.parameters?.point?.y ?? 0}
                 disabled={locked}
-                on:change={(event) => updateSegment(index, { parameters: { point: { x: segment.parameters?.point?.x ?? 0, y: Number((event.currentTarget as HTMLInputElement).value) } } })}
+                onchange={(event) => updateSegment(index, { parameters: { point: { x: segment.parameters?.point?.x ?? 0, y: Number((event.currentTarget as HTMLInputElement).value) } } })}
               />
             </label>
           </div>
@@ -402,7 +412,7 @@
   </div>
 
   <div class="flex justify-end">
-    <button class="rounded border border-neutral-700 px-3 py-1 text-[11px] text-neutral-100 hover:bg-neutral-800 disabled:opacity-40" on:click={() => {
+    <button class="rounded border border-neutral-700 px-3 py-1 text-[11px] text-neutral-100 hover:bg-neutral-800 disabled:opacity-40" onclick={() => {
       if (locked) return;
       const normalized = normalizePiecewiseHeadingInterpolation(config);
       const last = normalized.segments[normalized.segments.length - 1] || createDefaultPiecewiseHeadingInterpolation("path").segments[0];

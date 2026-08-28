@@ -1,17 +1,31 @@
 <script lang="ts">
   import { formatTime } from "../../utils";
 
-  export let playing: boolean;
-  export let play: () => any;
-  export let pause: () => any;
-  export let percent: number;
-  export let handleSeek: (percent: number) => void;
-  export let loopAnimation: boolean = true;
-  export let markers: { percent: number; color: string; name: string }[] = [];
-  // totalTime is in seconds
-  export let totalTime: number = 0;
+  
+  interface Props {
+    playing: boolean;
+    play: () => any;
+    pause: () => any;
+    percent: number;
+    handleSeek: (percent: number) => void;
+    loopAnimation?: boolean;
+    markers?: { percent: number; color: string; name: string }[];
+    // totalTime is in seconds
+    totalTime?: number;
+  }
 
-  $: elapsedSeconds = (percent / 100) * (totalTime || 0);
+  let {
+    playing,
+    play,
+    pause,
+    percent = $bindable(),
+    handleSeek,
+    loopAnimation = $bindable(true),
+    markers = [],
+    totalTime = 0
+  }: Props = $props();
+
+  let elapsedSeconds = $derived((percent / 100) * (totalTime || 0));
 </script>
 
 <div
@@ -19,7 +33,7 @@
 >
   <button
     title="Play/Pause"
-    on:click={() => {
+    onclick={() => {
       if (playing) {
         pause();
       } else {
@@ -63,7 +77,7 @@
   <!-- Loop Toggle Button -->
   <button
     title={loopAnimation ? "Disable Loop" : "Enable Loop"}
-    on:click={() => {
+    onclick={() => {
       loopAnimation = !loopAnimation;
     }}
     class:opacity-100={loopAnimation}
@@ -92,8 +106,8 @@
         class="absolute"
         role="button"
         tabindex="0"
-        on:click={() => handleSeek(m.percent)}
-        on:keydown={(e) => {
+        onclick={() => handleSeek(m.percent)}
+        onkeydown={(e) => {
           if (e.key === "Enter" || e.key === " ") handleSeek(m.percent);
         }}
         style={`left: ${m.percent}%; top: 3px; transform: translateX(-50%); width: 12px; height: 12px; border-radius: 9999px; background: ${m.color}; box-shadow: 0 0 0 2px rgba(0,0,0,0.06); cursor: pointer;`}
@@ -109,7 +123,7 @@
       max="100"
       step="0.000001"
       class="w-full appearance-none slider focus:outline-none"
-      on:input={(e) => handleSeek(parseFloat(e.currentTarget.value))}
+      oninput={(e) => handleSeek(parseFloat(e.currentTarget.value))}
     />
   </div>
   <div class="flex items-center gap-2 ml-2 text-sm text-neutral-600 dark:text-neutral-300">

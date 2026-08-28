@@ -3,20 +3,29 @@
   import SpinnerIcon from "./icons/SpinnerIcon.svelte";
   import PlusIcon from "./icons/PlusIcon.svelte";
 
-  export let isOpen = false;
-  export let fileName: string = "";
-  export let isSaving: boolean = false;
-
-  let inputValue = fileName;
-  let inputElement: HTMLInputElement;
-
-  $: if (isOpen && inputElement) {
-    setTimeout(() => inputElement?.focus(), 0);
+  interface Props {
+    isOpen?: boolean;
+    fileName?: string;
+    isSaving?: boolean;
   }
 
-  $: if (isOpen) {
-    inputValue = fileName;
-  }
+  let { isOpen = $bindable(false), fileName = "", isSaving = false }: Props = $props();
+
+  // Seeded from `fileName` each time the dialog opens (see below).
+  let inputValue = $state("");
+  let inputElement = $state<HTMLInputElement>();
+
+  $effect.pre(() => {
+    if (isOpen && inputElement) {
+      setTimeout(() => inputElement?.focus(), 0);
+    }
+  });
+
+  $effect.pre(() => {
+    if (isOpen) {
+      inputValue = fileName;
+    }
+  });
 
   function handleSave() {
     if (inputValue.trim()) {
@@ -68,7 +77,7 @@
         id="save-input"
         type="text"
         placeholder="my_path"
-        on:keydown={handleKeyDown}
+        onkeydown={handleKeyDown}
         class="console-input px-4 py-2.5 focus:outline-none focus:ring-1 focus:ring-blue-400"
       />
       <p class="text-xs text-[#888888] mt-1.5">
@@ -79,9 +88,9 @@
 
   <!-- Actions -->
   <div class="px-6 py-4 border-t border-[#333333] flex gap-3 justify-end">
-    <button on:click={close} class="console-action">Cancel</button>
+    <button onclick={close} class="console-action">Cancel</button>
     <button
-      on:click={handleSave}
+      onclick={handleSave}
       disabled={isSaving || !inputValue.trim()}
       class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-600/90 disabled:bg-blue-400 disabled:cursor-not-allowed rounded-lg transition-all duration-300 flex items-center gap-2 active:scale-98"
     >

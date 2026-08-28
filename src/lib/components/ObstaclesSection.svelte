@@ -17,12 +17,16 @@
     }
   }
 
-  export let shapes: Shape[];
-  export let collapsedObstacles: boolean[];
-  export let compact: boolean = false;
+  interface Props {
+    shapes: Shape[];
+    collapsedObstacles: boolean[];
+    compact?: boolean;
+  }
 
-  $: snapToGridTitle =
-    $snapToGrid && $showGrid ? `Snapping to ${$gridSize} grid` : "No snapping";
+  let { shapes = $bindable(), collapsedObstacles = $bindable(), compact = false }: Props = $props();
+
+  let snapToGridTitle =
+    $derived($snapToGrid && $showGrid ? `Snapping to ${$gridSize} grid` : "No snapping");
 
   function toggleObstacle(index: number) {
     collapsedObstacles[index] = !collapsedObstacles[index];
@@ -38,7 +42,7 @@
 <div class={`flex flex-col w-full justify-start items-start gap-0.5 text-sm ${compact ? "text-xs" : ""}`}>
   <div class="flex items-center gap-2 w-full">
     <button
-      on:click={toggleAllObstacles}
+      onclick={toggleAllObstacles}
       class={`flex items-center gap-2 font-semibold px-2 py-1 transition-colors duration-250 ${compact ? "text-xs" : "text-sm"}`}
       title={collapsedObstacles.every((c) => c) ? "Expand all" : "Collapse all"}
     >
@@ -67,7 +71,7 @@
       <div class="flex flex-row w-full justify-between items-center gap-2">
         <div class="flex flex-row items-center gap-2 min-w-0">
           <button
-            on:click={() => toggleObstacle(shapeIdx)}
+            onclick={() => toggleObstacle(shapeIdx)}
             class={`flex items-center gap-2 font-medium transition-colors duration-250 ${compact ? "px-1 py-0.5 text-xs" : "px-2 py-1 text-sm"}`}
             title={collapsedObstacles[shapeIdx] ? "Expand" : "Collapse"}
           >
@@ -97,7 +101,7 @@
           <select
             class={`bg-neutral-100 dark:bg-neutral-950 dark:border-neutral-700 border-[0.5px] px-2 font-medium ${compact ? "py-0.5 text-xs" : "py-1 text-sm"}`}
             bind:value={shape.color}
-            on:change={(e) => setPresetColor(shape, e.currentTarget.value)}
+            onchange={(e) => setPresetColor(shape, e.currentTarget.value)}
           >
             {#each colorChoices as c}
               <option value={c.color}>{c.label}</option>
@@ -108,7 +112,7 @@
         <div class="flex flex-row gap-1 shrink-0">
           <button
             title="Add Vertex"
-            on:click={() => {
+            onclick={() => {
               shape.vertices = [...shape.vertices, { x: 50, y: 50 }];
             }}
           >
@@ -129,7 +133,7 @@
           {#if shapes.length > 0}
             <button
               title="Remove Shape"
-              on:click={() => {
+              onclick={() => {
                 shapes.splice(shapeIdx, 1);
                 shapes = shapes;
                 collapsedObstacles.splice(shapeIdx, 1);
@@ -184,7 +188,7 @@
             {#if shape.vertices.length > 3}
               <button
                 title="Remove Vertex"
-                on:click={() => {
+                onclick={() => {
                   shape.vertices.splice(vertexIdx, 1);
                   shape.vertices = shape.vertices;
                 }}
@@ -211,7 +215,7 @@
   {/each}
 
   <button
-    on:click={() => {
+    onclick={() => {
       shapes = [...shapes, createTriangle(shapes.length)];
       collapsedObstacles = [...collapsedObstacles, true];
     }}

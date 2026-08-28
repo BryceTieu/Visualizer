@@ -1,8 +1,14 @@
 <script lang="ts">
+  import { stopPropagation } from 'svelte/legacy';
+
   import type { Point } from "../../types";
   import { FIELD_SIZE } from "../../config";
 
-  export let startPoint: Point;
+  interface Props {
+    startPoint: Point;
+  }
+
+  let { startPoint = $bindable() }: Props = $props();
 </script>
 
 <div class="flex flex-col w-full justify-start items-start gap-2">
@@ -11,10 +17,10 @@
       Starting Point
       <button
         title={startPoint.locked ? "Unlock Starting Point" : "Lock Starting Point"}
-        on:click|stopPropagation={() => {
+        onclick={stopPropagation(() => {
           startPoint.locked = !startPoint.locked;
           startPoint = { ...startPoint };
-        }}
+        })}
         class="p-1 rounded transition-colors duration-250"
       >
         {#if startPoint.locked}
@@ -57,7 +63,7 @@
       <span class="font-extralight">Name</span>
       <input
         value={startPoint.name ?? ""}
-        on:input={(e) => {
+        oninput={(e) => {
           startPoint.name = e.currentTarget.value;
           startPoint = { ...startPoint };
         }}
