@@ -12,12 +12,7 @@
     robotXY: { x: number; y: number };
   }
 
-  let {
-    x,
-    y,
-    twoElement,
-    robotXY
-  }: Props = $props();
+  let { x, y, twoElement, robotXY }: Props = $props();
 </script>
 
 {#if $showGrid}

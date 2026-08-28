@@ -1,10 +1,5 @@
 import * as prettier from "prettier/standalone";
-import type {
-  Point,
-  Line,
-  BasePoint,
-  SequenceItem,
-} from "../types";
+import type { Point, Line, BasePoint, SequenceItem } from "../types";
 
 import { FIELD_SIZE as FIELD_WIDTH_INCHES } from "../config/defaults";
 

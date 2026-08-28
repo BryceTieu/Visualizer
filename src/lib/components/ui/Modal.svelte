@@ -9,7 +9,7 @@
     closeOnEscape?: boolean;
     closeOnBackdrop?: boolean;
     onClose?: () => void;
-    children?: import('svelte').Snippet;
+    children?: import("svelte").Snippet;
   }
 
   let {
@@ -19,7 +19,7 @@
     closeOnEscape = true,
     closeOnBackdrop = true,
     onClose = () => {},
-    children
+    children,
   }: Props = $props();
 
   const BACKDROP_MS = 200;

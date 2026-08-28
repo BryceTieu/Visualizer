@@ -4,7 +4,9 @@
   <div
     class="max-w-lg rounded-3xl border border-white/10 bg-neutral-900/95 px-8 py-10 shadow-2xl shadow-black/40"
   >
-    <div class="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300">
+    <div
+      class="text-xs font-semibold uppercase tracking-[0.35em] text-amber-300"
+    >
       Desktop Required
     </div>
     <h1 class="mt-4 text-3xl font-semibold text-white">

@@ -25,7 +25,7 @@
     onOverwrite,
     onNew,
     onDownload,
-    onSaveToLocalFile
+    onSaveToLocalFile,
   }: Props = $props();
 
   const ICON_BTN =
@@ -38,7 +38,9 @@
   <div
     class="shrink-0 p-3 border-t border-neutral-200 dark:border-neutral-700 space-y-2 bg-neutral-50 dark:bg-neutral-950"
   >
-    <div class="text-xs font-medium text-neutral-700 dark:text-neutral-300 px-1">
+    <div
+      class="text-xs font-medium text-neutral-700 dark:text-neutral-300 px-1"
+    >
       {selectedFile.name}
     </div>
 
@@ -107,7 +109,9 @@
 
     <!-- Saving Operations -->
     <div class="space-y-1">
-      <div class="text-xs font-medium text-neutral-600 dark:text-neutral-400 px-1">
+      <div
+        class="text-xs font-medium text-neutral-600 dark:text-neutral-400 px-1"
+      >
         Save Options
       </div>
       <div class="grid grid-cols-2 gap-1">
@@ -117,8 +121,19 @@
           disabled={!selectedFile}
           title="Save into selected file (overwrite)"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width={2} stroke="currentColor" class="size-3.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7.5A2.25 2.25 0 0 1 5.25 5.25h13.5A2.25 2.25 0 0 1 21 7.5v9a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 16.5v-9zM7.5 11.25h9M7.5 14.25h6" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width={2}
+            stroke="currentColor"
+            class="size-3.5"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M3 7.5A2.25 2.25 0 0 1 5.25 5.25h13.5A2.25 2.25 0 0 1 21 7.5v9a2.25 2.25 0 0 1-2.25 2.25H5.25A2.25 2.25 0 0 1 3 16.5v-9zM7.5 11.25h9M7.5 14.25h6"
+            />
           </svg>
           Overwrite
         </button>
@@ -135,8 +150,19 @@
           class="{SAVE_BTN} bg-blue-600 hover:bg-blue-700"
           title="Download .pp to computer"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width={2} stroke="currentColor" class="size-3.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0 3-3m-3 3-3-3M21 21H3" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width={2}
+            stroke="currentColor"
+            class="size-3.5"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M12 3v12m0 0 3-3m-3 3-3-3M21 21H3"
+            />
           </svg>
           Download
         </button>
@@ -145,8 +171,19 @@
           class="{SAVE_BTN} bg-indigo-600 hover:bg-indigo-700"
           title="Save to local file"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width={2} stroke="currentColor" class="size-3.5">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 12v6m0-6V6m0 6l3-3m-3 3-3-3" />
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke-width={2}
+            stroke="currentColor"
+            class="size-3.5"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2M12 12v6m0-6V6m0 6l3-3m-3 3-3-3"
+            />
           </svg>
           Local
         </button>

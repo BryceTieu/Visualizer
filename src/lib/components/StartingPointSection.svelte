@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { stopPropagation } from 'svelte/legacy';
+  import { stopPropagation } from "svelte/legacy";
 
   import type { Point } from "../../types";
   import { FIELD_SIZE } from "../../config";
@@ -16,7 +16,9 @@
     <div class="font-semibold flex items-center gap-2">
       Starting Point
       <button
-        title={startPoint.locked ? "Unlock Starting Point" : "Lock Starting Point"}
+        title={startPoint.locked
+          ? "Unlock Starting Point"
+          : "Lock Starting Point"}
         onclick={stopPropagation(() => {
           startPoint.locked = !startPoint.locked;
           startPoint = { ...startPoint };

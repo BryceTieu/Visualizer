@@ -12,7 +12,10 @@ export function perpendicularDistance(
   lineStart: BasePoint,
   lineEnd: BasePoint,
 ): number {
-  const denominator = Math.hypot(lineEnd.x - lineStart.x, lineEnd.y - lineStart.y);
+  const denominator = Math.hypot(
+    lineEnd.x - lineStart.x,
+    lineEnd.y - lineStart.y,
+  );
   if (denominator === 0) {
     return distanceBetweenPoints(point, lineStart);
   }

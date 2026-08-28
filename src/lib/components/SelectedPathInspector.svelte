@@ -38,14 +38,16 @@
     onDeleteSelectedLine,
     onDeleteControlPoint,
     onToggleLock,
-    onCommitPointChange
+    onCommitPointChange,
   }: Props = $props();
 </script>
 
 <div
   class="w-full border border-[#333333] bg-[#222222] p-3 text-xs text-gray-400 space-y-3"
 >
-  <div class="flex items-start justify-between gap-3 border-b border-[#333333] pb-2">
+  <div
+    class="flex items-start justify-between gap-3 border-b border-[#333333] pb-2"
+  >
     <div>
       <div class="font-semibold text-gray-100">Selected Path</div>
       <div class="text-[11px] text-gray-500">
@@ -104,7 +106,9 @@
         />
       </div>
       <StatCell label="Endpoint">
-        {selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(1)}
+        {selectedLine.endPoint.x.toFixed(1)}, {selectedLine.endPoint.y.toFixed(
+          1,
+        )}
       </StatCell>
       <StatCell label="Control Points">
         {selectedLine.controlPoints.length}

@@ -178,7 +178,6 @@ export function getLineEndHeading(
   return 0;
 }
 
-
 /**
  * Convert a Catmull-Rom segment to a cubic Bezier control pair.
  * scaledTension should be tension/3 like in the Java implementation.
@@ -218,7 +217,11 @@ export function catmullToCubic(
 export function curveThroughPoints(
   tension: number,
   poses: { x: number; y: number }[],
-): { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] {
+): {
+  cp1: { x: number; y: number };
+  cp2: { x: number; y: number };
+  end: { x: number; y: number };
+}[] {
   if (!poses || poses.length < 3) return [];
 
   // Clone to avoid mutating input
@@ -231,7 +234,11 @@ export function curveThroughPoints(
   pts.push({ x: last.x + diff.x, y: last.y + diff.y });
 
   const scaledTension = tension / 3.0;
-  const out: { cp1: { x: number; y: number }; cp2: { x: number; y: number }; end: { x: number; y: number } }[] = [];
+  const out: {
+    cp1: { x: number; y: number };
+    cp2: { x: number; y: number };
+    end: { x: number; y: number };
+  }[] = [];
 
   // For i = 1 .. pts.length-3 produce segment between pts[i] and pts[i+1]
   for (let i = 1; i < pts.length - 2; i++) {

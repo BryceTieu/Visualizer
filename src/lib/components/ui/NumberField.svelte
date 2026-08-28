@@ -24,7 +24,7 @@
     suffix = "",
     disabled = false,
     inputClass = "console-input px-3 py-2",
-    onInput
+    onInput,
   }: Props = $props();
 
   let focused = $state(false);
@@ -83,7 +83,11 @@
       </div>
     {/if}
   </label>
-  <div class:flex={Boolean(suffix)} class:items-center={Boolean(suffix)} class:gap-2={Boolean(suffix)}>
+  <div
+    class:flex={Boolean(suffix)}
+    class:items-center={Boolean(suffix)}
+    class:gap-2={Boolean(suffix)}
+  >
     <input
       {id}
       type="number"
@@ -99,7 +103,9 @@
       class="{inputClass} focus:outline-none focus:ring-2 focus:ring-blue-500"
     />
     {#if suffix}
-      <span class="text-sm text-neutral-500 dark:text-neutral-400">{suffix}</span>
+      <span class="text-sm text-neutral-500 dark:text-neutral-400"
+        >{suffix}</span
+      >
     {/if}
   </div>
 </div>

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { formatTime } from "../../utils";
 
-  
   interface Props {
     playing: boolean;
     play: () => any;
@@ -22,7 +21,7 @@
     handleSeek,
     loopAnimation = $bindable(true),
     markers = [],
-    totalTime = 0
+    totalTime = 0,
   }: Props = $props();
 
   let elapsedSeconds = $derived((percent / 100) * (totalTime || 0));
@@ -126,7 +125,9 @@
       oninput={(e) => handleSeek(parseFloat(e.currentTarget.value))}
     />
   </div>
-  <div class="flex items-center gap-2 ml-2 text-sm text-neutral-600 dark:text-neutral-300">
+  <div
+    class="flex items-center gap-2 ml-2 text-sm text-neutral-600 dark:text-neutral-300"
+  >
     <div>{formatTime(elapsedSeconds)} / {formatTime(totalTime || 0)}</div>
   </div>
 </div>

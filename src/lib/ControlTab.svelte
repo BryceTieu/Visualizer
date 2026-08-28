@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
+  import { run } from "svelte/legacy";
 
   import type {
     Point,
@@ -17,7 +17,6 @@
   import { calculatePathTime, normalizeLines } from "../utils";
   import SelectedPathInspector from "./components/SelectedPathInspector.svelte";
   import { curveThroughPoints } from "../utils/math";
-
 
   interface Props {
     percent: number;
@@ -58,7 +57,7 @@
     handleSeek,
     loopAnimation = $bindable(),
     shapes = $bindable(),
-    recordChange
+    recordChange,
   }: Props = $props();
 
   let curveTension = $state(1.0);
@@ -88,7 +87,10 @@
 
   // Keep the selected point index inside the current line's range.
   run(() => {
-    if (selectedLine && selectedPointIndex > selectedLine.controlPoints.length) {
+    if (
+      selectedLine &&
+      selectedPointIndex > selectedLine.controlPoints.length
+    ) {
       selectedPointIndex = selectedLine.controlPoints.length;
     }
     if (selectedPointIndex < 0) {
@@ -109,31 +111,34 @@
   }
 
   // Compute timeline markers for the UI (start of each travel segment)
-  let timePrediction = $derived(calculatePathTime(startPoint, lines, settings, sequence));
-  let markers = $derived((() => {
-    const _markers: { percent: number; color: string; name: string }[] = [];
-    if (
-      !timePrediction ||
-      !timePrediction.timeline ||
-      timePrediction.totalTime <= 0
-    )
+  let timePrediction = $derived(
+    calculatePathTime(startPoint, lines, settings, sequence),
+  );
+  let markers = $derived(
+    (() => {
+      const _markers: { percent: number; color: string; name: string }[] = [];
+      if (
+        !timePrediction ||
+        !timePrediction.timeline ||
+        timePrediction.totalTime <= 0
+      )
+        return _markers;
+
+      timePrediction.timeline.forEach((ev) => {
+        if ((ev as any).type === "travel") {
+          const end = (ev as any).endTime as number;
+          const pct = (end / timePrediction.totalTime) * 100;
+          const lineIndex = (ev as any).lineIndex as number;
+          const line = lines[lineIndex];
+          const color = line?.color || "#ffffff";
+          const name = line?.name || `Path ${lineIndex + 1}`;
+          _markers.push({ percent: pct, color, name });
+        }
+      });
+
       return _markers;
-
-    timePrediction.timeline.forEach((ev) => {
-      if ((ev as any).type === "travel") {
-        const end = (ev as any).endTime as number;
-        const pct = (end / timePrediction.totalTime) * 100;
-        const lineIndex = (ev as any).lineIndex as number;
-        const line = lines[lineIndex];
-        const color = line?.color || "#ffffff";
-        const name = line?.name || `Path ${lineIndex + 1}`;
-        _markers.push({ percent: pct, color, name });
-      }
-    });
-
-    return _markers;
-  })());
-
+    })(),
+  );
 
   // Collapsed state for obstacles (default collapsed)
   let collapsedObstacles = $state(shapes.map(() => true));
@@ -151,11 +156,16 @@
     if (!selectedLine || selectedLineIndex == null) return;
 
     // Find the index of this line in the sequence
-    const seqIndex = sequence.findIndex((item) => item.kind === "path" && item.lineId === selectedLine.id);
+    const seqIndex = sequence.findIndex(
+      (item) => item.kind === "path" && item.lineId === selectedLine.id,
+    );
     if (seqIndex === -1) return;
 
     // Get previous point (startPoint for first line, or previous line's endPoint)
-    const prevPoint = selectedLineIndex > 0 ? lines[selectedLineIndex - 1].endPoint : startPoint;
+    const prevPoint =
+      selectedLineIndex > 0
+        ? lines[selectedLineIndex - 1].endPoint
+        : startPoint;
     const startPt = selectedLine.endPoint;
 
     // Find next line in sequence
@@ -175,7 +185,9 @@
 
     const segments = curveThroughPoints(tension, poses);
     if (!segments || segments.length === 0) {
-      alert("Curve generation produced no segments — need at least two path points.");
+      alert(
+        "Curve generation produced no segments — need at least two path points.",
+      );
       return;
     }
 
@@ -185,7 +197,10 @@
     if (existing) {
       nextLines[selectedLineIndex] = {
         ...existing,
-        controlPoints: [ { x: seg.cp1.x, y: seg.cp1.y }, { x: seg.cp2.x, y: seg.cp2.y } ],
+        controlPoints: [
+          { x: seg.cp1.x, y: seg.cp1.y },
+          { x: seg.cp2.x, y: seg.cp2.y },
+        ],
         endPoint: { ...existing.endPoint, x: seg.end.x, y: seg.end.y },
       };
     }
@@ -213,7 +228,10 @@
     if (lines.length <= 1) return;
 
     removeLine(selectedLineIndex);
-    selectedLineIndex = Math.max(0, Math.min(selectedLineIndex, lines.length - 1));
+    selectedLineIndex = Math.max(
+      0,
+      Math.min(selectedLineIndex, lines.length - 1),
+    );
     selectedPointIndex = 0;
     recordChange();
   }
@@ -226,10 +244,12 @@
 
     selectedLine.controlPoints.splice(controlPointIndex, 1);
     lines = [...lines];
-    selectedPointIndex = Math.min(selectedPointIndex, selectedLine.controlPoints.length);
+    selectedPointIndex = Math.min(
+      selectedPointIndex,
+      selectedLine.controlPoints.length,
+    );
     recordChange();
   }
-
 </script>
 
 <div class="flex-1 flex flex-col justify-start items-center gap-2 h-full">
@@ -241,10 +261,14 @@
         <button
           class="flex items-center justify-between gap-2 w-full border border-[#333333] bg-[#222222] px-3 py-2 text-xs text-gray-200"
           onclick={() => (obstaclesOpen = !obstaclesOpen)}
-          title={obstaclesOpen ? "Hide obstacle editor" : "Show obstacle editor"}
+          title={obstaclesOpen
+            ? "Hide obstacle editor"
+            : "Show obstacle editor"}
         >
           <span class="font-semibold uppercase tracking-wide">Obstacles</span>
-          <span class="text-[11px] text-gray-400">{obstaclesOpen ? "Hide" : "Show"}</span>
+          <span class="text-[11px] text-gray-400"
+            >{obstaclesOpen ? "Hide" : "Show"}</span
+          >
         </button>
         {#if obstaclesOpen}
           <ObstaclesSection bind:shapes bind:collapsedObstacles />

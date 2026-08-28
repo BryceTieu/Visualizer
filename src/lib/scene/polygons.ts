@@ -8,17 +8,41 @@ export function buildClosedPolygon(
   { x, y }: SceneScales,
 ): Path {
   const vertices = [
-    new Two.Anchor(x(points[0].x), y(points[0].y), 0, 0, 0, 0, Two.Commands.move),
+    new Two.Anchor(
+      x(points[0].x),
+      y(points[0].y),
+      0,
+      0,
+      0,
+      0,
+      Two.Commands.move,
+    ),
   ];
 
   for (let i = 1; i < points.length; i++) {
     vertices.push(
-      new Two.Anchor(x(points[i].x), y(points[i].y), 0, 0, 0, 0, Two.Commands.line),
+      new Two.Anchor(
+        x(points[i].x),
+        y(points[i].y),
+        0,
+        0,
+        0,
+        0,
+        Two.Commands.line,
+      ),
     );
   }
 
   vertices.push(
-    new Two.Anchor(x(points[0].x), y(points[0].y), 0, 0, 0, 0, Two.Commands.close),
+    new Two.Anchor(
+      x(points[0].x),
+      y(points[0].y),
+      0,
+      0,
+      0,
+      0,
+      Two.Commands.close,
+    ),
   );
 
   vertices.forEach((vertex) => (vertex.relative = false));

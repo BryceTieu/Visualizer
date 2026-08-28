@@ -10,9 +10,6 @@ interface StoredSettings {
   lastUpdated: string;
 }
 
-
-
-
 const SETTINGS_STORAGE_KEY = "pedro_settings";
 
 /**

@@ -7,10 +7,7 @@ export interface BasePoint {
 }
 
 export type PiecewiseHeadingInterpolationType =
-  | "linear"
-  | "constant"
-  | "tangential"
-  | "facing-point";
+  "linear" | "constant" | "tangential" | "facing-point";
 
 export interface PiecewiseHeadingSegment {
   startProgress: number;
@@ -75,7 +72,6 @@ export type Point = BasePoint &
 
 export type ControlPoint = BasePoint;
 
-
 export interface WaitSegment {
   name?: string;
   durationMs: number;
@@ -114,7 +110,7 @@ export type SequenceItem = SequencePathItem | SequenceWaitItem;
 
 // PathChain is kept only for backward compatibility with older saved files.
 // The visualizer and code export now treat timeline entries as Pedro Path objects.
- 
+
 export interface PathChain {
   id: string;
   name: string;

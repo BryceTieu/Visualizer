@@ -12,28 +12,32 @@
 
   let spacing = $derived(Math.max(1, $gridSize || 12));
 
-  let gridPositions = $derived((() => {
-    const positions: number[] = [];
-    for (let pos = 0; pos <= FIELD_SIZE; pos += spacing) {
-      positions.push(Number(pos.toFixed(6)));
-    }
-    if (positions[positions.length - 1] !== FIELD_SIZE) {
-      positions.push(FIELD_SIZE);
-    }
-    return positions;
-  })());
+  let gridPositions = $derived(
+    (() => {
+      const positions: number[] = [];
+      for (let pos = 0; pos <= FIELD_SIZE; pos += spacing) {
+        positions.push(Number(pos.toFixed(6)));
+      }
+      if (positions[positions.length - 1] !== FIELD_SIZE) {
+        positions.push(FIELD_SIZE);
+      }
+      return positions;
+    })(),
+  );
 
   // Adjust label frequency and size based on grid density
-  let labelInterval =
-    $derived(spacing <= 1 ? 12 : spacing <= 3 ? 4 : spacing <= 6 ? 2 : 1);
-  let labelFontSize =
-    $derived(spacing <= 1
+  let labelInterval = $derived(
+    spacing <= 1 ? 12 : spacing <= 3 ? 4 : spacing <= 6 ? 2 : 1,
+  );
+  let labelFontSize = $derived(
+    spacing <= 1
       ? "text-[8px]"
       : spacing <= 3
         ? "text-[9px]"
         : spacing <= 6
           ? "text-[10px]"
-          : "text-xs");
+          : "text-xs",
+  );
 
   function showsLabel(index: number, position: number): boolean {
     return (

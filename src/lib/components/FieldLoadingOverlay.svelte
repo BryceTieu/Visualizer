@@ -6,7 +6,9 @@
   >
     <img src="/loading.svg" alt="Loading" class="size-20" draggable="false" />
     <div class="text-center">
-      <div class="text-sm font-semibold text-neutral-100">Loading Visualizer</div>
+      <div class="text-sm font-semibold text-neutral-100">
+        Loading Visualizer
+      </div>
       <div class="text-xs text-neutral-400">
         Waiting for field assets to finish loading
       </div>

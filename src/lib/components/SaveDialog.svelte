@@ -9,7 +9,11 @@
     isSaving?: boolean;
   }
 
-  let { isOpen = $bindable(false), fileName = "", isSaving = false }: Props = $props();
+  let {
+    isOpen = $bindable(false),
+    fileName = "",
+    isSaving = false,
+  }: Props = $props();
 
   // Seeded from `fileName` each time the dialog opens (see below).
   let inputValue = $state("");
@@ -68,7 +72,10 @@
   <!-- Content -->
   <div class="px-6 py-5 space-y-4">
     <div>
-      <label for="save-input" class="block text-sm font-medium text-[#d0d0d0] mb-2">
+      <label
+        for="save-input"
+        class="block text-sm font-medium text-[#d0d0d0] mb-2"
+      >
         File name
       </label>
       <input

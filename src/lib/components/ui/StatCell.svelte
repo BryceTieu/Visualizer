@@ -1,18 +1,17 @@
 <script lang="ts">
-  
   interface Props {
     label: string;
     /** Roomier padding for cells that hold controls rather than a bare value. */
     roomy?: boolean;
     valueClass?: string;
-    children?: import('svelte').Snippet;
+    children?: import("svelte").Snippet;
   }
 
   let {
     label,
     roomy = false,
     valueClass = "font-medium text-gray-100",
-    children
+    children,
   }: Props = $props();
 </script>
 

@@ -3,9 +3,21 @@
 
   import { cubicInOut } from "svelte/easing";
   import { fade, fly } from "svelte/transition";
-  import type { FileInfo, FieldPoint, Point, Line, Shape, SequenceItem } from "../types";
+  import type {
+    FileInfo,
+    FieldPoint,
+    Point,
+    Line,
+    Shape,
+    SequenceItem,
+  } from "../types";
   import * as browserFileStore from "../utils/browserFileStore";
-  import { currentFilePath, isUnsaved, dualPathMode, secondFilePath } from "../stores";
+  import {
+    currentFilePath,
+    isUnsaved,
+    dualPathMode,
+    secondFilePath,
+  } from "../stores";
   import { normalizeFieldPoints } from "../utils/fieldPoints";
   import { normalizeLines, deriveSequence } from "../utils/normalize";
   import { serializeProject } from "../utils/project";
@@ -40,7 +52,7 @@
     secondLines = $bindable([]),
     secondShapes = $bindable([]),
     secondSequence = $bindable([]),
-    fieldPoints = $bindable([])
+    fieldPoints = $bindable([]),
   }: Props = $props();
 
   let files: FileInfo[] = $state([]);
@@ -63,8 +75,6 @@
   let nameDialogTitle = $state("");
   let nameDialogDefault = $state("");
   let pendingMirrorData: any = null;
-
-
 
   // Helper to get error message from unknown error type
   function getErrorMessage(error: unknown): string {
@@ -110,7 +120,9 @@
             path: file.path,
             size: file.size,
             modified: new Date((file as any).modified),
-            error: isSupported ? undefined : `Unsupported file type: ${fileExt}`,
+            error: isSupported
+              ? undefined
+              : `Unsupported file type: ${fileExt}`,
           } as FileInfo;
         })
         .filter((file) =>
@@ -371,7 +383,10 @@
       showToast(`Saved to local file: ${handle.name}`, "success");
     } catch (error) {
       console.error("File System API error:", error);
-      showToast(`Failed to write local file: ${getErrorMessage(error)}`, "error");
+      showToast(
+        `Failed to write local file: ${getErrorMessage(error)}`,
+        "error",
+      );
     }
   }
   async function createNewFile() {
@@ -455,7 +470,12 @@
           if (res) {
             deleted = true;
             // Normalize selectedFile/path if it matched any candidate
-            if (selectedFile && (selectedFile.path === candidate || selectedFile.name === candidate || selectedFile.name === file.name)) {
+            if (
+              selectedFile &&
+              (selectedFile.path === candidate ||
+                selectedFile.name === candidate ||
+                selectedFile.name === file.name)
+            ) {
               selectedFile = null;
               currentFilePath.set(null);
             }
@@ -510,9 +530,7 @@
       let counter = 1;
 
       // Find a unique name
-      while (
-        await browserFileStore.fileExists(newFileName)
-      ) {
+      while (await browserFileStore.fileExists(newFileName)) {
         newFileName = `${baseName}_copy${counter}.pp`;
         counter++;
       }
@@ -566,7 +584,7 @@
 
       const baseName = stripPpExtension(selectedFile.name);
       const defaultName = `${baseName}_mirrored`;
-      
+
       // Store the mirrored data and open custom dialog
       pendingMirrorData = mirroredData;
       nameDialogTitle = "Name Mirrored Path";
@@ -585,7 +603,7 @@
     try {
       // Remove .pp extension if user added it
       userInput = stripPpExtension(userInput);
-      
+
       let newFileName = `${userInput}.pp`;
       let counter = 1;
 
@@ -774,9 +792,7 @@
       class="shrink-0 p-3 border-b border-neutral-200 dark:border-neutral-700"
     >
       <div class="flex items-center justify-between">
-        <h2 class="text-base font-semibold text-neutral-100">
-          Files
-        </h2>
+        <h2 class="text-base font-semibold text-neutral-100">Files</h2>
         <button
           onclick={() => (isOpen = false)}
           class="console-icon-button"
@@ -801,13 +817,10 @@
 
       <!-- Error Message -->
       {#if errorMessage}
-        <div
-          class="console-section mb-3 p-2 text-sm text-red-300"
-        >
+        <div class="console-section mb-3 p-2 text-sm text-red-300">
           ⚠ {errorMessage}
         </div>
       {/if}
-      
     </div>
 
     <!-- New File Section -->
@@ -891,7 +904,9 @@
               d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
             />
           </svg>
-          <div class="text-center text-xs text-neutral-600 dark:text-neutral-400">
+          <div
+            class="text-center text-xs text-neutral-600 dark:text-neutral-400"
+          >
             {errorMessage}
           </div>
         </div>
@@ -911,7 +926,9 @@
               d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
             />
           </svg>
-          <div class="text-center text-xs text-neutral-500 dark:text-neutral-400 mb-2">
+          <div
+            class="text-center text-xs text-neutral-500 dark:text-neutral-400 mb-2"
+          >
             No files yet
           </div>
           <button
@@ -971,4 +988,3 @@
   onConfirm={handleMirrorNameConfirm}
   onCancel={handleMirrorNameCancel}
 />
-

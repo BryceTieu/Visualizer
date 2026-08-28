@@ -367,7 +367,10 @@ body {
 
 .desktop-grid {
   display: grid;
-  grid-template-columns: var(--left-panel-width, 330px) 18px minmax(0, 1fr) 18px var(--right-panel-width, 360px);
+  grid-template-columns: var(--left-panel-width, 330px) 18px minmax(
+      0,
+      1fr
+    ) 18px var(--right-panel-width, 360px);
   gap: 0;
   align-items: stretch;
 }
@@ -781,11 +784,12 @@ body {
   font-size: 0.74rem;
 }
 
-
-
 @media (max-width: 1300px) {
   .desktop-grid {
-    grid-template-columns: minmax(250px, 0.85fr) minmax(520px, 1.8fr) minmax(300px, 1fr);
+    grid-template-columns: minmax(250px, 0.85fr) minmax(520px, 1.8fr) minmax(
+        300px,
+        1fr
+      );
   }
 }
 

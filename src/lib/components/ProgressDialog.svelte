@@ -12,7 +12,7 @@
     isOpen = false,
     progress = 0,
     statusMessage = "Processing...",
-    onCancel = () => {}
+    onCancel = () => {},
   }: Props = $props();
 
   let progressPercentage = $derived(Math.round(progress * 100));

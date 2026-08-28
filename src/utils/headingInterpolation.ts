@@ -21,10 +21,16 @@ function clamp(value: number, min: number, max: number): number {
 
 function clonePoint(point?: BasePoint): BasePoint | undefined {
   if (!point) return undefined;
-  return { x: Number(point.x) || 0, y: Number(point.y) || 0, locked: point.locked };
+  return {
+    x: Number(point.x) || 0,
+    y: Number(point.y) || 0,
+    locked: point.locked,
+  };
 }
 
-function defaultParameters(type: PiecewiseHeadingInterpolationType): PiecewiseHeadingSegment["parameters"] {
+function defaultParameters(
+  type: PiecewiseHeadingInterpolationType,
+): PiecewiseHeadingSegment["parameters"] {
   switch (type) {
     case "constant":
       return { degrees: 0 };
@@ -44,7 +50,9 @@ function areParametersEqual(
   return JSON.stringify(left || {}) === JSON.stringify(right || {});
 }
 
-export function segmentSupportsReverse(type: PiecewiseHeadingInterpolationType): boolean {
+export function segmentSupportsReverse(
+  type: PiecewiseHeadingInterpolationType,
+): boolean {
   return type === "linear" || type === "tangential" || type === "facing-point";
 }
 
@@ -67,7 +75,9 @@ export function createDefaultPiecewiseHeadingInterpolation(
   };
 }
 
-function normalizeSegment(segment: PiecewiseHeadingSegment): PiecewiseHeadingSegment {
+function normalizeSegment(
+  segment: PiecewiseHeadingSegment,
+): PiecewiseHeadingSegment {
   const interpolationType = segment.interpolationType || "linear";
   const parameters = segment.parameters
     ? {
@@ -80,7 +90,9 @@ function normalizeSegment(segment: PiecewiseHeadingSegment): PiecewiseHeadingSeg
     startProgress: clamp(Number(segment.startProgress ?? 0), 0, 1),
     endProgress: clamp(Number(segment.endProgress ?? 1), 0, 1),
     interpolationType,
-    reversed: segmentSupportsReverse(interpolationType) ? !!segment.reversed : false,
+    reversed: segmentSupportsReverse(interpolationType)
+      ? !!segment.reversed
+      : false,
     parameters,
   };
 }
@@ -104,8 +116,14 @@ export function normalizePiecewiseHeadingInterpolation(
     const source = sorted[index];
     const isLast = index === sorted.length - 1;
     const startProgress = index === 0 ? 0 : cursor;
-    const desiredEnd = isLast ? 1 : Math.max(source.endProgress, startProgress + MIN_SEGMENT_LENGTH);
-    const endProgress = clamp(desiredEnd, startProgress + MIN_SEGMENT_LENGTH, 1);
+    const desiredEnd = isLast
+      ? 1
+      : Math.max(source.endProgress, startProgress + MIN_SEGMENT_LENGTH);
+    const endProgress = clamp(
+      desiredEnd,
+      startProgress + MIN_SEGMENT_LENGTH,
+      1,
+    );
 
     repaired.push({
       ...source,
@@ -133,7 +151,12 @@ export function normalizePiecewiseHeadingInterpolation(
       previous.endProgress = segment.endProgress;
       continue;
     }
-    merged.push({ ...segment, parameters: segment.parameters ? { ...segment.parameters, point: clonePoint(segment.parameters.point) } : undefined });
+    merged.push({
+      ...segment,
+      parameters: segment.parameters
+        ? { ...segment.parameters, point: clonePoint(segment.parameters.point) }
+        : undefined,
+    });
   }
 
   merged[0].startProgress = 0;
@@ -249,7 +272,10 @@ export function getPointAndTangentAtProgress(
 
   return {
     point,
-    tangentDegrees: Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9 ? 0 : radiansToDegrees(Math.atan2(dy, dx)),
+    tangentDegrees:
+      Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9
+        ? 0
+        : radiansToDegrees(Math.atan2(dy, dx)),
   };
 }
 
@@ -287,8 +313,14 @@ export function getChainTraversalState(
 
   for (const entry of lineData) {
     const nextAccumulated = accumulated + entry.length;
-    if (targetDistance <= nextAccumulated || entry === lineData[lineData.length - 1]) {
-      const localProgress = entry.length <= 1e-9 ? 0 : (targetDistance - accumulated) / entry.length;
+    if (
+      targetDistance <= nextAccumulated ||
+      entry === lineData[lineData.length - 1]
+    ) {
+      const localProgress =
+        entry.length <= 1e-9
+          ? 0
+          : (targetDistance - accumulated) / entry.length;
       return getPointAndTangentAtProgress(entry.points, localProgress);
     }
     accumulated = nextAccumulated;
@@ -312,7 +344,10 @@ export function evaluatePiecewiseHeading(
   const segment =
     normalized.segments.find((entry, index) => {
       const isLast = index === normalized.segments.length - 1;
-      return progress >= entry.startProgress && (progress <= entry.endProgress || isLast);
+      return (
+        progress >= entry.startProgress &&
+        (progress <= entry.endProgress || isLast)
+      );
     }) || normalized.segments[normalized.segments.length - 1];
 
   const localT = clamp(
@@ -328,7 +363,7 @@ export function evaluatePiecewiseHeading(
       : options.pointOverride || options.currentPoint;
   const sourceTangent =
     interpolation.scope === "chain"
-      ? options.chainState?.tangentDegrees ?? options.tangentDegrees
+      ? (options.chainState?.tangentDegrees ?? options.tangentDegrees)
       : options.tangentDegrees;
 
   switch (segment.interpolationType) {
@@ -350,6 +385,8 @@ export function evaluatePiecewiseHeading(
     }
     case "tangential":
     default:
-      return normalizeAngleDegrees(sourceTangent + (segment.reversed ? 180 : 0));
+      return normalizeAngleDegrees(
+        sourceTangent + (segment.reversed ? 180 : 0),
+      );
   }
 }

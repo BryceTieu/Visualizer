@@ -30,5 +30,9 @@ export function serializeProject(
   options: { pretty?: boolean; overrides?: Record<string, unknown> } = {},
 ): string {
   const { pretty = false, overrides = {} } = options;
-  return JSON.stringify(buildProject(doc, overrides), null, pretty ? 2 : undefined);
+  return JSON.stringify(
+    buildProject(doc, overrides),
+    null,
+    pretty ? 2 : undefined,
+  );
 }

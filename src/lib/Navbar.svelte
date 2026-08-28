@@ -1,7 +1,14 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
+  import { run } from "svelte/legacy";
 
-  import type { FieldPoint, Point, Line, Shape, Settings, SequenceItem } from "../types";
+  import type {
+    FieldPoint,
+    Point,
+    Line,
+    Shape,
+    Settings,
+    SequenceItem,
+  } from "../types";
   import { onMount, onDestroy } from "svelte";
   import {
     showGrid,
@@ -26,8 +33,6 @@
   import NavDivider from "./components/ui/NavDivider.svelte";
   import ViewToggles from "./components/ViewToggles.svelte";
   import html2canvas from "html2canvas";
-
-
 
   interface Props {
     loadFile: (evt: any) => any;
@@ -78,7 +83,7 @@
     optimizeAllLines,
     optimizingAll = false,
     twoElement = null,
-    exportPathAsGif
+    exportPathAsGif,
   }: Props = $props();
 
   let fileManagerOpen = $state(false);
@@ -113,8 +118,12 @@
     }
   });
 
-  let timePrediction = $derived(calculatePathTime(startPoint, lines, settings, sequence));
-  let elapsedSeconds = $derived((percent / 100) * (timePrediction?.totalTime || 0));
+  let timePrediction = $derived(
+    calculatePathTime(startPoint, lines, settings, sequence),
+  );
+  let elapsedSeconds = $derived(
+    (percent / 100) * (timePrediction?.totalTime || 0),
+  );
 
   onMount(() => {
     const unsubscribeGridSize = gridSize.subscribe((value) => {
@@ -177,7 +186,9 @@
       // Convert canvas to blob and download
       canvas.toBlob((blob) => {
         if (blob) {
-          const fileName = $currentFilePath ? pathStem($currentFilePath) : "field";
+          const fileName = $currentFilePath
+            ? pathStem($currentFilePath)
+            : "field";
           downloadBlob(blob, `${fileName}_field.png`);
         } else {
           alert("Failed to create image blob.");
@@ -185,7 +196,10 @@
       });
     } catch (error) {
       console.error("Export error:", error);
-      alert("Failed to export field as image: " + (error instanceof Error ? error.message : String(error)));
+      alert(
+        "Failed to export field as image: " +
+          (error instanceof Error ? error.message : String(error)),
+      );
     }
   }
 
@@ -258,7 +272,6 @@
     document.removeEventListener("click", handleClickOutside);
     document.removeEventListener("keydown", handleKeyDown);
   });
-
 </script>
 
 {#if fileManagerOpen}
@@ -358,14 +371,16 @@
       <!-- time estimate -->
       <div class="flex items-center gap-2 text-sm">
         <div class="text-neutral-600 dark:text-neutral-300">
-            {#if timePrediction && timePrediction.totalTime > 0}
-              {formatTime(elapsedSeconds)} / {formatTime(timePrediction.totalTime)}
-            {:else}
-              {formatTime(0)} / {formatTime(0)}
-            {/if}
+          {#if timePrediction && timePrediction.totalTime > 0}
+            {formatTime(elapsedSeconds)} / {formatTime(
+              timePrediction.totalTime,
+            )}
+          {:else}
+            {formatTime(0)} / {formatTime(0)}
+          {/if}
         </div>
         <div class="text-neutral-500 dark:text-neutral-400">
-            ({(timePrediction?.totalDistance ?? 0).toFixed(0)} in)
+          ({(timePrediction?.totalDistance ?? 0).toFixed(0)} in)
         </div>
       </div>
 
@@ -438,9 +453,9 @@
     <button
       title="Manage Multiple Paths Visualization"
       onclick={() => (multiplePathsDialogOpen = true)}
-        class="console-trigger relative text-sm"
-        class:console-trigger--active={$activePaths.length > 0}
-        class:console-trigger--muted={$activePaths.length === 0}
+      class="console-trigger relative text-sm"
+      class:console-trigger--active={$activePaths.length > 0}
+      class:console-trigger--muted={$activePaths.length === 0}
     >
       <div class="flex items-center gap-1.5">
         <svg
@@ -459,7 +474,9 @@
         </svg>
         <span>Multiple Paths</span>
         {#if $activePaths.length > 0}
-          <span class="console-badge ml-1 px-1.5 py-0.5 text-xs font-bold">{$activePaths.length}</span>
+          <span class="console-badge ml-1 px-1.5 py-0.5 text-xs font-bold"
+            >{$activePaths.length}</span
+          >
         {/if}
       </div>
     </button>
@@ -557,9 +574,12 @@
                 <span class="console-menu-item-title">Save</span>
                 <span class="console-menu-item-subtitle">
                   {#if $currentFilePath}
-                    Overwrite the current project file in app storage ({basename($currentFilePath)})
+                    Overwrite the current project file in app storage ({basename(
+                      $currentFilePath,
+                    )})
                   {:else}
-                    No project file selected — this will download the path as a new file to your computer
+                    No project file selected — this will download the path as a
+                    new file to your computer
                   {/if}
                 </span>
               </div>
@@ -592,7 +612,8 @@
               <div class="flex flex-col">
                 <span class="console-menu-item-title">Save As</span>
                 <span class="console-menu-item-subtitle">
-                  Create a new project file (choose a filename) or download a new .pp to your computer
+                  Create a new project file (choose a filename) or download a
+                  new .pp to your computer
                 </span>
               </div>
             </button>
@@ -654,10 +675,7 @@
                 Sequential Command
               </button>
             {/if}
-            <button
-              onclick={exportFieldAsImage}
-              class="console-menu-item"
-            >
+            <button onclick={exportFieldAsImage} class="console-menu-item">
               Field as Image
             </button>
             <button
@@ -707,7 +725,11 @@
       </button>
 
       <!-- Settings button -->
-      <button title="Open Settings" onclick={() => (settingsOpen = true)} class="console-icon-button">
+      <button
+        title="Open Settings"
+        onclick={() => (settingsOpen = true)}
+        class="console-icon-button"
+      >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           width="24"

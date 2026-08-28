@@ -6,12 +6,7 @@
     onRestore: () => void;
   }
 
-  let {
-    side,
-    hidden = false,
-    onResizeStart,
-    onRestore
-  }: Props = $props();
+  let { side, hidden = false, onResizeStart, onRestore }: Props = $props();
 
   let label = $derived(side === "left" ? "left" : "right");
   // The chevron points toward the direction the panel would reappear from.

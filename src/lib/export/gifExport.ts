@@ -1,4 +1,10 @@
-import type { BasePoint, Line, Point, SequenceItem, Settings } from "../../types";
+import type {
+  BasePoint,
+  Line,
+  Point,
+  SequenceItem,
+  Settings,
+} from "../../types";
 import { calculatePathTime } from "../../utils/timeCalculator";
 import { pathStem } from "../../utils/filename";
 

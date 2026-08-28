@@ -25,7 +25,7 @@
     onLinesChanged,
     onRecordChange,
     onDeleteControlPoint,
-    onToggleLock
+    onToggleLock,
   }: Props = $props();
 
   let disabled = $derived(selectedLine.locked || Boolean(selectedPoint.locked));
@@ -54,7 +54,9 @@
       </button>
       {#each selectedLine.controlPoints as _, pointIdx (pointIdx)}
         <button
-          class="{CHIP_CLASS} {selectedPointIndex === pointIdx + 1 ? 'bg-[#2f2f2f]' : ''}"
+          class="{CHIP_CLASS} {selectedPointIndex === pointIdx + 1
+            ? 'bg-[#2f2f2f]'
+            : ''}"
           onclick={() => (selectedPointIndex = pointIdx + 1)}
         >
           CP{pointIdx + 1}
@@ -93,7 +95,9 @@
   </div>
 
   {#if selectedPointIndex === 0}
-    <div class="mt-3 flex items-center gap-2 text-[11px] text-gray-300 flex-wrap">
+    <div
+      class="mt-3 flex items-center gap-2 text-[11px] text-gray-300 flex-wrap"
+    >
       <div class="text-gray-500">Heading</div>
       <HeadingControls
         endPoint={selectedLine.endPoint}
@@ -107,7 +111,9 @@
     </div>
   {/if}
 
-  <div class="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-300">
+  <div
+    class="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-300"
+  >
     <div>
       Locked: <span class="font-medium text-gray-100">
         {selectedPoint.locked ? "Yes" : "No"}

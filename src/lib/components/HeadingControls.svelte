@@ -23,7 +23,8 @@
       if (endPoint.reverse === undefined) endPoint.reverse = false;
     } else if (endPoint.heading === "piecewise") {
       if (!endPoint.piecewiseHeading) {
-        endPoint.piecewiseHeading = createDefaultPiecewiseHeadingInterpolation("path");
+        endPoint.piecewiseHeading =
+          createDefaultPiecewiseHeadingInterpolation("path");
       }
     }
     dispatch("change");
@@ -93,7 +94,10 @@ With tangential heading, the heading follows the direction of the line."
         dispatch("change");
       }}
       onblur={(e) => {
-        if (e.currentTarget.value === "" || isNaN(parseFloat(e.currentTarget.value))) {
+        if (
+          e.currentTarget.value === "" ||
+          isNaN(parseFloat(e.currentTarget.value))
+        ) {
           endPoint.degrees = 0;
           e.currentTarget.value = "0";
         }

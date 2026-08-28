@@ -8,14 +8,16 @@ export interface FileInfo {
   modified: number;
 }
 
-const STORAGE_KEY = 'pp_files';
+const STORAGE_KEY = "pp_files";
 
 function getFiles(): Record<string, { content: string; modified: number }> {
   const raw = localStorage.getItem(STORAGE_KEY);
   return raw ? JSON.parse(raw) : {};
 }
 
-function saveFiles(files: Record<string, { content: string; modified: number }>) {
+function saveFiles(
+  files: Record<string, { content: string; modified: number }>,
+) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(files));
 }
 
@@ -31,11 +33,14 @@ export async function listFiles(): Promise<FileInfo[]> {
 
 export async function readFile(path: string): Promise<string> {
   const files = getFiles();
-  if (!(path in files)) throw new Error('File not found');
+  if (!(path in files)) throw new Error("File not found");
   return files[path].content;
 }
 
-export async function writeFile(path: string, content: string): Promise<boolean> {
+export async function writeFile(
+  path: string,
+  content: string,
+): Promise<boolean> {
   const files = getFiles();
   files[path] = { content, modified: Date.now() };
   saveFiles(files);
@@ -55,7 +60,10 @@ export async function fileExists(path: string): Promise<boolean> {
   return path in files;
 }
 
-export async function renameFile(oldPath: string, newPath: string): Promise<{ success: boolean; newPath: string }> {
+export async function renameFile(
+  oldPath: string,
+  newPath: string,
+): Promise<{ success: boolean; newPath: string }> {
   const files = getFiles();
   if (!(oldPath in files)) return { success: false, newPath: oldPath };
   if (newPath in files) return { success: false, newPath };
@@ -65,7 +73,11 @@ export async function renameFile(oldPath: string, newPath: string): Promise<{ su
   return { success: true, newPath };
 }
 
-export async function getDirectoryStats(): Promise<{ totalFiles: number; totalSize: number; lastModified: number }> {
+export async function getDirectoryStats(): Promise<{
+  totalFiles: number;
+  totalSize: number;
+  lastModified: number;
+}> {
   const files = getFiles();
   const all = Object.values(files);
   return {

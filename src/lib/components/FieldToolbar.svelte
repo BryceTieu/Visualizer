@@ -21,7 +21,7 @@
     onAddControlPoint,
     onRemoveControlPoint,
     onCreatePathToLastPoint,
-    onTogglePlay
+    onTogglePlay,
   }: Props = $props();
 </script>
 
@@ -34,9 +34,16 @@
   >
     {penToolEnabled ? "Pen Tool On" : "Pen Tool"}
   </button>
-  <button class="toolbar-btn" onclick={onAddControlPoint}>+ Control Point</button>
-  <button class="toolbar-btn" onclick={onRemoveControlPoint}>- Control Point</button>
-  <button class="toolbar-btn toolbar-btn--blue" onclick={onCreatePathToLastPoint}>
+  <button class="toolbar-btn" onclick={onAddControlPoint}
+    >+ Control Point</button
+  >
+  <button class="toolbar-btn" onclick={onRemoveControlPoint}
+    >- Control Point</button
+  >
+  <button
+    class="toolbar-btn toolbar-btn--blue"
+    onclick={onCreatePathToLastPoint}
+  >
     Create Path to Last Point
   </button>
   <div style="flex: 1;"></div>

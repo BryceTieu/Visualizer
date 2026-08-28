@@ -12,7 +12,9 @@
 
   let { settings = $bindable() }: Props = $props();
 
-  let angularVelocityDisplay = $derived(settings ? settings.aVelocity / Math.PI : 1);
+  let angularVelocityDisplay = $derived(
+    settings ? settings.aVelocity / Math.PI : 1,
+  );
 
   function setNumber(
     value: string,

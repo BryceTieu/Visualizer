@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { stopPropagation } from 'svelte/legacy';
+  import { stopPropagation } from "svelte/legacy";
 
   import type { FileInfo } from "../../types";
   import PencilIcon from "./icons/PencilIcon.svelte";
@@ -32,7 +32,7 @@
     onStartRename,
     onConfirmRename,
     onCancelRename,
-    onDelete
+    onDelete,
   }: Props = $props();
 
   function handleKeydown(event: KeyboardEvent) {

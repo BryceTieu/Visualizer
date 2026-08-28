@@ -1,14 +1,13 @@
 <script lang="ts">
   import ChevronDownIcon from "../icons/ChevronDownIcon.svelte";
 
-  
   interface Props {
     title: string;
     collapsed?: boolean;
     /** Heroicon `d` path for the leading icon; omit to render title only. */
     iconPath?: string;
     onToggle: () => void;
-    children?: import('svelte').Snippet;
+    children?: import("svelte").Snippet;
   }
 
   let {
@@ -16,7 +15,7 @@
     collapsed = true,
     iconPath = "",
     onToggle,
-    children
+    children,
   }: Props = $props();
 </script>
 

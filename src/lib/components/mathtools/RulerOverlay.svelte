@@ -15,10 +15,9 @@
   let rulerEnd = $state({ x: 80, y: 72 });
   let dragging: "start" | "end" | null = null;
 
-  let rulerLength = $derived(Math.hypot(
-    rulerEnd.x - rulerStart.x,
-    rulerEnd.y - rulerStart.y,
-  ));
+  let rulerLength = $derived(
+    Math.hypot(rulerEnd.x - rulerStart.x, rulerEnd.y - rulerStart.y),
+  );
 
   function handleMouseDown(event: MouseEvent, which: "start" | "end") {
     event.stopPropagation();

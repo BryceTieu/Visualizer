@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
+  import { run } from "svelte/legacy";
 
   import Modal from "./ui/Modal.svelte";
 
@@ -18,7 +18,7 @@
     defaultValue = "",
     placeholder = "Enter name...",
     onConfirm = () => {},
-    onCancel = () => {}
+    onCancel = () => {},
   }: Props = $props();
 
   // Seeded from `defaultValue` each time the dialog opens (see below).

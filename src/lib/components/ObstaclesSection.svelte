@@ -23,10 +23,15 @@
     compact?: boolean;
   }
 
-  let { shapes = $bindable(), collapsedObstacles = $bindable(), compact = false }: Props = $props();
+  let {
+    shapes = $bindable(),
+    collapsedObstacles = $bindable(),
+    compact = false,
+  }: Props = $props();
 
-  let snapToGridTitle =
-    $derived($snapToGrid && $showGrid ? `Snapping to ${$gridSize} grid` : "No snapping");
+  let snapToGridTitle = $derived(
+    $snapToGrid && $showGrid ? `Snapping to ${$gridSize} grid` : "No snapping",
+  );
 
   function toggleObstacle(index: number) {
     collapsedObstacles[index] = !collapsedObstacles[index];
@@ -39,7 +44,9 @@
   }
 </script>
 
-<div class={`flex flex-col w-full justify-start items-start gap-0.5 text-sm ${compact ? "text-xs" : ""}`}>
+<div
+  class={`flex flex-col w-full justify-start items-start gap-0.5 text-sm ${compact ? "text-xs" : ""}`}
+>
   <div class="flex items-center gap-2 w-full">
     <button
       onclick={toggleAllObstacles}
@@ -89,7 +96,9 @@
                 d="m8.25 4.5 7.5 7.5-7.5 7.5"
               />
             </svg>
-            <span class={compact ? "text-xs" : "text-sm"}>Obstacle {shapeIdx + 1}</span>
+            <span class={compact ? "text-xs" : "text-sm"}
+              >Obstacle {shapeIdx + 1}</span
+            >
           </button>
 
           <input
@@ -160,9 +169,15 @@
 
       {#if !collapsedObstacles[shapeIdx]}
         {#each shape.vertices as vertex, vertexIdx (vertexIdx)}
-          <div class={`flex flex-row justify-start items-center ${compact ? "gap-1" : "gap-2"}`}>
-            <div class={`font-bold ${compact ? "text-xs" : "text-sm"}`}>{vertexIdx + 1}:</div>
-            <div class={`font-extralight ${compact ? "text-xs" : "text-sm"}`}>X:</div>
+          <div
+            class={`flex flex-row justify-start items-center ${compact ? "gap-1" : "gap-2"}`}
+          >
+            <div class={`font-bold ${compact ? "text-xs" : "text-sm"}`}>
+              {vertexIdx + 1}:
+            </div>
+            <div class={`font-extralight ${compact ? "text-xs" : "text-sm"}`}>
+              X:
+            </div>
             <input
               bind:value={vertex.x}
               type="number"
@@ -172,7 +187,9 @@
               title={snapToGridTitle}
               class={`pl-1.5 bg-neutral-100 dark:bg-neutral-950 dark:border-neutral-700 border-[0.5px] focus:outline-none ${compact ? "w-16 py-0.5 text-xs" : "w-24 py-1 text-sm"}`}
             />
-            <div class={`font-extralight ${compact ? "text-xs" : "text-sm"}`}>Y:</div>
+            <div class={`font-extralight ${compact ? "text-xs" : "text-sm"}`}>
+              Y:
+            </div>
             <input
               bind:value={vertex.y}
               type="number"
@@ -183,7 +200,9 @@
               title={snapToGridTitle}
             />
             {#if $snapToGrid && $showGrid}
-              <span class="text-xs text-green-500" title="Snapping enabled">✓</span>
+              <span class="text-xs text-green-500" title="Snapping enabled"
+                >✓</span
+              >
             {/if}
             {#if shape.vertices.length > 3}
               <button

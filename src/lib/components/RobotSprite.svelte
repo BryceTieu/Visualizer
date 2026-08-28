@@ -30,7 +30,7 @@
     arrowId = "arrowhead-main",
     showTValue = false,
     tValue = null,
-    onImageSettled = () => {}
+    onImageSettled = () => {},
   }: Props = $props();
 
   const DEFAULT_ROBOT_IMAGE = "/robot.png";

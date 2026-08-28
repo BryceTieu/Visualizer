@@ -11,7 +11,10 @@ let enabled: boolean | null = null;
 export function perfEnabled(): boolean {
   if (enabled !== null) return enabled;
   try {
-    const stored = typeof localStorage !== "undefined" ? localStorage.getItem("perfMonitor") : null;
+    const stored =
+      typeof localStorage !== "undefined"
+        ? localStorage.getItem("perfMonitor")
+        : null;
     enabled = stored === null ? true : stored === "1";
   } catch {
     enabled = true;
@@ -24,7 +27,10 @@ export type PerfSampler = {
   sample(start: number): void;
 };
 
-export function createPerfSampler(tag: string, reportIntervalMs = 2000): PerfSampler {
+export function createPerfSampler(
+  tag: string,
+  reportIntervalMs = 2000,
+): PerfSampler {
   let count = 0;
   let totalMs = 0;
   let maxMs = 0;
@@ -33,7 +39,7 @@ export function createPerfSampler(tag: string, reportIntervalMs = 2000): PerfSam
   function maybeReport(now: number) {
     if (now - lastReport < reportIntervalMs) return;
     const avg = count > 0 ? totalMs / count : 0;
-     
+
     console.log(
       `[perf:${tag}] ${count} samples | avg ${avg.toFixed(2)}ms | max ${maxMs.toFixed(2)}ms | total ${totalMs.toFixed(1)}ms`,
     );
@@ -59,7 +65,10 @@ export function createPerfSampler(tag: string, reportIntervalMs = 2000): PerfSam
 /** Track DOM node counts over time so an unbounded scene (a memory leak) is obvious. */
 const nodeSampleAccum = 0;
 let lastNodeLog = 0;
-export function sampleNodeCounts(label: string, root: ParentNode | null | undefined): void {
+export function sampleNodeCounts(
+  label: string,
+  root: ParentNode | null | undefined,
+): void {
   if (!perfEnabled()) return;
   const now = performance.now();
   if (now - lastNodeLog < 5000) return;
@@ -70,6 +79,6 @@ export function sampleNodeCounts(label: string, root: ParentNode | null | undefi
   } catch {
     nodes = -1;
   }
-   
+
   console.log(`[perf:${label}] DOM nodes under root: ${nodes}`);
 }

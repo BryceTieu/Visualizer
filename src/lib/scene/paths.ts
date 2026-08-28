@@ -17,7 +17,15 @@ export function buildSegmentPath(
     // Approximate an n-degree bezier curve by sampling it
     const cps = [startPoint, ...line.controlPoints, line.endPoint];
     const anchors = [
-      new Two.Anchor(x(startPoint.x), y(startPoint.y), 0, 0, 0, 0, Two.Commands.move),
+      new Two.Anchor(
+        x(startPoint.x),
+        y(startPoint.y),
+        0,
+        0,
+        0,
+        0,
+        Two.Commands.move,
+      ),
     ];
     for (let i = 1; i <= CURVE_SAMPLES; ++i) {
       const point = getCurvePoint(i / CURVE_SAMPLES, cps);

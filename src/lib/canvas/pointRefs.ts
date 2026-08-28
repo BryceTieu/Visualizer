@@ -114,7 +114,13 @@ export function snapPointToGrid(
   }
 
   return {
-    x: Math.max(0, Math.min(FIELD_SIZE, Math.round(inchX / gridSize) * gridSize)),
-    y: Math.max(0, Math.min(FIELD_SIZE, Math.round(inchY / gridSize) * gridSize)),
+    x: Math.max(
+      0,
+      Math.min(FIELD_SIZE, Math.round(inchX / gridSize) * gridSize),
+    ),
+    y: Math.max(
+      0,
+      Math.min(FIELD_SIZE, Math.round(inchY / gridSize) * gridSize),
+    ),
   };
 }

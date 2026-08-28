@@ -58,7 +58,9 @@
 
 <!-- Grid toggle -->
 <button
-  title={$showGrid ? `Grid: ${selectedGridSize}" (click to cycle)` : "Toggle Grid"}
+  title={$showGrid
+    ? `Grid: ${selectedGridSize}" (click to cycle)`
+    : "Toggle Grid"}
   onclick={onCycleGridSize}
   class:text-blue-500={$showGrid}
   class="console-icon-button relative"

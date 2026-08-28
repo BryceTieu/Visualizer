@@ -5,7 +5,11 @@
     rotated?: boolean;
   }
 
-  let { className = "size-5", strokeWidth = 2, rotated = false }: Props = $props();
+  let {
+    className = "size-5",
+    strokeWidth = 2,
+    rotated = false,
+  }: Props = $props();
 </script>
 
 <svg

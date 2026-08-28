@@ -14,10 +14,11 @@
   const DUCK_IMAGE = "/MecanumDuck.png";
 
   // Narrowed value so the template can use it without optional checks.
-  let customImage =
-    $derived(settings.robotImage && settings.robotImage !== DEFAULT_ROBOT_IMAGE
+  let customImage = $derived(
+    settings.robotImage && settings.robotImage !== DEFAULT_ROBOT_IMAGE
       ? settings.robotImage
-      : null);
+      : null,
+  );
   let isCustom = $derived(customImage !== null);
 
   function setImage(src: string) {
@@ -46,7 +47,9 @@
 </script>
 
 <div>
-  <div class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+  <div
+    class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1"
+  >
     Robot Image
     <div class="text-xs text-neutral-500 dark:text-neutral-400">
       Upload a custom image for your robot
@@ -80,7 +83,11 @@
             stroke="currentColor"
             stroke-width="3"
           >
-            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              d="M6 18L18 6M6 6l12 12"
+            />
           </svg>
         </button>
       {/if}
@@ -160,7 +167,10 @@
         style="background-image: linear-gradient(45deg, #a16207 25%, #ca8a04 25%, #ca8a04 50%, #a16207 50%, #a16207 75%, #ca8a04 75%, #ca8a04 100%); background-size: 20px 20px;"
         title="Transform your robot into Jeffery the Potato!"
       >
-        <span class="text-lg group-hover:scale-110 transition-transform duration-300">🥔</span>
+        <span
+          class="text-lg group-hover:scale-110 transition-transform duration-300"
+          >🥔</span
+        >
         <span class="font-semibold">Use Potato Robot</span>
         <span class="text-lg opacity-80">🥔</span>
 
@@ -180,7 +190,9 @@
       </button>
     </div>
 
-    <div class="text-xs text-neutral-500 dark:text-neutral-400 text-center mt-1">
+    <div
+      class="text-xs text-neutral-500 dark:text-neutral-400 text-center mt-1"
+    >
       <p>Supported: PNG, JPG, GIF</p>
       <p>Recommended: &lt; 1MB, transparent background</p>
     </div>

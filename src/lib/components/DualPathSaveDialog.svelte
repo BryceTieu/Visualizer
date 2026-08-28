@@ -8,7 +8,9 @@
   let { isOpen = $bindable(false) }: Props = $props();
 
   function dispatchSave(target: "first" | "second" | "both") {
-    window.dispatchEvent(new CustomEvent("saveDualPath", { detail: { target } }));
+    window.dispatchEvent(
+      new CustomEvent("saveDualPath", { detail: { target } }),
+    );
     isOpen = false;
   }
 
@@ -18,7 +20,10 @@
 </script>
 
 <Modal {isOpen} titleId="dual-path-save-title" onClose={close}>
-  <h2 id="dual-path-save-title" class="text-lg font-semibold text-[#e8e8e8] mb-4">
+  <h2
+    id="dual-path-save-title"
+    class="text-lg font-semibold text-[#e8e8e8] mb-4"
+  >
     Save Path Changes
   </h2>
 

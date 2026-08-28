@@ -5,12 +5,12 @@
     version: string;
     lineCount: number;
     pathPreviewItems: {
-    index: number;
-    lineIndex: number;
-    name: string;
-    x: string;
-    y: string;
-  }[];
+      index: number;
+      lineIndex: number;
+      name: string;
+      x: string;
+      y: string;
+    }[];
     selectedLineIndex: number;
     onToggleVisibility: () => void;
     onSelectLine: (lineIndex: number) => void;
@@ -24,7 +24,7 @@
     pathPreviewItems,
     selectedLineIndex,
     onToggleVisibility,
-    onSelectLine
+    onSelectLine,
   }: Props = $props();
 </script>
 

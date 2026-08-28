@@ -11,12 +11,7 @@
     robotXY: { x: number; y: number };
   }
 
-  let {
-    x,
-    y,
-    twoElement,
-    robotXY
-  }: Props = $props();
+  let { x, y, twoElement, robotXY }: Props = $props();
 
   const MIN_PROTRACTOR_RADIUS = 30;
   const MAX_PROTRACTOR_RADIUS = 150;
@@ -29,13 +24,15 @@
   let resizeAngle = $state(-60);
 
   // Lock to the robot when enabled, otherwise use the dragged position
-  let center = $derived($protractorLockToRobot
-    ? { x: x.invert(robotXY.x), y: y.invert(robotXY.y) }
-    : protractorPos);
+  let center = $derived(
+    $protractorLockToRobot
+      ? { x: x.invert(robotXY.x), y: y.invert(robotXY.y) }
+      : protractorPos,
+  );
 
-  let normalizedAngle = $derived(Math.round(
-    radiusAngle < 0 ? 360 + radiusAngle : radiusAngle,
-  ));
+  let normalizedAngle = $derived(
+    Math.round(radiusAngle < 0 ? 360 + radiusAngle : radiusAngle),
+  );
   let resizeHandleRadians = $derived((resizeAngle * Math.PI) / 180);
   let resizeHandlePosition = $derived({
     x: Math.cos(resizeHandleRadians) * radius,
@@ -47,7 +44,10 @@
     return { mx: event.clientX - rect.left, my: event.clientY - rect.top };
   }
 
-  function handleMouseDown(event: MouseEvent, type: "move" | "rotate" | "resize") {
+  function handleMouseDown(
+    event: MouseEvent,
+    type: "move" | "rotate" | "resize",
+  ) {
     event.stopPropagation();
 
     if (type === "move") {
@@ -122,7 +122,14 @@
       {@const y1 = -Math.sin(angle) * r1}
       {@const x2 = Math.cos(angle) * radius}
       {@const y2 = -Math.sin(angle) * radius}
-      <line {x1} {y1} {x2} {y2} stroke="#3b82f6" stroke-width={i % 3 === 0 ? "2" : "1"} />
+      <line
+        {x1}
+        {y1}
+        {x2}
+        {y2}
+        stroke="#3b82f6"
+        stroke-width={i % 3 === 0 ? "2" : "1"}
+      />
       {#if i % 3 === 0}
         {@const r3 = radius - 32}
         <text
@@ -155,7 +162,14 @@
 
     <!-- Rotating radius line -->
     <g transform="rotate({radiusAngle})">
-      <line x1="0" y1="0" x2={radius + 5} y2="0" stroke="#ef4444" stroke-width="3" />
+      <line
+        x1="0"
+        y1="0"
+        x2={radius + 5}
+        y2="0"
+        stroke="#ef4444"
+        stroke-width="3"
+      />
 
       <!-- Rotation handle on edge -->
       <circle

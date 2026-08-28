@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { run } from 'svelte/legacy';
+  import { run } from "svelte/legacy";
 
   import type {
     Line,
@@ -92,7 +92,11 @@
     buildOnionLayer,
     selectVisibleOnionLayers,
   } from "./lib/scene/polygons";
-  import { normalizeFieldPoints, renderFieldPoints, type FieldPoint } from "./utils/fieldPoints";
+  import {
+    normalizeFieldPoints,
+    renderFieldPoints,
+    type FieldPoint,
+  } from "./utils/fieldPoints";
   import {
     calculatePathTime,
     getAnimationDuration,
@@ -177,21 +181,26 @@
     }
     const userAgent = navigator.userAgent || "";
     // Prefer the standard, high-confidence signal when it's available.
-    const mobileHint = "userAgentData" in navigator
-      ? (navigator as Navigator & { userAgentData?: { mobile?: boolean } }).userAgentData?.mobile ?? false
-      : false;
+    const mobileHint =
+      "userAgentData" in navigator
+        ? ((navigator as Navigator & { userAgentData?: { mobile?: boolean } })
+            .userAgentData?.mobile ?? false)
+        : false;
 
     // Only treat a device as mobile when the user agent itself reports it.
-    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk/i.test(userAgent);
+    const uaMobile = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk/i.test(
+      userAgent,
+    );
 
     return mobileHint || uaMobile;
   }
 
-
-  let sequence: SequenceItem[] = $state(initialLines.map((ln) => ({
-    kind: "path",
-    lineId: ln.id!,
-  })));
+  let sequence: SequenceItem[] = $state(
+    initialLines.map((ln) => ({
+      kind: "path",
+      lineId: ln.id!,
+    })),
+  );
   let selectedLineIndex = $state(0);
   let selectedPointIndex = $state(0);
   let penToolEnabled = $state(false);
@@ -232,8 +241,6 @@
     };
   });
 
-
-
   let shapes: Shape[] = $state(getDefaultShapes());
   let optimizingLineIds: Record<string, boolean> = {};
   let optimizingAll = $state(false);
@@ -263,47 +270,57 @@
   const { canUndoStore, canRedoStore } = history;
 
   function commitPenStroke() {
-      const selectedLine = lines[selectedLineIndex];
-      const startAnchor = selectedLine?.endPoint || undefined;
-      const fitted = fitStrokeToLines(
-        penStroke,
-        Number(settings?.penToolAccuracy ?? DEFAULT_SETTINGS.penToolAccuracy),
-        startAnchor,
-      );
+    const selectedLine = lines[selectedLineIndex];
+    const startAnchor = selectedLine?.endPoint || undefined;
+    const fitted = fitStrokeToLines(
+      penStroke,
+      Number(settings?.penToolAccuracy ?? DEFAULT_SETTINGS.penToolAccuracy),
+      startAnchor,
+    );
     penStroke = [];
     penIsDrawing = false;
-  
+
     if (!fitted) return;
-  
-      const newLine = fitted.lines[0];
-      if (!newLine) return;
 
-      if (selectedLine?.id) {
-        const insertAt = lines.findIndex((line) => line.id === selectedLine.id);
-        const nextLines = [...lines];
-        nextLines.splice(insertAt >= 0 ? insertAt + 1 : nextLines.length, 0, newLine);
-        lines = normalizeLines(nextLines);
+    const newLine = fitted.lines[0];
+    if (!newLine) return;
 
-        const nextSequence = [...sequence];
-        const seqIndex = sequence.findIndex((item) => item.kind === "path" && item.lineId === selectedLine.id);
-        nextSequence.splice(seqIndex >= 0 ? seqIndex + 1 : nextSequence.length, 0, { kind: "path", lineId: newLine.id! });
-        sequence = nextSequence;
+    if (selectedLine?.id) {
+      const insertAt = lines.findIndex((line) => line.id === selectedLine.id);
+      const nextLines = [...lines];
+      nextLines.splice(
+        insertAt >= 0 ? insertAt + 1 : nextLines.length,
+        0,
+        newLine,
+      );
+      lines = normalizeLines(nextLines);
 
-        selectedLineIndex = insertAt >= 0 ? insertAt + 1 : lines.length - 1;
-        selectedPointIndex = 0;
-      } else {
-        startPoint = fitted.startPoint;
-        lines = normalizeLines(fitted.lines);
-        sequence = lines.map((line) => ({ kind: "path", lineId: line.id! }));
-        selectedLineIndex = 0;
-        selectedPointIndex = 0;
-      }
+      const nextSequence = [...sequence];
+      const seqIndex = sequence.findIndex(
+        (item) => item.kind === "path" && item.lineId === selectedLine.id,
+      );
+      nextSequence.splice(
+        seqIndex >= 0 ? seqIndex + 1 : nextSequence.length,
+        0,
+        { kind: "path", lineId: newLine.id! },
+      );
+      sequence = nextSequence;
+
+      selectedLineIndex = insertAt >= 0 ? insertAt + 1 : lines.length - 1;
+      selectedPointIndex = 0;
+    } else {
+      startPoint = fitted.startPoint;
+      lines = normalizeLines(fitted.lines);
+      sequence = lines.map((line) => ({ kind: "path", lineId: line.id! }));
+      selectedLineIndex = 0;
+      selectedPointIndex = 0;
+    }
 
     selectedPointIndex = 0;
     recordChange();
     two?.update();
   }
-  
+
   function togglePenTool() {
     penToolEnabled = !penToolEnabled;
     if (!penToolEnabled) {
@@ -311,8 +328,6 @@
       penIsDrawing = false;
     }
   }
-
-
 
   function beginPanelResize(side: "left" | "right", event: MouseEvent) {
     event.preventDefault();
@@ -344,17 +359,38 @@
 
     const availableWidth = Math.max(0, window.innerWidth - 24);
     if (panelResizeState.side === "left") {
-      const rightPanelMinWidth = Math.max(0, Number(settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth));
-      const otherWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
-      const desiredWidth = panelResizeState.startWidth + (event.clientX - panelResizeState.startX);
+      const rightPanelMinWidth = Math.max(
+        0,
+        Number(
+          settings?.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth,
+        ),
+      );
+      const otherWidth = rightPanelHidden
+        ? 0
+        : Math.max(rightPanelWidth, rightPanelMinWidth);
+      const desiredWidth =
+        panelResizeState.startWidth + (event.clientX - panelResizeState.startX);
       leftPanelHidden = false;
-      leftPanelWidth = clampPanelWidth("left", desiredWidth, availableWidth, otherWidth, settings);
+      leftPanelWidth = clampPanelWidth(
+        "left",
+        desiredWidth,
+        availableWidth,
+        otherWidth,
+        settings,
+      );
       settings.leftPanelWidth = leftPanelWidth;
     } else {
       const otherWidth = leftPanelHidden ? 0 : leftPanelWidth;
-      const desiredWidth = panelResizeState.startWidth - (event.clientX - panelResizeState.startX);
+      const desiredWidth =
+        panelResizeState.startWidth - (event.clientX - panelResizeState.startX);
       rightPanelHidden = false;
-      rightPanelWidth = clampPanelWidth("right", desiredWidth, availableWidth, otherWidth, settings);
+      rightPanelWidth = clampPanelWidth(
+        "right",
+        desiredWidth,
+        availableWidth,
+        otherWidth,
+        settings,
+      );
       settings.rightPanelWidth = rightPanelWidth;
     }
   }
@@ -422,7 +458,6 @@
     };
   }
 
-
   function recordChange() {
     history.record(getAppState());
   }
@@ -457,18 +492,14 @@
     }
   }
 
-
   // Animation controller
   let loopAnimation = $state(true);
-  let animationController = $state<ReturnType<typeof createAnimationController>>()!;
-  
-  
-
-  
+  let animationController =
+    $state<ReturnType<typeof createAnimationController>>()!;
 
   async function loadAdditionalPaths(paths: string[]) {
     const newAdditionalPaths: AdditionalPathData[] = [];
-    
+
     // Multi-path mode is isolated - turn off old dual path mode
     if (paths.length > 0) {
       dualPathMode.set(false);
@@ -478,8 +509,8 @@
       secondSequence = [];
       secondFilePath.set(null);
     }
-    
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A']; // Red, Teal, Blue, Salmon
+
+    const colors = ["#FF6B6B", "#4ECDC4", "#45B7D1", "#FFA07A"]; // Red, Teal, Blue, Salmon
 
     for (let i = 0; i < Math.min(paths.length, 4); i++) {
       const filePath = paths[i];
@@ -494,10 +525,12 @@
             startPoint: data.startPoint,
             lines: normalizedLines,
             shapes: data.shapes || [],
-            sequence: data.sequence || normalizedLines.map((ln: Line) => ({
-              kind: "path",
-              lineId: ln.id!,
-            })),
+            sequence:
+              data.sequence ||
+              normalizedLines.map((ln: Line) => ({
+                kind: "path",
+                lineId: ln.id!,
+              })),
             settings: data.settings || { ...DEFAULT_SETTINGS },
             color: colors[i],
           });
@@ -551,21 +584,11 @@
 
     return true;
   }
-  
+
   let secondRobotXY: BasePoint = $state({ x: 0, y: 0 });
   let secondRobotHeading: number = $state(0);
   const GHOST_COLOR = "#a78bfa"; // Light purple/lavender
   const SECOND_PATH_COLOR = "#fca5a5"; // Light red/pink for the second robot
-
-
-
-
-
-
-
-
-
-
 
   let isLoaded = $state(false);
 
@@ -621,18 +644,29 @@
     if (typeof window === "undefined") return;
     const availableWidth = Math.max(0, window.innerWidth - 24);
     const rightPanelMinWidth = getRightPanelMinWidth(settings);
-    const otherForLeft = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightPanelMinWidth);
-    leftPanelWidth = clampPanelWidth("left", leftPanelWidth, availableWidth, otherForLeft, settings);
+    const otherForLeft = rightPanelHidden
+      ? 0
+      : Math.max(rightPanelWidth, rightPanelMinWidth);
+    leftPanelWidth = clampPanelWidth(
+      "left",
+      leftPanelWidth,
+      availableWidth,
+      otherForLeft,
+      settings,
+    );
     const otherForRight = leftPanelHidden ? 0 : leftPanelWidth;
-    rightPanelWidth = clampPanelWidth("right", rightPanelWidth, availableWidth, otherForRight, settings);
+    rightPanelWidth = clampPanelWidth(
+      "right",
+      rightPanelWidth,
+      availableWidth,
+      otherForRight,
+      settings,
+    );
     settings.leftPanelWidth = leftPanelWidth;
     settings.rightPanelWidth = rightPanelWidth;
   }
 
-
   const debouncedSaveSession = debounce(saveSessionSnapshot, 750);
-
-
 
   onDestroy(() => {
     debouncedSaveSession.cancel();
@@ -657,7 +691,6 @@
     );
   });
 
-
   // Save Function
   // Save the current project into the browser-backed store (or download)
   async function saveProject() {
@@ -673,20 +706,25 @@
   async function saveAdditionalPath(pathIdx: number) {
     const pathData = additionalPaths[pathIdx];
     if (!pathData || !pathData.filePath) return;
-    
+
     try {
-      const fileData = JSON.stringify(buildProjectData({
-        startPoint: pathData.startPoint,
-        lines: pathData.lines,
-        shapes: pathData.shapes,
-        sequence: pathData.sequence,
-        settings: pathData.settings,
-      }));
-      
+      const fileData = JSON.stringify(
+        buildProjectData({
+          startPoint: pathData.startPoint,
+          lines: pathData.lines,
+          shapes: pathData.shapes,
+          sequence: pathData.sequence,
+          settings: pathData.settings,
+        }),
+      );
+
       await browserFileStore.writeFile(pathData.filePath, fileData);
       console.log(`Auto-saved additional path: ${pathData.filePath}`);
     } catch (error) {
-      console.error(`Failed to save additional path ${pathData.filePath}:`, error);
+      console.error(
+        `Failed to save additional path ${pathData.filePath}:`,
+        error,
+      );
       throw error;
     }
   }
@@ -722,19 +760,20 @@
       alert("Canvas not ready. Please try again.");
       return;
     }
-    
+
     // Two.js can render as canvas or SVG; exporter supports both.
     const rendererElement = two.renderer.domElement;
     if (!rendererElement) {
       alert("Unable to access renderer for export.");
       return;
     }
-    
+
     // Check if we have paths to export
     const hasActivePaths = $activePaths.length > 0;
-    const hasDualPath = $dualPathMode && secondStartPoint && secondLines.length > 0;
+    const hasDualPath =
+      $dualPathMode && secondStartPoint && secondLines.length > 0;
     const hasSinglePath = lines.length > 0;
-    
+
     if (!hasActivePaths && !hasDualPath && !hasSinglePath) {
       alert("No paths to export. Please create a path first.");
       return;
@@ -752,7 +791,9 @@
       const fieldImage = await loadImage(fieldMapSrc).catch(async () => {
         return loadImage("/fields/decode.webp");
       });
-      const robotImage = await loadImage(settings.robotImage || "/robot.png").catch(async () => {
+      const robotImage = await loadImage(
+        settings.robotImage || "/robot.png",
+      ).catch(async () => {
         return loadImage("/robot.png");
       });
 
@@ -783,17 +824,17 @@
       }
 
       gifExportStatus = "Preparing animation...";
-      
+
       // Stop any playing animation and reset to start
       const wasPlaying = playing;
       pause();
       percent = 0;
       animationController.reset();
-        two.update(); // Make sure Two.js renders the initial state
+      two.update(); // Make sure Two.js renders the initial state
       await tick(); // Allow UI to update
 
       gifExportStatus = "Capturing frames...";
-      
+
       // Export as GIF with manual frame control
       const durationMs = totalDuration * 1000;
       const blob = await exportAsGif({
@@ -827,12 +868,12 @@
         onFrameAdvance: async (frameIndex, totalFrames) => {
           // Calculate the percentage for this frame
           const framePercent = (frameIndex / (totalFrames - 1)) * 100;
-          
+
           // Update the animation to this frame
           percent = framePercent;
           animationController.seekToPercent(framePercent);
           two.update(); // Force Two.js to render
-          
+
           // Allow UI to update before capturing
           await tick();
         },
@@ -841,14 +882,14 @@
       // Reset animation
       percent = 0;
       animationController.reset();
-      
+
       // Resume playing if it was playing before
       if (wasPlaying) {
         play();
       }
 
       gifExportStatus = "Saving file...";
-      
+
       // Download the GIF
       const fileName = resolveGifFileName(
         $currentFilePath,
@@ -863,12 +904,12 @@
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       console.error("GIF export error:", errorMsg);
-      
+
       // Don't show alert if user cancelled
-      if (!errorMsg.includes('cancelled')) {
+      if (!errorMsg.includes("cancelled")) {
         alert("Failed to export GIF: " + errorMsg);
       }
-      
+
       cancelGifExport = false;
       exportingGif = false;
       gifExportProgress = 0;
@@ -877,7 +918,6 @@
   }
   const robotPerf = createPerfSampler("robot-state");
 
-
   // Precompute per-additional-path time predictions and their animation
   // scaling ONCE per edit (keyed by the additionalPaths array reference)
   // instead of rebuilding the full path timeline on every animation frame.
@@ -885,10 +925,9 @@
     prediction: ReturnType<typeof calculatePathTime>;
     completionPercent: number;
   };
-  let additionalPathCache = $state(new Map<
-    AdditionalPathData,
-    AdditionalPathEntry | null
-  >());
+  let additionalPathCache = $state(
+    new Map<AdditionalPathData, AdditionalPathEntry | null>(),
+  );
   let additionalPathCacheKey: AdditionalPathData[] | null = $state(null);
 
   // Calculate robot states for all additional paths (cheap: uses the cached
@@ -1006,8 +1045,6 @@
     });
   }
 
-
-
   async function saveFileAs() {
     const win: any = window as any;
     await saveAllAdditionalPaths();
@@ -1106,7 +1143,6 @@
     }
   }
 
-
   function play() {
     animationController.play();
     playing = true;
@@ -1116,7 +1152,6 @@
     animationController.pause();
     playing = false;
   }
-
 
   // Handle slider changes
   function handleSeek(newPercent: number) {
@@ -1136,7 +1171,10 @@
     let currentElem: string | null = null;
     let isDown = false;
     let dragOffset = { x: 0, y: 0 }; // Store offset to prevent snapping to center
-    const getPathPointLockedState = (lineIdx: number, pointIdx: number): boolean => {
+    const getPathPointLockedState = (
+      lineIdx: number,
+      pointIdx: number,
+    ): boolean => {
       const line = lines[lineIdx];
       if (!line) return false;
       if (pointIdx === 0) {
@@ -1153,10 +1191,15 @@
       if (Number.isNaN(lineIdx)) return false;
       if (lineIdx < 0) return false; // startPoint currently not lockable
       if (Number.isNaN(pointIdx)) return !!lines[lineIdx]?.locked;
-      return !!lines[lineIdx]?.locked || getPathPointLockedState(lineIdx, pointIdx);
+      return (
+        !!lines[lineIdx]?.locked || getPathPointLockedState(lineIdx, pointIdx)
+      );
     };
 
-    const getPreferredPointElemId = (clientX: number, clientY: number): string | null => {
+    const getPreferredPointElemId = (
+      clientX: number,
+      clientY: number,
+    ): string | null => {
       const elements = Array.from(document.elementsFromPoint(clientX, clientY));
       const pointIds = elements
         .map((element) => (element as HTMLElement).id || "")
@@ -1171,7 +1214,10 @@
 
     two.renderer.domElement.addEventListener("mousemove", (evt: MouseEvent) => {
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
-      const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
+      const preferredPointElemId = getPreferredPointElemId(
+        evt.clientX,
+        evt.clientY,
+      );
 
       if (penToolEnabled) {
         two.renderer.domElement.style.cursor = "crosshair";
@@ -1181,7 +1227,10 @@
           if (!mousePoint) return;
 
           const lastPoint = penStroke[penStroke.length - 1];
-          if (!lastPoint || distanceBetweenPoints(lastPoint, mousePoint) >= 0.35) {
+          if (
+            !lastPoint ||
+            distanceBetweenPoints(lastPoint, mousePoint) >= 0.35
+          ) {
             penStroke = [...penStroke, mousePoint];
           }
         }
@@ -1243,11 +1292,13 @@
         }
       } else {
         if (
-          ((preferredPointElemId || elem?.id)?.startsWith("point") && !isLockedPathElem(preferredPointElemId || elem?.id || null)) ||
+          ((preferredPointElemId || elem?.id)?.startsWith("point") &&
+            !isLockedPathElem(preferredPointElemId || elem?.id || null)) ||
           elem?.id.startsWith("line-") ||
           elem?.id.startsWith("second-point") ||
           elem?.id.startsWith("additional-path-") ||
-          (settings?.experimentalFeatures?.obstacles && elem?.id.startsWith("obstacle"))
+          (settings?.experimentalFeatures?.obstacles &&
+            elem?.id.startsWith("obstacle"))
         ) {
           two.renderer.domElement.style.cursor = "pointer";
           currentElem = preferredPointElemId || elem?.id || null;
@@ -1270,7 +1321,10 @@
         return;
       }
 
-      const preferredPointElemId = getPreferredPointElemId(evt.clientX, evt.clientY);
+      const preferredPointElemId = getPreferredPointElemId(
+        evt.clientX,
+        evt.clientY,
+      );
       if (preferredPointElemId) {
         currentElem = preferredPointElemId;
       }
@@ -1285,8 +1339,14 @@
         const selectedPointX = x(selectedPoint.x);
         const selectedPointY = y(selectedPoint.y);
         const selectedPointRadius = x(POINT_RADIUS) * 1.45;
-        const dx = evt.clientX - (two.renderer.domElement.getBoundingClientRect().left + selectedPointX);
-        const dy = evt.clientY - (two.renderer.domElement.getBoundingClientRect().top + selectedPointY);
+        const dx =
+          evt.clientX -
+          (two.renderer.domElement.getBoundingClientRect().left +
+            selectedPointX);
+        const dy =
+          evt.clientY -
+          (two.renderer.domElement.getBoundingClientRect().top +
+            selectedPointY);
         if (Math.hypot(dx, dy) <= selectedPointRadius) {
           currentElem = `point-${selectedLineIndex + 1}-${selectedPointIndex}`;
         }
@@ -1351,7 +1411,8 @@
       if (
         elem?.id &&
         (elem.id.startsWith("point") ||
-          (settings?.experimentalFeatures?.obstacles && elem.id.startsWith("obstacle")) ||
+          (settings?.experimentalFeatures?.obstacles &&
+            elem.id.startsWith("obstacle")) ||
           elem.id.startsWith("line"))
       ) {
         return;
@@ -1538,17 +1599,13 @@
     }
   }
 
-
   function addNewLine() {
     const newLine = createLine(_.random(36, 108), _.random(36, 108), {
       reverse: true,
     });
     const newLineId = newLine.id!;
     lines = [...lines, newLine];
-    sequence = [
-      ...sequence,
-      { kind: "path", lineId: newLineId },
-    ];
+    sequence = [...sequence, { kind: "path", lineId: newLineId }];
     selectedLineIndex = lines.length - 1;
     selectedPointIndex = 0;
     recordChange();
@@ -1574,7 +1631,10 @@
       if (targetLine.controlPoints.length > 0) {
         targetLine.controlPoints.pop();
         lines = [...lines];
-        selectedPointIndex = Math.min(selectedPointIndex, targetLine.controlPoints.length);
+        selectedPointIndex = Math.min(
+          selectedPointIndex,
+          targetLine.controlPoints.length,
+        );
         recordChange();
         two?.update();
       }
@@ -1601,7 +1661,9 @@
 
     const lastLine =
       lastPathSeqIndex >= 0
-        ? lines.find((line) => line.id === (sequence[lastPathSeqIndex] as any).lineId)
+        ? lines.find(
+            (line) => line.id === (sequence[lastPathSeqIndex] as any).lineId,
+          )
         : null;
 
     // Start from the currently selected point (endpoint or control point) so
@@ -1623,7 +1685,10 @@
     lines = nextLines;
 
     const nextSequence = [...sequence];
-    nextSequence.splice(selectedSeqIndex + 1, 0, { kind: "path", lineId: newLineId });
+    nextSequence.splice(selectedSeqIndex + 1, 0, {
+      kind: "path",
+      lineId: newLineId,
+    });
     sequence = nextSequence;
 
     selectedLineIndex = selectedLineIndex + 1;
@@ -1635,7 +1700,10 @@
     if (lineIndex < 0 || lineIndex >= lines.length) return;
 
     selectedLineIndex = lineIndex;
-    const maxPointIndex = Math.max(0, lines[lineIndex]?.controlPoints.length ?? 0);
+    const maxPointIndex = Math.max(
+      0,
+      lines[lineIndex]?.controlPoints.length ?? 0,
+    );
     selectedPointIndex = Math.max(0, Math.min(pointIndex, maxPointIndex));
   }
 
@@ -1698,20 +1766,25 @@
       isSaving = true;
       try {
         // Create a full file path with .pp extension if not present
-        const fullFileName = fileName.endsWith(".pp") ? fileName : fileName + ".pp";
-        
+        const fullFileName = fileName.endsWith(".pp")
+          ? fileName
+          : fileName + ".pp";
+
         // Call the file manager's save function through the browser file store
         const fileData = JSON.stringify(buildProjectData());
-        
+
         await browserFileStore.writeFile(fullFileName, fileData);
         currentFilePath.set(fullFileName);
         isUnsaved.set(false);
-        
+
         // Show success feedback
         showSaveDialog = false;
       } catch (error) {
         console.error("Save failed:", error);
-        alert("Failed to save file: " + (error instanceof Error ? error.message : String(error)));
+        alert(
+          "Failed to save file: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
       } finally {
         isSaving = false;
       }
@@ -1730,12 +1803,14 @@
           await browserFileStore.writeFile($currentFilePath, fileData);
           isUnsaved.set(false);
         } else if (target === "second" && $secondFilePath) {
-          const fileData = JSON.stringify(buildProjectData({
-            startPoint: secondStartPoint,
-            lines: secondLines,
-            shapes: secondShapes,
-            sequence: secondSequence,
-          }));
+          const fileData = JSON.stringify(
+            buildProjectData({
+              startPoint: secondStartPoint,
+              lines: secondLines,
+              shapes: secondShapes,
+              sequence: secondSequence,
+            }),
+          );
           await browserFileStore.writeFile($secondFilePath, fileData);
         } else if (target === "both") {
           // Save first path
@@ -1745,12 +1820,14 @@
           }
           // Save second path
           if ($secondFilePath) {
-            const fileData2 = JSON.stringify(buildProjectData({
-              startPoint: secondStartPoint,
-              lines: secondLines,
-              shapes: secondShapes,
-              sequence: secondSequence,
-            }));
+            const fileData2 = JSON.stringify(
+              buildProjectData({
+                startPoint: secondStartPoint,
+                lines: secondLines,
+                shapes: secondShapes,
+                sequence: secondSequence,
+              }),
+            );
             await browserFileStore.writeFile($secondFilePath, fileData2);
           }
           isUnsaved.set(false);
@@ -1758,7 +1835,10 @@
         showDualPathSaveDialog = false;
       } catch (error) {
         console.error("Dual path save failed:", error);
-        alert("Failed to save: " + (error instanceof Error ? error.message : String(error)));
+        alert(
+          "Failed to save: " +
+            (error instanceof Error ? error.message : String(error)),
+        );
       } finally {
         isSaving = false;
       }
@@ -1774,18 +1854,24 @@
   // Robot state
   let robotWidth = $derived(settings?.rWidth || DEFAULT_ROBOT_WIDTH);
   let robotHeight = $derived(settings?.rHeight || DEFAULT_ROBOT_HEIGHT);
-  let fieldMapSrc =
-    $derived(settings.fieldMap === "custom"
+  let fieldMapSrc = $derived(
+    settings.fieldMap === "custom"
       ? settings.customFieldImage || "/fields/decode.webp"
       : settings.fieldMap
         ? `/fields/${settings.fieldMap}`
-        : "/fields/decode.webp");
-  let fieldPixelSize = $derived(Math.max(
-    1,
-    Math.floor(
-      Math.min(fieldStageWidth || FIELD_SIZE, fieldStageHeight || FIELD_SIZE) - 16,
+        : "/fields/decode.webp",
+  );
+  let fieldPixelSize = $derived(
+    Math.max(
+      1,
+      Math.floor(
+        Math.min(
+          fieldStageWidth || FIELD_SIZE,
+          fieldStageHeight || FIELD_SIZE,
+        ) - 16,
+      ),
     ),
-  ));
+  );
   run(() => {
     if (fieldMapSrc !== lastFieldMapSrc) {
       fieldMapLoaded = false;
@@ -1823,8 +1909,13 @@
     const rightMinWidth = getRightPanelMinWidth(settings);
 
     if (!leftPanelHidden) {
-      const rightWidth = rightPanelHidden ? 0 : Math.max(rightPanelWidth, rightMinWidth);
-      const maxLeft = Math.max(SIDE_PANEL_MIN_WIDTH, availableForPanels - rightWidth);
+      const rightWidth = rightPanelHidden
+        ? 0
+        : Math.max(rightPanelWidth, rightMinWidth);
+      const maxLeft = Math.max(
+        SIDE_PANEL_MIN_WIDTH,
+        availableForPanels - rightWidth,
+      );
       const nextLeft = clamp(leftPanelWidth, SIDE_PANEL_MIN_WIDTH, maxLeft);
       if (nextLeft !== leftPanelWidth) leftPanelWidth = nextLeft;
     }
@@ -1837,58 +1928,77 @@
     }
   });
   // Reactive center width calculation for the field constraint
-  let centerWidth = $derived(getCenterWidth(
-    leftPanelWidth,
-    rightPanelWidth,
-    leftPanelHidden,
-    rightPanelHidden,
-  ));
+  let centerWidth = $derived(
+    getCenterWidth(
+      leftPanelWidth,
+      rightPanelWidth,
+      leftPanelHidden,
+      rightPanelHidden,
+    ),
+  );
   // Use the stores for reactivity
   let canUndo = $derived($canUndoStore);
   let canRedo = $derived($canRedoStore);
-  let timePrediction = $derived(calculatePathTime(startPoint, lines, settings, sequence));
-  let animationDuration = $derived(getAnimationDuration(timePrediction.totalTime / 1000));
+  let timePrediction = $derived(
+    calculatePathTime(startPoint, lines, settings, sequence),
+  );
+  let animationDuration = $derived(
+    getAnimationDuration(timePrediction.totalTime / 1000),
+  );
   // Second path timeline (for dual path mode)
-  let secondTimePrediction = $derived($dualPathMode && secondStartPoint && secondLines.length > 0 
-    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
-    : null);
+  let secondTimePrediction = $derived(
+    $dualPathMode && secondStartPoint && secondLines.length > 0
+      ? calculatePathTime(
+          secondStartPoint,
+          secondLines,
+          settings,
+          secondSequence,
+        )
+      : null,
+  );
   // Calculate max duration across all paths for playbar scaling
-  let effectiveAnimationDuration = $derived((() => {
-    // In multi-path mode, only use additional paths for duration
-    if ($activePaths.length > 0) {
-      let maxTime = 0;
-      additionalPaths.forEach((pathData) => {
-        if (pathData.startPoint && pathData.lines.length > 0) {
-          const pathTime = calculatePathTime(
-            pathData.startPoint,
-            pathData.lines,
-            pathData.settings,
-            pathData.sequence
-          );
-          if (pathTime) {
-            maxTime = Math.max(maxTime, pathTime.totalTime);
+  let effectiveAnimationDuration = $derived(
+    (() => {
+      // In multi-path mode, only use additional paths for duration
+      if ($activePaths.length > 0) {
+        let maxTime = 0;
+        additionalPaths.forEach((pathData) => {
+          if (pathData.startPoint && pathData.lines.length > 0) {
+            const pathTime = calculatePathTime(
+              pathData.startPoint,
+              pathData.lines,
+              pathData.settings,
+              pathData.sequence,
+            );
+            if (pathTime) {
+              maxTime = Math.max(maxTime, pathTime.totalTime);
+            }
           }
-        }
-      });
-      return maxTime > 0 ? getAnimationDuration(maxTime / 1000) : animationDuration;
-    }
-    
-    // In normal/dual mode, check main path and second path
-    let maxTime = timePrediction.totalTime;
-    
-    if ($dualPathMode && secondTimePrediction) {
-      maxTime = Math.max(maxTime, secondTimePrediction.totalTime);
-    }
-    
-    return getAnimationDuration(maxTime / 1000);
-  })());
-  let pathPreviewItems = $derived(lines.slice(0, 14).map((line, idx) => ({
-    index: idx + 1,
-    lineIndex: idx,
-    name: line.name || `Path ${idx + 1}`,
-    x: formatPathPoint(line.endPoint.x),
-    y: formatPathPoint(line.endPoint.y),
-  })));
+        });
+        return maxTime > 0
+          ? getAnimationDuration(maxTime / 1000)
+          : animationDuration;
+      }
+
+      // In normal/dual mode, check main path and second path
+      let maxTime = timePrediction.totalTime;
+
+      if ($dualPathMode && secondTimePrediction) {
+        maxTime = Math.max(maxTime, secondTimePrediction.totalTime);
+      }
+
+      return getAnimationDuration(maxTime / 1000);
+    })(),
+  );
+  let pathPreviewItems = $derived(
+    lines.slice(0, 14).map((line, idx) => ({
+      index: idx + 1,
+      lineIndex: idx,
+      name: line.name || `Path ${idx + 1}`,
+      x: formatPathPoint(line.endPoint.x),
+      y: formatPathPoint(line.endPoint.y),
+    })),
+  );
   // Load additional paths when activePaths changes
   $effect.pre(() => {
     loadAdditionalPaths($activePaths);
@@ -1896,20 +2006,27 @@
   /**
    * Converter for X axis from inches to pixels.
    */
-  let x = $derived(d3
-    .scaleLinear()
-    .domain([0, FIELD_SIZE])
-    .range([0, effectiveSize || FIELD_SIZE]));
+  let x = $derived(
+    d3
+      .scaleLinear()
+      .domain([0, FIELD_SIZE])
+      .range([0, effectiveSize || FIELD_SIZE]),
+  );
   /**
    * Converter for Y axis from inches to pixels.
    */
-  let y = $derived(d3
-    .scaleLinear()
-    .domain([0, FIELD_SIZE])
-    .range([effectiveSize || FIELD_SIZE, 0]));
+  let y = $derived(
+    d3
+      .scaleLinear()
+      .domain([0, FIELD_SIZE])
+      .range([effectiveSize || FIELD_SIZE, 0]),
+  );
   let isMultiPathMode = $derived($activePaths.length > 0);
   let scales = $derived({ x, y });
-  let pointSelection = $derived({ lineIndex: selectedLineIndex, pointIndex: selectedPointIndex });
+  let pointSelection = $derived({
+    lineIndex: selectedLineIndex,
+    pointIndex: selectedPointIndex,
+  });
   let points = $derived([
     // Only show main path points when NOT in multi-path mode
     ...(isMultiPathMode
@@ -1955,16 +2072,21 @@
       : []),
   ]);
   // Hide main path when in multi-path mode (isolated visualization)
-  let path = $derived(isMultiPathMode
-    ? []
-    : buildPathElements(
-        { startPoint, lines, idPrefix: "line" },
-        scales,
-        settings,
-      ));
+  let path = $derived(
+    isMultiPathMode
+      ? []
+      : buildPathElements(
+          { startPoint, lines, idPrefix: "line" },
+          scales,
+          settings,
+        ),
+  );
   // Second path rendering (for dual path mode); not shown in multi-path mode
-  let secondPath =
-    $derived(isMultiPathMode || !$dualPathMode || !secondStartPoint || secondLines.length === 0
+  let secondPath = $derived(
+    isMultiPathMode ||
+      !$dualPathMode ||
+      !secondStartPoint ||
+      secondLines.length === 0
       ? []
       : buildPathElements(
           {
@@ -1974,26 +2096,34 @@
           },
           scales,
           settings,
-        ));
-  // Render all additional paths; only slight opacity variation between them
-  let additionalPathElements = $derived(additionalPaths.map((pathData, pathIdx) =>
-    !pathData.startPoint || pathData.lines.length === 0
-      ? []
-      : buildPathElements(
-          {
-            startPoint: pathData.startPoint,
-            lines: pathData.lines,
-            idPrefix: `additional-path-${pathIdx}-line`,
-            color: pathData.color,
-            opacityScale: 1.0 - pathIdx * 0.1,
-            honorLocked: false,
-          },
-          scales,
-          settings,
         ),
-  ));
+  );
+  // Render all additional paths; only slight opacity variation between them
+  let additionalPathElements = $derived(
+    additionalPaths.map((pathData, pathIdx) =>
+      !pathData.startPoint || pathData.lines.length === 0
+        ? []
+        : buildPathElements(
+            {
+              startPoint: pathData.startPoint,
+              lines: pathData.lines,
+              idPrefix: `additional-path-${pathIdx}-line`,
+              color: pathData.color,
+              opacityScale: 1.0 - pathIdx * 0.1,
+              honorLocked: false,
+            },
+            scales,
+            settings,
+          ),
+    ),
+  );
   let penGhostPath: (Path | PathLine)[] = $derived.by(() => {
-    if (!penToolEnabled || !penIsDrawing || penStroke.length < 2 || isMultiPathMode) {
+    if (
+      !penToolEnabled ||
+      !penIsDrawing ||
+      penStroke.length < 2 ||
+      isMultiPathMode
+    ) {
       return [];
     }
 
@@ -2022,21 +2152,23 @@
 
     return [ghost];
   });
-  let shapeElements = $derived(!(settings?.experimentalFeatures?.obstacles ?? false)
-    ? []
-    : shapes.flatMap((shape, idx) => {
-        if (shape.vertices.length < 3) return [];
-        const shapeElement = buildClosedPolygon(shape.vertices, scales);
-        shapeElement.id = `shape-${idx}`;
-        shapeElement.stroke = shape.color;
-        shapeElement.fill = shape.color;
-        shapeElement.opacity = 0.4;
-        shapeElement.linewidth = x(0.8);
-        return [shapeElement];
-      }));
+  let shapeElements = $derived(
+    !(settings?.experimentalFeatures?.obstacles ?? false)
+      ? []
+      : shapes.flatMap((shape, idx) => {
+          if (shape.vertices.length < 3) return [];
+          const shapeElement = buildClosedPolygon(shape.vertices, scales);
+          shapeElement.id = `shape-${idx}`;
+          shapeElement.stroke = shape.color;
+          shapeElement.fill = shape.color;
+          shapeElement.opacity = 0.4;
+          shapeElement.linewidth = x(0.8);
+          return [shapeElement];
+        }),
+  );
   // Don't show ghost paths in multi-path mode
-  let ghostPathElement =
-    $derived(!isMultiPathMode && settings.showGhostPaths && lines.length > 0
+  let ghostPathElement = $derived(
+    !isMultiPathMode && settings.showGhostPaths && lines.length > 0
       ? buildGhostPath(
           generateGhostPathPoints(
             startPoint,
@@ -2048,14 +2180,15 @@
           { id: "ghost-path", color: GHOST_COLOR },
           scales,
         )
-      : null);
+      : null,
+  );
   // Second ghost path for dual path mode
-  let secondGhostPathElement =
-    $derived(!isMultiPathMode &&
-    $dualPathMode &&
-    settings.showGhostPaths &&
-    secondLines.length > 0 &&
-    secondStartPoint
+  let secondGhostPathElement = $derived(
+    !isMultiPathMode &&
+      $dualPathMode &&
+      settings.showGhostPaths &&
+      secondLines.length > 0 &&
+      secondStartPoint
       ? buildGhostPath(
           generateGhostPathPoints(
             secondStartPoint,
@@ -2067,10 +2200,11 @@
           { id: "ghost-path-2", color: SECOND_PATH_COLOR },
           scales,
         )
-      : null);
+      : null,
+  );
   // Ghost paths for additional paths in multi-path mode
-  let additionalGhostPathElements =
-    $derived(isMultiPathMode && settings.showGhostPaths
+  let additionalGhostPathElements = $derived(
+    isMultiPathMode && settings.showGhostPaths
       ? additionalPaths.flatMap((pathData, pathIdx) => {
           if (!pathData.startPoint || !pathData.lines.length) return [];
           const ghostPath = buildGhostPath(
@@ -2089,10 +2223,11 @@
           );
           return ghostPath ? [ghostPath] : [];
         })
-      : []);
+      : [],
+  );
   // Don't show onion layers in multi-path mode
-  let onionLayerElements =
-    $derived(!isMultiPathMode && settings.showOnionLayers && lines.length > 0
+  let onionLayerElements = $derived(
+    !isMultiPathMode && settings.showOnionLayers && lines.length > 0
       ? selectVisibleOnionLayers(
           generateOnionLayers(
             startPoint,
@@ -2114,14 +2249,15 @@
             scales,
           ),
         )
-      : []);
+      : [],
+  );
   // Second onion layers for dual path mode
-  let secondOnionLayerElements =
-    $derived(!isMultiPathMode &&
-    $dualPathMode &&
-    settings.showOnionLayers &&
-    secondLines.length > 0 &&
-    secondStartPoint
+  let secondOnionLayerElements = $derived(
+    !isMultiPathMode &&
+      $dualPathMode &&
+      settings.showOnionLayers &&
+      secondLines.length > 0 &&
+      secondStartPoint
       ? selectVisibleOnionLayers(
           generateOnionLayers(
             secondStartPoint,
@@ -2140,7 +2276,8 @@
             scales,
           ),
         )
-      : []);
+      : [],
+  );
   // Reactively trigger when any saveable data changes
   $effect.pre(() => {
     if (isLoaded && (lines || shapes || startPoint || settings)) {
@@ -2173,7 +2310,12 @@
   $effect.pre(() => {
     // This handles both 'travel' (movement) and 'wait' (stationary rotation) events.
     // Don't show main robot in multi-path mode
-    if ($activePaths.length === 0 && timePrediction && timePrediction.timeline && lines.length > 0) {
+    if (
+      $activePaths.length === 0 &&
+      timePrediction &&
+      timePrediction.timeline &&
+      lines.length > 0
+    ) {
       const t0 = performance.now();
       const state = calculateRobotState(
         percent,
@@ -2213,12 +2355,15 @@
     ) {
       // Calculate actual percent for this path based on max duration
       const maxDuration = effectiveAnimationDuration;
-      const thisDuration = getAnimationDuration(secondTimePrediction.totalTime / 1000);
+      const thisDuration = getAnimationDuration(
+        secondTimePrediction.totalTime / 1000,
+      );
       const completionPercent = (thisDuration / maxDuration) * 100;
-      
+
       // If this path should be complete, cap at 100% (robot waits at end)
       const actualPercent = Math.min(percent, completionPercent);
-      const normalizedPercent = completionPercent > 0 ? (actualPercent / completionPercent) * 100 : 0;
+      const normalizedPercent =
+        completionPercent > 0 ? (actualPercent / completionPercent) * 100 : 0;
 
       const state = calculateRobotState(
         normalizedPercent,
@@ -2275,35 +2420,35 @@
   let additionalRobotStates: Array<{ xy: BasePoint; heading: number }> =
     $derived.by(() =>
       additionalPaths.map((pathData) => {
-      const entry = additionalPathCache.get(pathData);
-      if (!entry || !pathData.startPoint) {
+        const entry = additionalPathCache.get(pathData);
+        if (!entry || !pathData.startPoint) {
+          return {
+            xy: { x: 0, y: 0 },
+            heading: 0,
+          };
+        }
+
+        // If this path should be complete, cap at 100% (robot waits at end)
+        const actualPercent = Math.min(percent, entry.completionPercent);
+        const normalizedPercent =
+          entry.completionPercent > 0
+            ? (actualPercent / entry.completionPercent) * 100
+            : 0;
+
+        const state = calculateRobotState(
+          normalizedPercent,
+          entry.prediction.timeline,
+          pathData.lines,
+          pathData.startPoint,
+          pathData.settings,
+          x,
+          y,
+        );
+
         return {
-          xy: { x: 0, y: 0 },
-          heading: 0,
+          xy: { x: state.x, y: state.y },
+          heading: state.heading,
         };
-      }
-
-      // If this path should be complete, cap at 100% (robot waits at end)
-      const actualPercent = Math.min(percent, entry.completionPercent);
-      const normalizedPercent =
-        entry.completionPercent > 0
-          ? (actualPercent / entry.completionPercent) * 100
-          : 0;
-
-      const state = calculateRobotState(
-        normalizedPercent,
-        entry.prediction.timeline,
-        pathData.lines,
-        pathData.startPoint,
-        pathData.settings,
-        x,
-        y,
-      );
-
-      return {
-        xy: { x: state.x, y: state.y },
-        heading: state.heading,
-      };
       }),
     );
   $effect.pre(() => {
@@ -2346,226 +2491,234 @@
 {#if isMobileBlocked}
   <MobileBlocked />
 {:else}
+  <Navbar
+    bind:lines
+    bind:startPoint
+    bind:shapes
+    bind:sequence
+    bind:secondStartPoint
+    bind:secondLines
+    bind:secondShapes
+    bind:secondSequence
+    bind:fieldPoints
+    bind:settings
+    {percent}
+    {saveProject}
+    {saveFileAs}
+    {loadFile}
+    {undoAction}
+    {redoAction}
+    {recordChange}
+    {canUndo}
+    {canRedo}
+    {optimizeAllLines}
+    {optimizingAll}
+    {twoElement}
+    {exportPathAsGif}
+  />
 
-<Navbar
-  bind:lines
-  bind:startPoint
-  bind:shapes
-  bind:sequence
-  bind:secondStartPoint
-  bind:secondLines
-  bind:secondShapes
-  bind:secondSequence
-  bind:fieldPoints
-  bind:settings
-  {percent}
-  {saveProject}
-  {saveFileAs}
-  {loadFile}
-  {undoAction}
-  {redoAction}
-  {recordChange}
-  {canUndo}
-  {canRedo}
-  {optimizeAllLines}
-  {optimizingAll}
-  {twoElement}
-  {exportPathAsGif}
-/>
+  <SaveDialog
+    bind:isOpen={showSaveDialog}
+    {isSaving}
+    fileName={pathStem($currentFilePath) || "my_path"}
+  />
 
-<SaveDialog
-  bind:isOpen={showSaveDialog}
-  {isSaving}
-  fileName={pathStem($currentFilePath) || "my_path"}
-/>
+  <DualPathSaveDialog bind:isOpen={showDualPathSaveDialog} />
 
-<DualPathSaveDialog bind:isOpen={showDualPathSaveDialog} />
+  <ProgressDialog
+    isOpen={exportingGif}
+    progress={gifExportProgress}
+    statusMessage={gifExportStatus}
+    onCancel={() => {
+      cancelGifExport = true;
+      gifExportStatus = "Cancelling...";
+    }}
+  />
 
-<ProgressDialog
-  isOpen={exportingGif}
-  progress={gifExportProgress}
-  statusMessage={gifExportStatus}
-  onCancel={() => {
-    cancelGifExport = true;
-    gifExportStatus = "Cancelling...";
-  }}
-/>
+  <ToastHost />
 
-<ToastHost />
-
-<!--   {saveFile} -->
-<div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
-  <div
-    class="desktop-grid h-full"
-    style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`}; --center-width: ${centerWidth}px;`}
-  >
-    <LeftRail
-      hidden={leftPanelHidden}
-      fileName={basename($currentFilePath) || "untitled_path.pp"}
-      version="v1.2.1"
-      lineCount={lines.length}
-      {pathPreviewItems}
-      {selectedLineIndex}
-      onToggleVisibility={toggleLeftPanelVisibility}
-      onSelectLine={(lineIndex) => selectLinePoint(lineIndex, 0)}
-    />
-
-    <PanelDivider
-      side="left"
-      hidden={leftPanelHidden}
-      onResizeStart={beginPanelResize}
-      onRestore={() => (leftPanelHidden = false)}
-    />
-
-    <main class="panel-box center-stage">
-      <div class="module-header-row mb-2">
-        <h3 class="module-title">Field</h3>
-        <span class="module-caption">Click a line or point to select it</span>
-      </div>
-      <FieldToolbar
-        {playing}
-        {penToolEnabled}
-        onAddPath={addNewLine}
-        onTogglePenTool={togglePenTool}
-        onAddControlPoint={addControlPoint}
-        onRemoveControlPoint={removeControlPoint}
-        onCreatePathToLastPoint={createPathBetweenSelectedPoints}
-        onTogglePlay={() => (playing ? pause() : play())}
+  <!--   {saveFile} -->
+  <div class="ui-shell w-screen h-screen pt-[5.1rem] px-3 pb-3">
+    <div
+      class="desktop-grid h-full"
+      style={`--left-panel-width: ${leftPanelHidden ? "0px" : `${leftPanelWidth}px`}; --right-panel-width: ${rightPanelHidden ? "0px" : `${rightPanelWidth}px`}; --center-width: ${centerWidth}px;`}
+    >
+      <LeftRail
+        hidden={leftPanelHidden}
+        fileName={basename($currentFilePath) || "untitled_path.pp"}
+        version="v1.2.1"
+        lineCount={lines.length}
+        {pathPreviewItems}
+        {selectedLineIndex}
+        onToggleVisibility={toggleLeftPanelVisibility}
+        onSelectLine={(lineIndex) => selectLinePoint(lineIndex, 0)}
       />
 
-      <div
-        class="field-stage flex h-full justify-center items-center"
-        bind:clientWidth={fieldStageWidth}
-        bind:clientHeight={fieldStageHeight}
-      >
+      <PanelDivider
+        side="left"
+        hidden={leftPanelHidden}
+        onResizeStart={beginPanelResize}
+        onRestore={() => (leftPanelHidden = false)}
+      />
+
+      <main class="panel-box center-stage">
+        <div class="module-header-row mb-2">
+          <h3 class="module-title">Field</h3>
+          <span class="module-caption">Click a line or point to select it</span>
+        </div>
+        <FieldToolbar
+          {playing}
+          {penToolEnabled}
+          onAddPath={addNewLine}
+          onTogglePenTool={togglePenTool}
+          onAddControlPoint={addControlPoint}
+          onRemoveControlPoint={removeControlPoint}
+          onCreatePathToLastPoint={createPathBetweenSelectedPoints}
+          onTogglePlay={() => (playing ? pause() : play())}
+        />
+
         <div
-          bind:this={twoElement}
-          bind:clientWidth={width}
-          bind:clientHeight={height}
-          class="bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
-          role="application"
-          style={`width: ${fieldPixelSize}px; height: ${fieldPixelSize}px; max-width: 100%; max-height: 100%; aspect-ratio: 1 / 1; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-drag: none; -webkit-user-drag: none; -khtml-user-drag: none; -moz-user-drag: none; -ms-user-drag: none; -o-user-drag: none;`}
-          oncontextmenu={(e) => e.preventDefault()}
-      ondragstart={(e) => e.preventDefault()}
-      onselectstart={(e) => e.preventDefault()}
-      tabindex="-1"
+          class="field-stage flex h-full justify-center items-center"
+          bind:clientWidth={fieldStageWidth}
+          bind:clientHeight={fieldStageHeight}
         >
-      <FieldMapImage
-        src={fieldMapSrc}
-        fieldMapName={settings.fieldMap}
-        onSettled={() => (fieldMapLoaded = true)}
-      />
-      <canvas
-        bind:this={fieldPointsCanvas}
-        class="absolute top-0 left-0 w-full h-full z-15 pointer-events-none"
-        aria-hidden="true"
-      ></canvas>
-      <MathTools {x} {y} {twoElement} {robotXY} />
-      <!-- Main robot: only show in normal mode -->
-      {#if !isMultiPathMode}
-        <RobotSprite
-          xy={robotXY}
-          heading={robotHeading}
-          widthPx={x(robotWidth)}
-          heightPx={x(robotHeight)}
-          {settings}
-          alt="Robot"
-          zIndex={20}
-          arrowZIndex={21}
-          arrowId="arrowhead-main"
-          showTValue={settings.showCurrentTValue}
-          tValue={robotT}
-          onImageSettled={() => (robotImageLoaded = true)}
-        />
-      {/if}
-      <!-- Second robot: only show in dual path mode (not multi-path mode) -->
-      {#if !isMultiPathMode && $dualPathMode}
-        <RobotSprite
-          xy={secondRobotXY}
-          heading={secondRobotHeading}
-          widthPx={x(robotWidth)}
-          heightPx={x(robotHeight)}
-          {settings}
-          alt="Robot 2"
-          zIndex={19}
-          arrowZIndex={19}
-          opacity={0.8}
-          arrowId="arrowhead-second"
-          onImageSettled={() => (robotImageLoaded = true)}
-        />
-      {/if}
-      <!-- Additional robots: only show in multi-path mode -->
-      {#if isMultiPathMode}
-        {#each additionalRobotStates as robotState, idx (idx)}
-          <RobotSprite
-            xy={robotState.xy}
-            heading={robotState.heading}
-            widthPx={x(robotWidth)}
-            heightPx={x(robotHeight)}
-            {settings}
-            alt="Robot {idx + 1}"
-            zIndex={20 - idx}
-            arrowZIndex={20 - idx}
-            opacity={1.0 - idx * 0.15}
-            arrowId="arrowhead-{idx}"
-            onImageSettled={() => (robotImageLoaded = true)}
-          />
-        {/each}
-      {/if}
-      {#if !initialAssetsReady}
-        <FieldLoadingOverlay />
-      {/if}
-        </div>
-      </div>
-      <div class="module-footer">Field · {FIELD_SIZE}&quot; x {FIELD_SIZE}&quot;</div>
-    </main>
-
-    <PanelDivider
-      side="right"
-      hidden={rightPanelHidden}
-      onResizeStart={beginPanelResize}
-      onRestore={() => (rightPanelHidden = false)}
-    />
-
-    <aside class="panel-box side-rail side-rail-right" class:side-rail--collapsed={rightPanelHidden}>
-      <div class="module-box control-panel-header">
-        <div class="module-header-row">
-          <div>
-            <h3 class="module-title">Controls</h3>
-            <p class="module-caption">Edit playback, paths, and robot settings.</p>
-          </div>
-          <button
-            class="panel-toggle-btn"
-            type="button"
-            onclick={toggleRightPanelVisibility}
-            aria-label={rightPanelHidden ? "Show right panel" : "Hide right panel"}
-            title={rightPanelHidden ? "Show right panel" : "Hide right panel"}
+          <div
+            bind:this={twoElement}
+            bind:clientWidth={width}
+            bind:clientHeight={height}
+            class="bg-neutral-50 dark:bg-neutral-900 relative overflow-clip"
+            role="application"
+            style={`width: ${fieldPixelSize}px; height: ${fieldPixelSize}px; max-width: 100%; max-height: 100%; aspect-ratio: 1 / 1; user-select: none; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; user-drag: none; -webkit-user-drag: none; -khtml-user-drag: none; -moz-user-drag: none; -ms-user-drag: none; -o-user-drag: none;`}
+            oncontextmenu={(e) => e.preventDefault()}
+            ondragstart={(e) => e.preventDefault()}
+            onselectstart={(e) => e.preventDefault()}
+            tabindex="-1"
           >
-            {rightPanelHidden ? "‹" : "›"}
-          </button>
+            <FieldMapImage
+              src={fieldMapSrc}
+              fieldMapName={settings.fieldMap}
+              onSettled={() => (fieldMapLoaded = true)}
+            />
+            <canvas
+              bind:this={fieldPointsCanvas}
+              class="absolute top-0 left-0 w-full h-full z-15 pointer-events-none"
+              aria-hidden="true"
+            ></canvas>
+            <MathTools {x} {y} {twoElement} {robotXY} />
+            <!-- Main robot: only show in normal mode -->
+            {#if !isMultiPathMode}
+              <RobotSprite
+                xy={robotXY}
+                heading={robotHeading}
+                widthPx={x(robotWidth)}
+                heightPx={x(robotHeight)}
+                {settings}
+                alt="Robot"
+                zIndex={20}
+                arrowZIndex={21}
+                arrowId="arrowhead-main"
+                showTValue={settings.showCurrentTValue}
+                tValue={robotT}
+                onImageSettled={() => (robotImageLoaded = true)}
+              />
+            {/if}
+            <!-- Second robot: only show in dual path mode (not multi-path mode) -->
+            {#if !isMultiPathMode && $dualPathMode}
+              <RobotSprite
+                xy={secondRobotXY}
+                heading={secondRobotHeading}
+                widthPx={x(robotWidth)}
+                heightPx={x(robotHeight)}
+                {settings}
+                alt="Robot 2"
+                zIndex={19}
+                arrowZIndex={19}
+                opacity={0.8}
+                arrowId="arrowhead-second"
+                onImageSettled={() => (robotImageLoaded = true)}
+              />
+            {/if}
+            <!-- Additional robots: only show in multi-path mode -->
+            {#if isMultiPathMode}
+              {#each additionalRobotStates as robotState, idx (idx)}
+                <RobotSprite
+                  xy={robotState.xy}
+                  heading={robotState.heading}
+                  widthPx={x(robotWidth)}
+                  heightPx={x(robotHeight)}
+                  {settings}
+                  alt="Robot {idx + 1}"
+                  zIndex={20 - idx}
+                  arrowZIndex={20 - idx}
+                  opacity={1.0 - idx * 0.15}
+                  arrowId="arrowhead-{idx}"
+                  onImageSettled={() => (robotImageLoaded = true)}
+                />
+              {/each}
+            {/if}
+            {#if !initialAssetsReady}
+              <FieldLoadingOverlay />
+            {/if}
+          </div>
         </div>
-      </div>
-      <ControlTab
-        bind:playing
-        {play}
-        {pause}
-        bind:startPoint
-        bind:lines
-        bind:sequence
-        bind:selectedLineIndex
-        bind:selectedPointIndex
-        {settings}
-        bind:percent
-        {robotXY}
-        {robotHeading}
-        bind:shapes
-        {x}
-        {y}
-        {handleSeek}
-        bind:loopAnimation
-        {recordChange}
+        <div class="module-footer">
+          Field · {FIELD_SIZE}&quot; x {FIELD_SIZE}&quot;
+        </div>
+      </main>
+
+      <PanelDivider
+        side="right"
+        hidden={rightPanelHidden}
+        onResizeStart={beginPanelResize}
+        onRestore={() => (rightPanelHidden = false)}
       />
-    </aside>
+
+      <aside
+        class="panel-box side-rail side-rail-right"
+        class:side-rail--collapsed={rightPanelHidden}
+      >
+        <div class="module-box control-panel-header">
+          <div class="module-header-row">
+            <div>
+              <h3 class="module-title">Controls</h3>
+              <p class="module-caption">
+                Edit playback, paths, and robot settings.
+              </p>
+            </div>
+            <button
+              class="panel-toggle-btn"
+              type="button"
+              onclick={toggleRightPanelVisibility}
+              aria-label={rightPanelHidden
+                ? "Show right panel"
+                : "Hide right panel"}
+              title={rightPanelHidden ? "Show right panel" : "Hide right panel"}
+            >
+              {rightPanelHidden ? "‹" : "›"}
+            </button>
+          </div>
+        </div>
+        <ControlTab
+          bind:playing
+          {play}
+          {pause}
+          bind:startPoint
+          bind:lines
+          bind:sequence
+          bind:selectedLineIndex
+          bind:selectedPointIndex
+          {settings}
+          bind:percent
+          {robotXY}
+          {robotHeading}
+          bind:shapes
+          {x}
+          {y}
+          {handleSeek}
+          bind:loopAnimation
+          {recordChange}
+        />
+      </aside>
+    </div>
   </div>
-</div>
 {/if}
