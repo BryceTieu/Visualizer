@@ -34,17 +34,20 @@
       )
     ) {
       const defaultSettings = await resetSettings();
-      // Update the bound settings object
-      Object.keys(defaultSettings).forEach((key) => {
-        settings[key] = defaultSettings[key];
-      });
+      // Reassign (rather than mutate) so the `bind:settings` prop propagates.
+      settings = { ...settings, ...defaultSettings };
     }
   }
+
+  // Keys of Settings whose value is a number (optional or not).
+  type NumericSettingKey = {
+    [K in keyof Settings]-?: NonNullable<Settings[K]> extends number ? K : never;
+  }[keyof Settings];
 
   // Helper function to handle input with validation
   function handleNumberInput(
     value: string,
-    property: keyof Settings,
+    property: NumericSettingKey,
     min?: number,
     max?: number,
   ) {
@@ -248,7 +251,7 @@
                   max="36"
                   step="0.5"
                   on:input={(e) =>
-                    handleNumberInput(e.target.value, "rWidth", 1, 36)}
+                    handleNumberInput(e.currentTarget.value, "rWidth", 1, 36)}
                   class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -271,7 +274,7 @@
                   max="36"
                   step="0.5"
                   on:input={(e) =>
-                    handleNumberInput(e.target.value, "rHeight", 1, 36)}
+                    handleNumberInput(e.currentTarget.value, "rHeight", 1, 36)}
                   class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -294,7 +297,7 @@
                   max="24"
                   step="0.5"
                   on:input={(e) =>
-                    handleNumberInput(e.target.value, "safetyMargin", 0, 24)}
+                    handleNumberInput(e.currentTarget.value, "safetyMargin", 0, 24)}
                   class="console-input w-full px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -325,7 +328,7 @@
                           "Failed to load robot image:",
                           settings.robotImage,
                         );
-                        e.target.src = "/robot.png"; // Fallback
+                        (e.currentTarget as HTMLImageElement).src = "/robot.png"; // Fallback
                       }}
                     />
                     {#if settings.robotImage && settings.robotImage !== "/robot.png"}
@@ -398,7 +401,7 @@
                       accept="image/*"
                       class="hidden"
                       on:change={async (e) => {
-                        const file = e.target.files?.[0];
+                        const file = e.currentTarget.files?.[0];
                         if (file) {
                           try {
                             const base64 = await imageToBase64(file);
@@ -415,14 +418,17 @@
                             document.body.appendChild(successMsg);
                             setTimeout(() => successMsg.remove(), 3000);
                           } catch (error) {
-                            alert("Error loading image: " + error.message);
+                            alert(
+                              "Error loading image: " +
+                                (error instanceof Error ? error.message : String(error)),
+                            );
                           }
                         }
                       }}
                     />
                     <button
                       on:click={() =>
-                        document.getElementById("robot-image-input").click()}
+                        document.getElementById("robot-image-input")?.click()}
                       class="console-action px-4 py-2 text-sm bg-blue-500 hover:bg-blue-600 text-white transition-colors flex items-center justify-center gap-2"
                     >
                       <svg
@@ -583,7 +589,7 @@
                     min="0"
                     step="1"
                     on:input={(e) =>
-                      handleNumberInput(e.target.value, "xVelocity", 0)}
+                      handleNumberInput(e.currentTarget.value, "xVelocity", 0)}
                     class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -602,7 +608,7 @@
                     min="0"
                     step="1"
                     on:input={(e) =>
-                      handleNumberInput(e.target.value, "yVelocity", 0)}
+                      handleNumberInput(e.currentTarget.value, "yVelocity", 0)}
                     class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -645,7 +651,7 @@
                   min="0"
                   step="1"
                   on:input={(e) =>
-                    handleNumberInput(e.target.value, "maxVelocity", 0)}
+                    handleNumberInput(e.currentTarget.value, "maxVelocity", 0)}
                   class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -666,7 +672,7 @@
                     min="0"
                     step="1"
                     on:input={(e) =>
-                      handleNumberInput(e.target.value, "maxAcceleration", 0)}
+                      handleNumberInput(e.currentTarget.value, "maxAcceleration", 0)}
                     class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -685,7 +691,7 @@
                     min="0"
                     step="1"
                     on:input={(e) =>
-                      handleNumberInput(e.target.value, "maxDeceleration", 0)}
+                      handleNumberInput(e.currentTarget.value, "maxDeceleration", 0)}
                     class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -709,7 +715,7 @@
                   min="0"
                   step="0.1"
                   on:input={(e) =>
-                    handleNumberInput(e.target.value, "kFriction", 0)}
+                    handleNumberInput(e.currentTarget.value, "kFriction", 0)}
                   class="w-full px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
@@ -819,7 +825,7 @@
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  <label for="left-panel-width" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                     Left Panel Width
                   </label>
                   <div class="flex items-center gap-2">
@@ -829,6 +835,7 @@
                       max="800"
                       step="5"
                       value={settings.leftPanelWidth ?? DEFAULT_SETTINGS.leftPanelWidth ?? 370}
+                      id="left-panel-width"
                       on:input={handleLeftPanelWidthInput}
                       class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -837,7 +844,7 @@
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  <label for="right-panel-width" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                     Right Panel Width
                   </label>
                   <div class="flex items-center gap-2">
@@ -847,6 +854,7 @@
                       max="800"
                       step="5"
                       value={settings.rightPanelWidth ?? DEFAULT_SETTINGS.rightPanelWidth ?? 620}
+                      id="right-panel-width"
                       on:input={handleRightPanelWidthInput}
                       class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -855,7 +863,7 @@
                 </div>
 
                 <div>
-                  <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                  <label for="right-panel-min-width" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                     Right Panel Minimum Width
                   </label>
                   <div class="flex items-center gap-2">
@@ -865,6 +873,7 @@
                       max="600"
                       step="5"
                       value={settings.rightPanelMinWidth ?? DEFAULT_SETTINGS.rightPanelMinWidth ?? 0}
+                      id="right-panel-min-width"
                       on:input={handleRightPanelMinWidthInput}
                       class="w-28 px-3 py-2 rounded-md border border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
@@ -981,13 +990,14 @@
               <div
                 class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
               >
-                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                <label for="pen-tool-accuracy" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
                   Pen Tool Accuracy
                 </label>
                 <input
                   type="number"
                   min="0"
                   step="1"
+                  id="pen-tool-accuracy"
                   bind:value={settings.penToolAccuracy}
                   class="w-full px-3 py-2 rounded border bg-white dark:bg-neutral-800"
                 />
@@ -1091,12 +1101,12 @@
                     Distance in inches between each robot body trace
                   </div>
                   <div class="mt-3">
-                    <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                    <label for="onion-color" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-1">
                       Onion Layer Color
-                      <div class="text-xs text-neutral-500 dark:text-neutral-400">Color used to draw onion-layer colliders</div>
                     </label>
+                    <div class="text-xs text-neutral-500 dark:text-neutral-400 mb-1">Color used to draw onion-layer colliders</div>
                     <div class="flex items-center gap-3">
-                      <input type="color" bind:value={settings.onionColor} class="w-10 h-10 p-0 border rounded" />
+                      <input id="onion-color" type="color" bind:value={settings.onionColor} class="w-10 h-10 p-0 border rounded" />
                       <input type="text" bind:value={settings.onionColor} class="px-2 py-1 rounded border bg-white dark:bg-neutral-800" />
                     </div>
                   </div>
@@ -1116,7 +1126,7 @@
                   
                   <!-- Arrow Length -->
                   <div class="mb-3">
-                    <label class="block text-sm text-neutral-700 dark:text-neutral-300 mb-1">
+                    <label for="heading-arrow-length" class="block text-sm text-neutral-700 dark:text-neutral-300 mb-1">
                       Arrow Length
                     </label>
                     <div class="flex items-center gap-2">
@@ -1125,6 +1135,7 @@
                         min="10"
                         max="100"
                         step="5"
+                        id="heading-arrow-length"
                         bind:value={settings.headingArrowLength}
                         class="flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                       />
@@ -1138,11 +1149,12 @@
 
                   <!-- Arrow Color -->
                   <div class="mb-3">
-                    <label class="block text-sm text-neutral-700 dark:text-neutral-300 mb-1">
+                    <label for="heading-arrow-color" class="block text-sm text-neutral-700 dark:text-neutral-300 mb-1">
                       Arrow Color
                     </label>
                     <div class="flex items-center gap-3">
                       <input
+                        id="heading-arrow-color"
                         type="color"
                         bind:value={settings.headingArrowColor}
                         class="w-10 h-10 p-0 border rounded cursor-pointer"
@@ -1157,7 +1169,7 @@
 
                   <!-- Arrow Thickness -->
                   <div>
-                    <label class="block text-sm text-neutral-700 dark:text-neutral-300 mb-1">
+                    <label for="heading-arrow-thickness" class="block text-sm text-neutral-700 dark:text-neutral-300 mb-1">
                       Arrow Thickness
                     </label>
                     <div class="flex items-center gap-2">
@@ -1166,6 +1178,7 @@
                         min="1"
                         max="10"
                         step="0.5"
+                        id="heading-arrow-thickness"
                         bind:value={settings.headingArrowThickness}
                         class="flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
                       />
@@ -1184,7 +1197,7 @@
               <div
                 class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
               >
-                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                <label for="path-opacity" class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
                   Path Opacity
                 </label>
                 <div class="flex items-center gap-2">
@@ -1193,6 +1206,7 @@
                     min="0.1"
                     max="1"
                     step="0.05"
+                    id="path-opacity"
                     bind:value={settings.pathOpacity}
                     class="flex-1 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                   />
@@ -1209,15 +1223,15 @@
               <div
                 class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700 mt-3"
               >
-                <label class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
+                <div class="block text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
                   Experimental Features
-                </label>
+                </div>
                 <div class="flex flex-col gap-2">
                   <label class="flex items-center gap-2">
                     <input
                       type="checkbox"
                       checked={settings.experimentalFeatures?.optimize ?? false}
-                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), optimize: e.target.checked })}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), optimize: e.currentTarget.checked })}
                       class="h-4 w-4"
                     />
                     <span class="text-sm">Enable Optimize button</span>
@@ -1226,7 +1240,7 @@
                     <input
                       type="checkbox"
                       checked={settings.experimentalFeatures?.curveThrough ?? false}
-                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), curveThrough: e.target.checked })}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), curveThrough: e.currentTarget.checked })}
                       class="h-4 w-4"
                     />
                     <span class="text-sm">Enable Curve Through features</span>
@@ -1235,7 +1249,7 @@
                     <input
                       type="checkbox"
                       checked={settings.experimentalFeatures?.obstacles ?? false}
-                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), obstacles: e.target.checked })}
+                      on:change={(e) => (settings.experimentalFeatures = { ...(settings.experimentalFeatures || {}), obstacles: e.currentTarget.checked })}
                       class="h-4 w-4"
                     />
                     <span class="text-sm">Enable Obstacles</span>

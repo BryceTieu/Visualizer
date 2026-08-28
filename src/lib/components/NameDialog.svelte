@@ -50,25 +50,26 @@
 </script>
 
 {#if isOpen}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     transition:fade={{ duration: 200, easing: cubicInOut }}
     class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[2000]"
     on:click={handleCancel}
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="dialog-title"
+    role="presentation"
   >
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       transition:fly={{ duration: 300, easing: cubicInOut, y: -20 }}
       class="bg-white dark:bg-neutral-800 rounded-lg shadow-2xl p-6 w-full max-w-md mx-4"
       on:click|stopPropagation
-      role="document"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="dialog-title"
+      tabindex="-1"
     >
       <h2
         id="dialog-title"

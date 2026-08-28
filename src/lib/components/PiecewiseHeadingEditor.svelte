@@ -233,7 +233,7 @@
       <div
         class="absolute top-0 h-full rounded-full opacity-80"
         style={`left:${segment.startProgress * 100}%; width:${Math.max((segment.endProgress - segment.startProgress) * 100, 0.2)}%; background: linear-gradient(90deg, rgba(59,130,246,0.6), rgba(16,185,129,0.6));`}
-      />
+></div>
       {#if index > 0}
         <button
           type="button"
@@ -242,7 +242,7 @@
           on:pointerdown={(event) => beginBoundaryDrag(index, event)}
           disabled={locked}
           aria-label={`Drag boundary ${index}`}
-        />
+></button>
       {/if}
     {/each}
   </div>

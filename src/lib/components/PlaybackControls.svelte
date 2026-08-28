@@ -109,7 +109,7 @@
       max="100"
       step="0.000001"
       class="w-full appearance-none slider focus:outline-none"
-      on:input={(e) => handleSeek(parseFloat(e.target.value))}
+      on:input={(e) => handleSeek(parseFloat(e.currentTarget.value))}
     />
   </div>
   <div class="flex items-center gap-2 ml-2 text-sm text-neutral-600 dark:text-neutral-300">

@@ -48,8 +48,8 @@
   export let robotHeight: number = 16;
   export let robotXY: BasePoint;
   export let robotHeading: number;
-  export let x: d3.ScaleLinear<number, number, number>;
-  export let y: d3.ScaleLinear<number, number, number>;
+  export let x: d3.ScaleLinear<number, number>;
+  export let y: d3.ScaleLinear<number, number>;
   export let settings: Settings;
   export let handleSeek: (percent: number) => void;
   export let loopAnimation: boolean;
@@ -108,7 +108,7 @@
   $: robotHeight;
 
   // Compute timeline markers for the UI (start of each travel segment)
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
+  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
   $: markers = (() => {
     const _markers: { percent: number; color: string; name: string }[] = [];
     if (
@@ -371,7 +371,7 @@
       nextLines[selectedLineIndex] = {
         ...existing,
         controlPoints: [ { x: seg.cp1.x, y: seg.cp1.y }, { x: seg.cp2.x, y: seg.cp2.y } ],
-        endPoint: { x: seg.end.x, y: seg.end.y, heading: existing.endPoint.heading as any },
+        endPoint: { ...existing.endPoint, x: seg.end.x, y: seg.end.y },
       };
     }
 

@@ -86,7 +86,7 @@
     exportMenuOpen = false;
   }
 
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
+  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
   $: elapsedSeconds = (percent / 100) * (timePrediction?.totalTime || 0);
 
   onMount(() => {

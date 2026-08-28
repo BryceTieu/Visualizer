@@ -64,25 +64,26 @@
 </script>
 
 {#if isOpen}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <!-- svelte-ignore a11y-no-static-element-interactions -->
-  <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div
     transition:fade={{ duration: 200, easing: cubicInOut }}
     class="console-backdrop fixed inset-0 flex items-center justify-center z-[2000]"
     on:click={handleClose}
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="multipaths-title"
+    role="presentation"
   >
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       transition:fly={{ duration: 300, easing: cubicInOut, y: -20 }}
       class="console-panel console-multipaths-shell p-6 w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col"
       on:click|stopPropagation
-      role="document"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="multipaths-title"
+      tabindex="-1"
     >
       <h2
         id="multipaths-title"
@@ -182,7 +183,7 @@
                   {:else}
                     <div
                       class="size-6 border-2 border-neutral-300 dark:border-neutral-600"
-                    />
+                    ></div>
                   {/if}
                 </div>
 

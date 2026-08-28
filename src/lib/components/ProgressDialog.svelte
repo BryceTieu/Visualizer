@@ -45,7 +45,7 @@
           <div
             class="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-300 ease-out"
             style="width: {progressPercentage}%"
-          />
+          ></div>
         </div>
       </div>
 

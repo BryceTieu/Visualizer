@@ -120,6 +120,8 @@ export interface PathChain {
   name: string;
   color: string;
   lineIds: string[];
+  // Only present in older saved files; never written by current code.
+  globalHeadingInterpolation?: PiecewiseHeadingInterpolation;
 }
 
 export interface Settings {

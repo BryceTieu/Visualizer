@@ -82,7 +82,7 @@
         class="relative size-5 rounded-full overflow-hidden shadow-sm border border-neutral-300 dark:border-neutral-600 shrink-0"
         style="background-color: {line.color}"
       >
-        <div class="absolute inset-0" title="Path color" />
+        <div class="absolute inset-0" title="Path color"></div>
       </div>
 
       <!-- Lock/Unlock Button -->
@@ -271,7 +271,7 @@
   </div>
 
   {#if !collapsed}
-    <div class={`h-[0.75px] w-full`} style={`background: ${line.color}`} />
+    <div class={`h-[0.75px] w-full`} style={`background: ${line.color}`}></div>
 
     <div class="flex flex-col justify-start items-start w-full">
       <div class="font-light">Point Position:</div>

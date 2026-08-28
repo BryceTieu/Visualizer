@@ -78,20 +78,20 @@ With tangential heading, the heading follows the direction of the line."
       max="180"
       value={endPoint.degrees || 0}
       on:input={(e) => {
-        const value = parseFloat(e.target.value);
+        const value = parseFloat(e.currentTarget.value);
         if (!isNaN(value)) {
           endPoint.degrees = value;
         } else {
           // If empty or invalid, set to 0
           endPoint.degrees = 0;
-          e.target.value = "0";
+          e.currentTarget.value = "0";
         }
         dispatch("change");
       }}
       on:blur={(e) => {
-        if (e.target.value === "" || isNaN(parseFloat(e.target.value))) {
+        if (e.currentTarget.value === "" || isNaN(parseFloat(e.currentTarget.value))) {
           endPoint.degrees = 0;
-          e.target.value = "0";
+          e.currentTarget.value = "0";
         }
         dispatch("commit");
       }}

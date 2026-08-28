@@ -729,17 +729,17 @@
   let shapeGroup = new Two.Group();
   shapeGroup.id = "shape-group";
   // Coordinate converters
-  let x: d3.ScaleLinear<number, number, number>;
+  let x: d3.ScaleLinear<number, number>;
 
   // Animation controller
   let loopAnimation = true;
   let animationController: ReturnType<typeof createAnimationController>;
-  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence, []);
+  $: timePrediction = calculatePathTime(startPoint, lines, settings, sequence);
   $: animationDuration = getAnimationDuration(timePrediction.totalTime / 1000);
   
   // Second path timeline (for dual path mode)
   $: secondTimePrediction = $dualPathMode && secondStartPoint && secondLines.length > 0 
-    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence, [])
+    ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
     : null;
   
   // Calculate max duration across all paths for playbar scaling
@@ -753,8 +753,7 @@
             pathData.startPoint,
             pathData.lines,
             pathData.settings,
-            pathData.sequence,
-            []
+            pathData.sequence
           );
           if (pathTime) {
             maxTime = Math.max(maxTime, pathTime.totalTime);
@@ -959,7 +958,6 @@
               `${idx1}`,
               x(point.x),
               y(point.y - 0.15),
-              x(POINT_RADIUS),
             );
             pointText.id = `point-${idx + 1}-${idx1}-text`;
             pointText.size = x(1.55);
@@ -1055,7 +1053,6 @@
           `${vertexIdx + 1}`,
           x(vertex.x),
           y(vertex.y - 0.15),
-          x(POINT_RADIUS),
         );
         pointText.id = `obstacle-${shapeIdx}-${vertexIdx}-text`;
         pointText.size = x(1.55);
@@ -1103,7 +1100,6 @@
               `${idx1}`,
               x(point.x),
               y(point.y - 0.15),
-              x(POINT_RADIUS),
             );
             pointText.id = `second-point-${idx + 1}-${idx1}-text`;
             pointText.size = x(1.55);
@@ -1171,7 +1167,6 @@
                 `${pointIdx}`,
                 x(point.x),
                 y(point.y - 0.15),
-                x(POINT_RADIUS * 0.9),
               );
               pointText.id = `additional-path-${pathIdx}-point-${lineIdx + 1}-${pointIdx}-text`;
               pointText.size = x(1.4);
@@ -2343,14 +2338,14 @@
         }
       } else if (hasDualPath) {
         // Dual path mode - use the longer path
-        const path1Time = calculatePathTime(startPoint, lines, settings, sequence, []);
+        const path1Time = calculatePathTime(startPoint, lines, settings, sequence);
         const path2Time = secondStartPoint 
-          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence, [])
+          ? calculatePathTime(secondStartPoint, secondLines, settings, secondSequence)
           : { totalTime: 0 };
         totalDuration = Math.max(path1Time?.totalTime || 0, path2Time?.totalTime || 0);
       } else {
         // Single path mode
-        const pathTime = calculatePathTime(startPoint, lines, settings, sequence, []);
+        const pathTime = calculatePathTime(startPoint, lines, settings, sequence);
         totalDuration = pathTime?.totalTime || 0;
       }
 
@@ -3103,7 +3098,7 @@
           (settings?.experimentalFeatures?.obstacles && elem?.id.startsWith("obstacle"))
         ) {
           two.renderer.domElement.style.cursor = "pointer";
-          currentElem = preferredPointElemId || elem.id;
+          currentElem = preferredPointElemId || elem?.id || null;
         } else {
           two.renderer.domElement.style.cursor = "auto";
           currentElem = null;
@@ -3627,7 +3622,9 @@
   }
 
   function loadRobot(evt: Event) {
-    loadRobotImage(evt, () => updateRobotImageDisplay());
+    const file = (evt.currentTarget as HTMLInputElement | null)?.files?.[0];
+    if (!file) return;
+    loadRobotImage(file, () => updateRobotImageDisplay());
   }
 
   function addNewLine() {
@@ -4145,7 +4142,7 @@
         on:error={(e) => {
           console.error("Failed to load field map:", settings.fieldMap);
           fieldMapLoaded = true;
-          e.target.src = "/fields/decode.webp"; // Fallback
+          (e.currentTarget as HTMLImageElement).src = "/fields/decode.webp"; // Fallback
         }}
         on:dragstart={(e) => e.preventDefault()}
         on:selectstart={(e) => e.preventDefault()}
@@ -4169,7 +4166,7 @@ pointer-events: none;`}
           on:error={(e) => {
             console.error("Failed to load robot image:", settings.robotImage);
             robotImageLoaded = true;
-            e.target.src = "/robot.png"; // Fallback to default
+            (e.currentTarget as HTMLImageElement).src = "/robot.png"; // Fallback to default
           }}
           on:dragstart={(e) => e.preventDefault()}
           on:selectstart={(e) => e.preventDefault()}
@@ -4229,7 +4226,7 @@ pointer-events: none; opacity: 0.8;`}
           on:error={(e) => {
             console.error("Failed to load robot image:", settings.robotImage);
             robotImageLoaded = true;
-            e.target.src = "/robot.png";
+            (e.currentTarget as HTMLImageElement).src = "/robot.png";
           }}
           on:dragstart={(e) => e.preventDefault()}
           on:selectstart={(e) => e.preventDefault()}
@@ -4282,7 +4279,7 @@ pointer-events: none; opacity: ${1.0 - idx * 0.15};`}
             on:error={(e) => {
               console.error("Failed to load robot image:", settings.robotImage);
               robotImageLoaded = true;
-              e.target.src = "/robot.png";
+              (e.currentTarget as HTMLImageElement).src = "/robot.png";
             }}
             on:dragstart={(e) => e.preventDefault()}
             on:selectstart={(e) => e.preventDefault()}

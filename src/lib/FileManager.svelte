@@ -858,7 +858,7 @@
           isOpen = false;
         }
       }}
-    />
+    ></div>
   {/if}
 
   <!-- Sidebar -->

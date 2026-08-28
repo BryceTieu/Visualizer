@@ -46,6 +46,7 @@
       on:keydown|stopPropagation
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
     >
       <h2 class="text-lg font-semibold text-neutral-900 dark:text-white mb-4">
         Save Path Changes

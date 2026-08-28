@@ -688,6 +688,7 @@ export function generateOnionLayers(
     y: number;
     heading: number;
     corners: BasePoint[];
+    lineIndex: number;
   }> = [];
 
   // Calculate total path length

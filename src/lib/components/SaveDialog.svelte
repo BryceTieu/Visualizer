@@ -61,7 +61,7 @@
       on:keydown={() => {}}
       aria-label="Close save dialog"
       transition:fade={{ duration: 250 }}
-    />
+    ></div>
 
     <!-- Dialog -->
     <div
