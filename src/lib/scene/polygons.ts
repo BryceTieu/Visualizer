@@ -1,12 +1,12 @@
 import Two from "two.js";
-import type { Path } from "two.js/src/path";
+import type { Path as TwoPath } from "two.js/src/path";
 import type { BasePoint, TimePrediction } from "../../types";
 import type { SceneScales } from "./types";
 
 export function buildClosedPolygon(
   points: BasePoint[],
   { x, y }: SceneScales,
-): Path {
+): TwoPath {
   const vertices = [
     new Two.Anchor(
       x(points[0].x),
@@ -56,7 +56,7 @@ export function buildGhostPath(
   ghostPoints: BasePoint[],
   options: { id: string; color: string },
   scales: SceneScales,
-): Path | null {
+): TwoPath | null {
   if (ghostPoints.length < 3) return null;
 
   const ghostPath = buildClosedPolygon(ghostPoints, scales);
@@ -72,7 +72,7 @@ export function buildOnionLayer(
   corners: BasePoint[],
   options: { id: string; color: string },
   scales: SceneScales,
-): Path {
+): TwoPath {
   const layer = buildClosedPolygon(corners, scales);
   layer.id = options.id;
   layer.stroke = options.color;
@@ -87,7 +87,7 @@ export function buildOnionLayer(
  * When "onion layers for the next point only" is enabled, narrow the layers to
  * the travel segment the playhead is currently in, or the next one upcoming.
  */
-export function selectVisibleOnionLayers<T extends { lineIndex?: number }>(
+export function selectVisibleOnionLayers<T extends { lineId?: string }>(
   layers: T[],
   prediction: TimePrediction | null | undefined,
   percent: number,
@@ -100,21 +100,20 @@ export function selectVisibleOnionLayers<T extends { lineIndex?: number }>(
     (ev) => ev.type === "travel",
   );
 
-  let selectedLineIndex: number | null = null;
+  let selectedLineId: string | null = null;
 
   const currentTravel = travelEvents.find(
     (ev) => ev.startTime <= currentTime && ev.endTime >= currentTime,
   );
   if (currentTravel) {
-    selectedLineIndex = currentTravel.lineIndex as number;
+    selectedLineId = currentTravel.lineId ?? null;
   } else {
     const nextTravel = travelEvents.find((ev) => ev.startTime > currentTime);
-    if (nextTravel) selectedLineIndex = nextTravel.lineIndex as number;
+    if (nextTravel) selectedLineId = nextTravel.lineId ?? null;
     else if (travelEvents.length)
-      selectedLineIndex = travelEvents[travelEvents.length - 1]
-        .lineIndex as number;
+      selectedLineId = travelEvents[travelEvents.length - 1].lineId ?? null;
   }
 
-  if (selectedLineIndex === null) return layers;
-  return layers.filter((layer) => layer.lineIndex === selectedLineIndex);
+  if (selectedLineId === null) return layers;
+  return layers.filter((layer) => layer.lineId === selectedLineId);
 }

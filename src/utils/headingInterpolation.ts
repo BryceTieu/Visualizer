@@ -1,13 +1,12 @@
 import type {
   BasePoint,
-  Line,
+  Heading,
   PiecewiseHeadingInterpolation,
   PiecewiseHeadingInterpolationType,
   PiecewiseHeadingSegment,
-  PathChain,
 } from "../types";
 import {
-  getCurvePoint,
+  clamp,
   interpolateAngleDegrees,
   normalizeAngleDegrees,
   radiansToDegrees,
@@ -15,8 +14,47 @@ import {
 
 const MIN_SEGMENT_LENGTH = 0.0001;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
+/** Sample count used when approximating a curve's arc length. */
+export const CURVE_SAMPLES = 100;
+
+/**
+ * The single angle a heading rule resolves to at one end of its segment.
+ *
+ * Tangential headings have no fixed angle without the surrounding geometry, so
+ * they resolve to 0 here; callers that need the real tangent (the time
+ * calculator) use `getLineStartHeading` / `getLineEndHeading` in ./math, which
+ * take the neighbouring points into account.
+ */
+export function headingAngleAt(
+  heading: Heading,
+  role: "start" | "end",
+): number {
+  switch (heading.type) {
+    case "constant":
+      return heading.degrees;
+    case "linear":
+      return role === "start" ? heading.startDeg : heading.endDeg;
+    case "tangential":
+      return 0;
+    case "piecewise":
+      return piecewiseEdgeHeading(heading.piecewiseHeading, role);
+  }
+}
+
+function piecewiseEdgeHeading(
+  interpolation: PiecewiseHeadingInterpolation,
+  role: "start" | "end",
+): number {
+  const segments = interpolation?.segments ?? [];
+  const segment =
+    role === "start" ? segments[0] : segments[segments.length - 1];
+  const parameters = segment?.parameters;
+  if (!parameters) return 0;
+  if (segment.interpolationType === "constant") return parameters.degrees ?? 0;
+  if (segment.interpolationType === "linear") {
+    return (role === "start" ? parameters.startDeg : parameters.endDeg) ?? 0;
+  }
+  return 0;
 }
 
 function clonePoint(point?: BasePoint): BasePoint | undefined {
@@ -66,13 +104,8 @@ export function createDefaultPiecewiseSegment(): PiecewiseHeadingSegment {
   };
 }
 
-export function createDefaultPiecewiseHeadingInterpolation(
-  scope: "path" | "chain" = "path",
-): PiecewiseHeadingInterpolation {
-  return {
-    scope,
-    segments: [createDefaultPiecewiseSegment()],
-  };
+export function createDefaultPiecewiseHeadingInterpolation(): PiecewiseHeadingInterpolation {
+  return { segments: [createDefaultPiecewiseSegment()] };
 }
 
 function normalizeSegment(
@@ -100,7 +133,6 @@ function normalizeSegment(
 export function normalizePiecewiseHeadingInterpolation(
   input?: PiecewiseHeadingInterpolation,
 ): PiecewiseHeadingInterpolation {
-  const scope = input?.scope === "chain" ? "chain" : "path";
   const sourceSegments = input?.segments?.length
     ? input.segments
     : [createDefaultPiecewiseSegment()];
@@ -135,7 +167,7 @@ export function normalizePiecewiseHeadingInterpolation(
   }
 
   if (repaired.length === 0) {
-    return createDefaultPiecewiseHeadingInterpolation(scope);
+    return createDefaultPiecewiseHeadingInterpolation();
   }
 
   const merged: PiecewiseHeadingSegment[] = [];
@@ -162,10 +194,7 @@ export function normalizePiecewiseHeadingInterpolation(
   merged[0].startProgress = 0;
   merged[merged.length - 1].endProgress = 1;
 
-  return {
-    scope,
-    segments: merged,
-  };
+  return { segments: merged };
 }
 
 export function validatePiecewiseHeadingInterpolation(
@@ -225,110 +254,6 @@ export function degreesToRadians(degrees: number): number {
   return (normalizeAngleDegrees(degrees) * Math.PI) / 180;
 }
 
-export function toDegreesDisplay(value: number): number {
-  return normalizeAngleDegrees(value);
-}
-
-export function lineCurvePoints(
-  startPoint: BasePoint,
-  line: Line,
-): BasePoint[] {
-  return [startPoint, ...line.controlPoints, line.endPoint];
-}
-
-export function approximateCurveLength(
-  points: BasePoint[],
-  samples = 100,
-): number {
-  if (points.length < 2) return 0;
-
-  let length = 0;
-  let previousPoint = points[0];
-
-  for (let index = 1; index <= samples; index += 1) {
-    const t = index / samples;
-    const point = getCurvePoint(t, points);
-    const dx = point.x - previousPoint.x;
-    const dy = point.y - previousPoint.y;
-    length += Math.sqrt(dx * dx + dy * dy);
-    previousPoint = point;
-  }
-
-  return length;
-}
-
-export function getPointAndTangentAtProgress(
-  points: BasePoint[],
-  progress: number,
-  reversed = false,
-): { point: BasePoint; tangentDegrees: number } {
-  const clampedProgress = clamp(progress, 0, 1);
-  const point = getCurvePoint(clampedProgress, points);
-  const epsilon = 0.01;
-  const nextT = clamp(clampedProgress + (reversed ? -epsilon : epsilon), 0, 1);
-  const nextPoint = getCurvePoint(nextT, points);
-  const dx = nextPoint.x - point.x;
-  const dy = nextPoint.y - point.y;
-
-  return {
-    point,
-    tangentDegrees:
-      Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9
-        ? 0
-        : radiansToDegrees(Math.atan2(dy, dx)),
-  };
-}
-
-export function getChainTraversalState(
-  chain: PathChain,
-  lines: Line[],
-  startPoint: BasePoint,
-  progress: number,
-): { point: BasePoint; tangentDegrees: number } {
-  const chainLines = chain.lineIds
-    .map((lineId) => lines.find((line) => line.id === lineId))
-    .filter((line): line is Line => Boolean(line));
-
-  if (chainLines.length === 0) {
-    return getPointAndTangentAtProgress([startPoint, startPoint], 0);
-  }
-
-  const lineData = chainLines.map((line, index) => {
-    const lineStart = index === 0 ? startPoint : chainLines[index - 1].endPoint;
-    const points = lineCurvePoints(lineStart, line);
-    return {
-      line,
-      points,
-      length: approximateCurveLength(points),
-    };
-  });
-
-  const totalLength = lineData.reduce((sum, entry) => sum + entry.length, 0);
-  if (totalLength <= 1e-9) {
-    return getPointAndTangentAtProgress(lineData[0].points, 0);
-  }
-
-  const targetDistance = clamp(progress, 0, 1) * totalLength;
-  let accumulated = 0;
-
-  for (const entry of lineData) {
-    const nextAccumulated = accumulated + entry.length;
-    if (
-      targetDistance <= nextAccumulated ||
-      entry === lineData[lineData.length - 1]
-    ) {
-      const localProgress =
-        entry.length <= 1e-9
-          ? 0
-          : (targetDistance - accumulated) / entry.length;
-      return getPointAndTangentAtProgress(entry.points, localProgress);
-    }
-    accumulated = nextAccumulated;
-  }
-
-  return getPointAndTangentAtProgress(lineData[lineData.length - 1].points, 1);
-}
-
 export function evaluatePiecewiseHeading(
   interpolation: PiecewiseHeadingInterpolation,
   progress: number,
@@ -336,8 +261,6 @@ export function evaluatePiecewiseHeading(
     points: BasePoint[];
     currentPoint: BasePoint;
     tangentDegrees: number;
-    chainState?: { point: BasePoint; tangentDegrees: number };
-    pointOverride?: BasePoint;
   },
 ): number {
   const normalized = normalizePiecewiseHeadingInterpolation(interpolation);
@@ -357,14 +280,8 @@ export function evaluatePiecewiseHeading(
     1,
   );
 
-  const sourcePoint =
-    interpolation.scope === "chain"
-      ? options.chainState?.point || options.currentPoint
-      : options.pointOverride || options.currentPoint;
-  const sourceTangent =
-    interpolation.scope === "chain"
-      ? (options.chainState?.tangentDegrees ?? options.tangentDegrees)
-      : options.tangentDegrees;
+  const sourcePoint = options.currentPoint;
+  const sourceTangent = options.tangentDegrees;
 
   switch (segment.interpolationType) {
     case "constant":

@@ -1,19 +1,22 @@
 import type {
-  Point,
   BasePoint,
-  Line,
+  Path,
   Settings,
+  StartPose,
   TimePrediction,
   TimelineEvent,
   SequenceItem,
 } from "../types";
 import {
-  getCurvePoint,
   getLineStartHeading,
   getLineEndHeading,
   getAngularDifference,
 } from "./math";
-import { approximateCurveLength } from "./headingInterpolation";
+import {
+  atomicSegments,
+  effectiveHeadingAt,
+  flattenToAtomicSegments,
+} from "./pathTraversal";
 
 /**
  * Calculate time for a motion profile (trapezoidal or triangular)
@@ -48,8 +51,8 @@ function calculateMotionProfileTime(
 }
 
 export function calculatePathTime(
-  startPoint: Point,
-  lines: Line[],
+  startPoint: StartPose,
+  lines: Path[],
   settings: Settings,
   sequence?: SequenceItem[],
 ): TimePrediction {
@@ -68,43 +71,23 @@ export function calculatePathTime(
   const timeline: TimelineEvent[] = [];
 
   let currentTime = 0;
-  let currentHeading = 0;
+  let currentHeading = startPoint.headingDeg;
 
-  // Initialize heading based on start point settings
-  // Note: This initialization is technically overridden by the idx===0 check below
-  // to ensure no initial turning, but kept for fallback logic.
-  if (startPoint.heading === "linear") currentHeading = startPoint.startDeg;
-  else if (startPoint.heading === "constant")
-    currentHeading = startPoint.degrees;
-  else if (startPoint.heading === "tangential") {
-    if (lines.length > 0) {
-      const firstLine = lines[0];
-      const nextP =
-        firstLine.controlPoints.length > 0
-          ? firstLine.controlPoints[0]
-          : firstLine.endPoint;
-      const angle =
-        Math.atan2(nextP.y - startPoint.y, nextP.x - startPoint.x) *
-        (180 / Math.PI);
-      currentHeading = startPoint.reverse ? angle + 180 : angle;
-    } else {
-      currentHeading = 0;
-    }
-  }
+  // Create map by order of segments
+  const pathSegments = flattenToAtomicSegments(startPoint, lines);
+  const segmentById = new Map(
+    pathSegments.map((segment) => [segment.line.id, segment]),
+  );
 
-  // Create map and default sequence
-  const lineById = new Map<string, Line>();
-  lines.forEach((ln) => {
-    if (!ln.id) ln.id = `line-${Math.random().toString(36).slice(2)}`;
-    lineById.set(ln.id, ln);
-  });
-
+  // The default sequence drives every leaf, not every top-level entry: a group
+  // is not itself drivable.
   const seq: SequenceItem[] =
     sequence && sequence.length
       ? sequence
-      : lines.map((ln) => ({ kind: "path", lineId: ln.id! }));
+      : atomicSegments(lines).map((ln) => ({ kind: "path", lineId: ln.id }));
 
-  let lastPoint: Point = startPoint;
+  // Where the robot actually sits, which does follow execution order.
+  let robotPoint: BasePoint = startPoint;
 
   seq.forEach((item, idx) => {
     if (item.kind === "wait") {
@@ -118,22 +101,33 @@ export function calculatePathTime(
           endTime: currentTime + waitSeconds,
           startHeading: currentHeading,
           targetHeading: currentHeading,
-          atPoint: lastPoint,
+          atPoint: robotPoint,
         });
         currentTime += waitSeconds;
       }
       return;
     }
 
-    const line = lineById.get(item.lineId);
-    if (!line || !line.endPoint) {
+    const segment = segmentById.get(item.lineId);
+    if (!segment) {
       // Skip missing or malformed lines in sequence
       return;
     }
-    const prevPoint = lastPoint;
+    const line = segment.line;
+    const prevPoint = segment.start;
 
     // --- ROTATION CHECK ---
-    const requiredStartHeading = getLineStartHeading(line, prevPoint);
+    // Read the heading the same way the animation does, so a group override
+    // does not leave the timeline turning to an angle that is never shown.
+    const startHeading = effectiveHeadingAt(pathSegments, segment.index, 0);
+    const endHeading = effectiveHeadingAt(pathSegments, segment.index, 1);
+
+    const requiredStartHeading = getLineStartHeading(
+      line,
+      prevPoint,
+      startHeading.heading,
+      startHeading.t,
+    );
     if (idx === 0) currentHeading = requiredStartHeading;
     const diff = Math.abs(
       getAngularDifference(currentHeading, requiredStartHeading),
@@ -155,18 +149,9 @@ export function calculatePathTime(
     }
 
     // --- TRAVEL ---
-    const curvePoints = [prevPoint, ...line.controlPoints, line.endPoint];
-    const length = approximateCurveLength(curvePoints);
+    const length = segment.arcLength;
     segmentLengths.push(length);
     let segmentTime: number;
-    const sampledPoints: Array<{ x: number; y: number }> = [];
-    const sampleCount = Math.max(12, Math.ceil(length / 6));
-    for (let sampleIndex = 0; sampleIndex <= sampleCount; sampleIndex += 1) {
-      const t = sampleIndex / sampleCount;
-      const point = getCurvePoint(t, curvePoints as any);
-      sampledPoints.push({ x: point.x, y: point.y });
-    }
-    const segmentScale = 1.0;
 
     if (useMotionProfile) {
       segmentTime = calculateMotionProfileTime(
@@ -179,19 +164,22 @@ export function calculatePathTime(
       const avgVelocity = (settings.xVelocity + settings.yVelocity) / 2;
       segmentTime = length / avgVelocity;
     }
-    segmentTime /= segmentScale;
     segmentTimes.push(segmentTime);
-    const lineIndex = lines.findIndex((l) => l.id === line.id);
     timeline.push({
       type: "travel",
       duration: segmentTime,
       startTime: currentTime,
       endTime: currentTime + segmentTime,
-      lineIndex,
+      lineId: line.id,
     });
     currentTime += segmentTime;
-    currentHeading = getLineEndHeading(line, prevPoint);
-    lastPoint = line.endPoint as Point;
+    currentHeading = getLineEndHeading(
+      line,
+      prevPoint,
+      endHeading.heading,
+      endHeading.t,
+    );
+    robotPoint = line.endPoint;
   });
 
   const totalTime = currentTime;

@@ -1,16 +1,16 @@
 import type {
   FieldPoint,
-  Point,
-  Line,
+  Path,
   Shape,
   SequenceItem,
   Settings,
+  StartPose,
 } from "../types";
 import { writable } from "svelte/store";
 
 export type AppState = {
-  startPoint: Point;
-  lines: Line[];
+  startPoint: StartPose;
+  lines: Path[];
   shapes: Shape[];
   sequence: SequenceItem[];
   settings: Settings;

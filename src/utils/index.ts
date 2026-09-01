@@ -18,10 +18,25 @@ export {
   normalizePiecewiseHeadingInterpolation,
   validatePiecewiseHeadingInterpolation,
   degreesToRadians,
-  toDegreesDisplay,
+  headingAngleAt,
+  evaluatePiecewiseHeading,
+} from "./headingInterpolation";
+
+export {
+  CURVE_SAMPLES,
   lineCurvePoints,
   approximateCurveLength,
   getPointAndTangentAtProgress,
-  getChainTraversalState,
-  evaluatePiecewiseHeading,
-} from "./headingInterpolation";
+  flattenToAtomicSegments,
+  segmentStartById,
+  atomicSegments,
+  findSegmentById,
+  findPathById,
+  locatePath,
+  groupPaths,
+  groupingProblem,
+  ungroupPath,
+  replaceSegment,
+  updatePath,
+} from "./pathTraversal";
+export type { FlatSegment } from "./pathTraversal";

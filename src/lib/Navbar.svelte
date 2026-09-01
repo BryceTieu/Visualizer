@@ -3,11 +3,11 @@
 
   import type {
     FieldPoint,
-    Point,
-    Line,
+    Path,
     Shape,
     Settings,
     SequenceItem,
+    StartPose,
   } from "../types";
   import { onMount, onDestroy } from "svelte";
   import {
@@ -20,14 +20,14 @@
   } from "../stores";
   import {
     getDefaultStartPoint,
-    getDefaultLines,
+    getDefaultPaths,
     getDefaultShapes,
   } from "../config";
   import FileManager from "./FileManager.svelte";
   import SettingsDialog from "./components/SettingsDialog.svelte";
   import ExportCodeDialog from "./components/ExportCodeDialog.svelte";
   import MultiplePathsDialog from "./components/MultiplePathsDialog.svelte";
-  import { calculatePathTime, formatTime } from "../utils";
+  import { atomicSegments, calculatePathTime, formatTime } from "../utils";
   import { basename, pathStem } from "../utils/filename";
   import { downloadBlob } from "../utils/download";
   import NavDivider from "./components/ui/NavDivider.svelte";
@@ -37,13 +37,13 @@
 
   interface Props {
     loadFile: (evt: any) => any;
-    startPoint: Point;
-    lines: Line[];
+    startPoint: StartPose;
+    lines: Path[];
     shapes: Shape[];
     sequence: SequenceItem[];
     fieldPoints?: FieldPoint[];
-    secondStartPoint?: Point | null;
-    secondLines?: Line[];
+    secondStartPoint?: StartPose | null;
+    secondLines?: Path[];
     secondShapes?: Shape[];
     secondSequence?: SequenceItem[];
     percent?: number;
@@ -199,10 +199,10 @@
 
   function resetPath() {
     startPoint = getDefaultStartPoint();
-    lines = getDefaultLines();
-    sequence = lines.map((ln) => ({
+    lines = getDefaultPaths();
+    sequence = atomicSegments(lines).map((ln) => ({
       kind: "path",
-      lineId: ln.id || `line-${Math.random().toString(36).slice(2)}`,
+      lineId: ln.id,
     }));
     shapes = getDefaultShapes();
     activePaths.set([]);

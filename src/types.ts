@@ -23,7 +23,6 @@ export interface PiecewiseHeadingSegment {
 }
 
 export interface PiecewiseHeadingInterpolation {
-  scope?: "path" | "chain";
   segments: PiecewiseHeadingSegment[];
 }
 
@@ -33,42 +32,20 @@ export interface FieldPoint extends BasePoint {
   opacity?: number;
 }
 
-export type Point = BasePoint &
-  (
-    | {
-        heading: "linear";
-        startDeg: number;
-        endDeg: number;
-        degrees?: never;
-        reverse?: never;
-        name?: string;
-      }
-    | {
-        heading: "constant";
-        degrees: number;
-        startDeg?: never;
-        endDeg?: never;
-        reverse?: never;
-        name?: string;
-      }
-    | {
-        heading: "tangential";
-        degrees?: never;
-        startDeg?: never;
-        endDeg?: never;
-        reverse: boolean;
-        name?: string;
-      }
-    | {
-        heading: "piecewise";
-        piecewiseHeading: PiecewiseHeadingInterpolation;
-        degrees?: never;
-        startDeg?: never;
-        endDeg?: never;
-        reverse?: never;
-        name?: string;
-      }
-  );
+export type HeadingType = "linear" | "constant" | "tangential" | "piecewise";
+
+export type Heading =
+  | { type: "linear"; startDeg: number; endDeg: number }
+  | { type: "constant"; degrees: number }
+  | { type: "tangential"; reverse: boolean }
+  | { type: "piecewise"; piecewiseHeading: PiecewiseHeadingInterpolation };
+
+export type Point = BasePoint & { name?: string };
+
+export interface StartPose extends BasePoint {
+  name?: string;
+  headingDeg: number;
+}
 
 export type ControlPoint = BasePoint;
 
@@ -78,10 +55,8 @@ export interface WaitSegment {
   position?: "before" | "after";
 }
 
-export interface Line {
-  id?: string;
-  endPoint: Point;
-  controlPoints: ControlPoint[];
+export type Path = {
+  id: string;
   color: string;
   name?: string;
   locked?: boolean;
@@ -91,7 +66,32 @@ export interface Line {
   waitAfterMs?: number;
   waitBeforeName?: string;
   waitAfterName?: string;
+} & (Atomic | Compound);
+
+export interface Atomic {
+  kind: "atomic";
+  endPoint: Point;
+  controlPoints: ControlPoint[];
+  heading: Heading;
 }
+
+export type AtomicPath = Extract<Path, Atomic>;
+
+export interface Compound {
+  kind: "compound";
+  segments: Path[];
+  heading?: Heading;
+}
+
+export type CompoundPath = Extract<Path, Compound>;
+
+export type PathListItem = {
+  id: string;
+  name: string;
+} & (
+  | { kind: "atomic"; x: string; y: string; children?: never }
+  | { kind: "compound"; children: PathListItem[]; x?: never; y?: never }
+);
 
 export type SequencePathItem = {
   kind: "path";
@@ -107,18 +107,6 @@ export type SequenceWaitItem = {
 };
 
 export type SequenceItem = SequencePathItem | SequenceWaitItem;
-
-// PathChain is kept only for backward compatibility with older saved files.
-// The visualizer and code export now treat timeline entries as Pedro Path objects.
-
-export interface PathChain {
-  id: string;
-  name: string;
-  color: string;
-  lineIds: string[];
-  // Only present in older saved files; never written by current code.
-  globalHeadingInterpolation?: PiecewiseHeadingInterpolation;
-}
 
 export interface Settings {
   xVelocity: number;
@@ -173,7 +161,7 @@ export interface TimelineEvent {
   endTime: number;
   name?: string;
   waitPosition?: "before" | "after";
-  lineIndex?: number; // for travel
+  lineId?: string; // for travel
   startHeading?: number;
   targetHeading?: number;
   atPoint?: BasePoint;

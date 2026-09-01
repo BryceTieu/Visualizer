@@ -1,44 +1,33 @@
-import type { Line, Point, Settings, Shape } from "../../types";
+import type { Path, Settings, Shape, StartPose } from "../../types";
 import { FIELD_SIZE } from "../../config/defaults";
+import { headingAngleAt } from "../../utils/headingInterpolation";
+import {
+  flattenToAtomicSegments,
+  replaceSegment,
+} from "../../utils/pathTraversal";
 
 export const OPTIMIZER_BASE_URL = "https://fpa.pedropathing.com";
 
-export function toHeadingDegrees(
-  point: Point,
-  position: "start" | "end",
-): number {
-  if (!point) return 0;
-  if (point.heading === "linear") {
-    return position === "start" ? (point.startDeg ?? 0) : (point.endDeg ?? 0);
-  }
-  if (point.heading === "constant") {
-    return point.degrees ?? 0;
-  }
-  return 0;
-}
-
 export function buildOptimizationPayload(
-  lineIndex: number,
-  startPoint: Point,
-  lines: Line[],
+  lineId: string,
+  startPoint: StartPose,
+  paths: Path[],
   shapes: Shape[],
   settings: Settings,
 ) {
-  const line = lines[lineIndex];
-  if (!line) throw new Error("Line not found");
+  // The optimizer works on one drivable curve, which may sit inside a group.
+  const segment = flattenToAtomicSegments(startPoint, paths).find(
+    (entry) => entry.line.id === lineId,
+  );
+  if (!segment) throw new Error("Line not found");
 
-  const startPt = lineIndex === 0 ? startPoint : lines[lineIndex - 1]?.endPoint;
-  if (!startPt) throw new Error("Missing start point for optimization");
-
-  const waypoints = [startPt, ...line.controlPoints, line.endPoint].map((p) => [
-    p.x,
-    p.y,
-  ]);
+  const line = segment.line;
+  const waypoints = segment.points.map((p) => [p.x, p.y]);
 
   return {
     waypoints,
-    start_heading_degrees: toHeadingDegrees(startPt, "start"),
-    end_heading_degrees: toHeadingDegrees(line.endPoint, "end"),
+    start_heading_degrees: headingAngleAt(line.heading, "start"),
+    end_heading_degrees: headingAngleAt(line.heading, "end"),
     x_velocity: settings.xVelocity,
     y_velocity: settings.yVelocity,
     angular_velocity: settings.aVelocity,
@@ -48,9 +37,9 @@ export function buildOptimizationPayload(
     min_coord_field: 0,
     max_coord_field: FIELD_SIZE,
     interpolation:
-      line.endPoint.heading === "tangential"
+      line.heading.type === "tangential"
         ? "tangent"
-        : line.endPoint.heading === "constant"
+        : line.heading.type === "constant"
           ? "constant"
           : "linear",
     obstacles: shapes.map((shape) => shape.vertices.map((v) => [v.x, v.y])),
@@ -86,11 +75,11 @@ export async function runOptimization(payload: any) {
  * or null when the response produced no applicable change.
  */
 export function applyOptimizedWaypoints(
-  lines: Line[],
-  lineIndex: number,
+  paths: Path[],
+  lineId: string,
   result: any,
   targetControlPointIndex?: number,
-): Line[] | null {
+): Path[] | null {
   const optimizedWaypoints = Array.isArray(result?.optimized_waypoints)
     ? result.optimized_waypoints
     : Array.isArray(result)
@@ -105,32 +94,33 @@ export function applyOptimizedWaypoints(
     .slice(1, optimizedWaypoints.length - 1)
     .map((p: number[]) => ({ x: p[0], y: p[1] }));
 
-  const newLines = [...lines];
-  const current = newLines[lineIndex];
+  let applied = true;
+  const next = replaceSegment(paths, lineId, (current) => {
+    if (typeof targetControlPointIndex === "number") {
+      // Only replace the targeted control point; keep others and endpoint untouched
+      const replacement =
+        interior[targetControlPointIndex] ?? interior[interior.length - 1];
+      const cps = [...current.controlPoints];
+      if (!replacement || !cps[targetControlPointIndex]) {
+        applied = false;
+        return current;
+      }
+      cps[targetControlPointIndex] = replacement;
+      return { ...current, controlPoints: cps };
+    }
 
-  if (typeof targetControlPointIndex === "number") {
-    // Only replace the targeted control point; keep others and endpoint untouched
-    const replacement =
-      interior[targetControlPointIndex] ?? interior[interior.length - 1];
-    if (!replacement) return null;
+    // Replace entire line (control points and endpoint)
+    return {
+      ...current,
+      endPoint: {
+        ...current.endPoint,
+        x: optimizedWaypoints[optimizedWaypoints.length - 1][0],
+        y: optimizedWaypoints[optimizedWaypoints.length - 1][1],
+      },
+      controlPoints: interior,
+    };
+  });
 
-    const cps = [...current.controlPoints];
-    if (!cps[targetControlPointIndex]) return null;
-
-    cps[targetControlPointIndex] = replacement;
-    newLines[lineIndex] = { ...current, controlPoints: cps };
-    return newLines;
-  }
-
-  // Replace entire line (control points and endpoint)
-  newLines[lineIndex] = {
-    ...current,
-    endPoint: {
-      ...current.endPoint,
-      x: optimizedWaypoints[optimizedWaypoints.length - 1][0],
-      y: optimizedWaypoints[optimizedWaypoints.length - 1][1],
-    },
-    controlPoints: interior,
-  };
-  return newLines;
+  if (!applied || next === paths) return null;
+  return next;
 }

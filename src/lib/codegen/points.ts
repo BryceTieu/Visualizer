@@ -1,9 +1,13 @@
-import type { BasePoint, Line, Point } from "../../types";
+import type { BasePoint, Path, StartPose } from "../../types";
+import { atomicSegments } from "../../utils/pathTraversal";
 
-export function generatePointsArray(startPoint: Point, lines: Line[]): string {
+export function generatePointsArray(
+  startPoint: StartPose,
+  paths: Path[],
+): string {
   const points: BasePoint[] = [startPoint];
 
-  lines.forEach((line) => {
+  atomicSegments(paths).forEach((line) => {
     line.controlPoints.forEach((controlPoint) => points.push(controlPoint));
     points.push(line.endPoint);
   });

@@ -1,18 +1,21 @@
 import Two from "two.js";
-import type { Path } from "two.js/src/path";
+import type { Path as TwoPath } from "two.js/src/path";
 import type { Line as PathLine } from "two.js/src/shapes/line";
-import type { BasePoint, Line, Settings } from "../../types";
+import type { AtomicPath, BasePoint, Settings } from "../../types";
 import { getCurvePoint, quadraticToCubic } from "../../utils/math";
+import {
+  CURVE_SAMPLES,
+  flattenToAtomicSegments,
+} from "../../utils/pathTraversal";
+import type { PointContainer, PointRegistry } from "../canvas/pointRefs";
 import { LINE_WIDTH } from "../../config/defaults";
 import type { PathRenderSpec, SceneScales } from "./types";
 
-const CURVE_SAMPLES = 100;
-
 export function buildSegmentPath(
   startPoint: BasePoint,
-  line: Line,
+  line: AtomicPath,
   { x, y }: SceneScales,
-): Path | PathLine {
+): TwoPath | PathLine {
   if (line.controlPoints.length > 2) {
     // Approximate an n-degree bezier curve by sampling it
     const cps = [startPoint, ...line.controlPoints, line.endPoint];
@@ -84,35 +87,35 @@ export function buildPathElements(
   spec: PathRenderSpec,
   scales: SceneScales,
   settings: Settings,
-): (Path | PathLine)[] {
+  registry?: PointRegistry,
+  container: PointContainer = "main",
+): (TwoPath | PathLine)[] {
   const { startPoint, lines, idPrefix, color, honorLocked = true } = spec;
   const opacityScale = spec.opacityScale ?? 1;
   const baseOpacity = (settings.pathOpacity || 1.0) * opacityScale;
-  const elements: (Path | PathLine)[] = [];
+  const elements: (TwoPath | PathLine)[] = [];
 
-  lines.forEach((line, idx) => {
-    if (!line || !line.endPoint) return;
-    const segmentStart =
-      idx === 0 ? startPoint : lines[idx - 1]?.endPoint || null;
-    if (!segmentStart) return;
+  flattenToAtomicSegments(startPoint, lines).forEach(
+    ({ line, index: idx, start: segmentStart }) => {
+      const lineElem = buildSegmentPath(segmentStart, line, scales);
 
-    const lineElem = buildSegmentPath(segmentStart, line, scales);
+      lineElem.id = `${idPrefix}-${idx + 1}`;
+      registry?.registerSegment(lineElem.id, line.id, container);
+      lineElem.stroke = color || line.color;
+      lineElem.linewidth = scales.x(LINE_WIDTH);
+      lineElem.noFill();
 
-    lineElem.id = `${idPrefix}-${idx + 1}`;
-    lineElem.stroke = color || line.color;
-    lineElem.linewidth = scales.x(LINE_WIDTH);
-    lineElem.noFill();
+      if (honorLocked && line.locked) {
+        lineElem.dashes = [scales.x(2), scales.x(2)];
+        lineElem.opacity = baseOpacity * 0.7;
+      } else {
+        if (honorLocked) lineElem.dashes = [];
+        lineElem.opacity = baseOpacity;
+      }
 
-    if (honorLocked && line.locked) {
-      lineElem.dashes = [scales.x(2), scales.x(2)];
-      lineElem.opacity = baseOpacity * 0.7;
-    } else {
-      if (honorLocked) lineElem.dashes = [];
-      lineElem.opacity = baseOpacity;
-    }
-
-    elements.push(lineElem);
-  });
+      elements.push(lineElem);
+    },
+  );
 
   return elements;
 }

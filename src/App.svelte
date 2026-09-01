@@ -2,12 +2,14 @@
   import { run } from "svelte/legacy";
 
   import type {
-    Line,
+    Path,
     BasePoint,
     Settings,
-    Point,
+    PathListItem,
     SequenceItem,
+    SequencePathItem,
     Shape,
+    StartPose,
   } from "./types";
   import * as d3 from "d3";
   import {
@@ -21,7 +23,7 @@
     activePaths,
   } from "./stores";
   import Two from "two.js";
-  import type { Path } from "two.js/src/path";
+  import type { Path as TwoPath } from "two.js/src/path";
   import type { Line as PathLine } from "two.js/src/shapes/line";
   import ControlTab from "./lib/ControlTab.svelte";
   import Navbar from "./lib/Navbar.svelte";
@@ -48,9 +50,9 @@
   import { buildPathElements } from "./lib/scene/paths";
   import { fitStrokeToLines } from "./lib/pen/strokeFitting";
   import {
-    resolvePointRef,
+    PointRegistry,
+    pointKey,
     snapPointToGrid,
-    type PointRefContext,
   } from "./lib/canvas/pointRefs";
   import {
     SIDE_PANEL_MIN_WIDTH,
@@ -104,12 +106,19 @@
     generateGhostPathPoints,
     generateOnionLayers,
     getRandomColor,
-    normalizeLines,
-    makeLineId,
-    createLine,
+    normalizePaths,
+    normalizeStartPose,
+    makePathId,
+    createSegment,
     downloadTrajectory,
     loadTrajectoryFromFile,
     updateRobotImageDisplay,
+    atomicSegments,
+    findSegmentById,
+    findPathById,
+    groupPaths,
+    groupingProblem,
+    ungroupPath,
   } from "./utils";
   import {
     POINT_RADIUS,
@@ -119,7 +128,7 @@
     DEFAULT_SETTINGS,
     FIELD_SIZE,
     getDefaultStartPoint,
-    getDefaultLines,
+    getDefaultPaths,
     getDefaultShapes,
   } from "./config";
   import {
@@ -170,9 +179,9 @@
   let cancelGifExport = $state(false);
   // Path data
   let settings: Settings = $state({ ...DEFAULT_SETTINGS });
-  let startPoint: Point = $state(getDefaultStartPoint());
-  const initialLines = normalizeLines(getDefaultLines());
-  let lines: Line[] = $state(initialLines);
+  let startPoint: StartPose = $state(getDefaultStartPoint());
+  const initialLines = normalizePaths(getDefaultPaths());
+  let lines: Path[] = $state(initialLines);
   let fieldPoints: FieldPoint[] = $state([]);
 
   function detectMobileDevice() {
@@ -196,13 +205,91 @@
   }
 
   let sequence: SequenceItem[] = $state(
-    initialLines.map((ln) => ({
+    atomicSegments(initialLines).map((ln) => ({
       kind: "path",
-      lineId: ln.id!,
+      lineId: ln.id,
     })),
   );
-  let selectedLineIndex = $state(0);
+  let selectedPathIds: string[] = $state(
+    initialLines[0] ? [initialLines[0].id] : [],
+  );
+  let primarySelectedId = $derived(
+    selectedPathIds[selectedPathIds.length - 1] ?? null,
+  );
+  let selectedPath = $derived(findPathById(lines, primarySelectedId));
+  /** Only a drivable segment can have its points edited. */
+  let selectedLineId = $derived(
+    selectedPath?.kind === "atomic" ? selectedPath.id : null,
+  );
   let selectedPointIndex = $state(0);
+  let selectedLineIndex = $derived(
+    lines.findIndex((line) => line.id === selectedLineId),
+  );
+
+  let displayOrderIds = $derived.by(() => {
+    const out: string[] = [];
+    const walk = (nodes: Path[]) => {
+      for (const node of nodes) {
+        out.push(node.id);
+        if (node.kind === "compound") walk(node.segments);
+      }
+    };
+    walk(lines);
+    return out;
+  });
+
+  function selectPathFromList(
+    id: string,
+    modifiers: { additive?: boolean; range?: boolean } = {},
+  ) {
+    if (modifiers.range && primarySelectedId) {
+      const from = displayOrderIds.indexOf(primarySelectedId);
+      const to = displayOrderIds.indexOf(id);
+      if (from >= 0 && to >= 0) {
+        const [lo, hi] = from <= to ? [from, to] : [to, from];
+        const span = displayOrderIds.slice(lo, hi + 1);
+        // Keep the clicked path primary so the inspector follows the cursor.
+        selectedPathIds = [...span.filter((entry) => entry !== id), id];
+        return;
+      }
+    }
+
+    if (modifiers.additive) {
+      selectedPathIds = selectedPathIds.includes(id)
+        ? selectedPathIds.filter((entry) => entry !== id)
+        : [...selectedPathIds, id];
+      return;
+    }
+
+    selectedPathIds = [id];
+  }
+
+  let groupingBlockedReason = $derived(groupingProblem(lines, selectedPathIds));
+
+  function groupSelectedPaths() {
+    if (groupingBlockedReason) return;
+    const next = groupPaths(lines, selectedPathIds);
+    if (next === lines) return;
+    lines = next;
+    // Select the group that was just created.
+    const created = next.find(
+      (path) =>
+        path.kind === "compound" &&
+        !selectedPathIds.includes(path.id) &&
+        path.segments.some((child) => selectedPathIds.includes(child.id)),
+    );
+    selectedPathIds = created ? [created.id] : selectedPathIds;
+    recordChange();
+  }
+
+  function ungroupSelectedPath() {
+    const target = selectedPath;
+    if (!target || target.kind !== "compound") return;
+    const childIds = target.segments.map((child) => child.id);
+    lines = ungroupPath(lines, target.id);
+    selectedPathIds = childIds;
+    recordChange();
+  }
   let penToolEnabled = $state(false);
   let penStroke: BasePoint[] = $state([]);
   let penIsDrawing = $state(false);
@@ -246,16 +333,16 @@
   let optimizingAll = $state(false);
 
   // Second path data (for alliance coordination) - DEPRECATED, use additionalPaths
-  let secondStartPoint: Point | null = $state(null);
-  let secondLines: Line[] = $state([]);
+  let secondStartPoint: StartPose | null = $state(null);
+  let secondLines: Path[] = $state([]);
   let secondSequence: SequenceItem[] = $state([]);
   let secondShapes: Shape[] = $state([]);
 
   // Multiple paths data (new system - supports up to 4 paths total)
   interface AdditionalPathData {
     filePath: string;
-    startPoint: Point | null;
-    lines: Line[];
+    startPoint: StartPose | null;
+    lines: Path[];
     sequence: SequenceItem[];
     shapes: Shape[];
     settings: Settings;
@@ -270,7 +357,7 @@
   const { canUndoStore, canRedoStore } = history;
 
   function commitPenStroke() {
-    const selectedLine = lines[selectedLineIndex];
+    const selectedLine = findSegmentById(lines, selectedLineId);
     const startAnchor = selectedLine?.endPoint || undefined;
     const fitted = fitStrokeToLines(
       penStroke,
@@ -293,7 +380,7 @@
         0,
         newLine,
       );
-      lines = normalizeLines(nextLines);
+      lines = normalizePaths(nextLines);
 
       const nextSequence = [...sequence];
       const seqIndex = sequence.findIndex(
@@ -302,17 +389,20 @@
       nextSequence.splice(
         seqIndex >= 0 ? seqIndex + 1 : nextSequence.length,
         0,
-        { kind: "path", lineId: newLine.id! },
+        { kind: "path", lineId: newLine.id },
       );
       sequence = nextSequence;
 
-      selectedLineIndex = insertAt >= 0 ? insertAt + 1 : lines.length - 1;
+      selectedPathIds = [newLine.id];
       selectedPointIndex = 0;
     } else {
       startPoint = fitted.startPoint;
-      lines = normalizeLines(fitted.lines);
-      sequence = lines.map((line) => ({ kind: "path", lineId: line.id! }));
-      selectedLineIndex = 0;
+      lines = normalizePaths(fitted.lines);
+      sequence = atomicSegments(lines).map((line) => ({
+        kind: "path",
+        lineId: line.id,
+      }));
+      selectedPathIds = lines[0] ? [lines[0].id] : [];
       selectedPointIndex = 0;
     }
 
@@ -401,18 +491,6 @@
 
   function toggleRightPanelVisibility() {
     rightPanelHidden = !rightPanelHidden;
-  }
-
-  function pointRefContext(): PointRefContext {
-    return {
-      startPoint,
-      lines,
-      secondStartPoint,
-      secondLines,
-      additionalPaths,
-      shapes,
-      obstaclesEnabled: Boolean(settings?.experimentalFeatures?.obstacles),
-    };
   }
 
   function gridSnapOptions() {
@@ -519,17 +597,17 @@
         const data = JSON.parse(content);
 
         if (data.startPoint && data.lines) {
-          const normalizedLines = normalizeLines(data.lines || []);
+          const normalizedLines = normalizePaths(data.lines || []);
           newAdditionalPaths.push({
             filePath,
-            startPoint: data.startPoint,
+            startPoint: normalizeStartPose(data.startPoint),
             lines: normalizedLines,
             shapes: data.shapes || [],
             sequence:
               data.sequence ||
-              normalizedLines.map((ln: Line) => ({
+              atomicSegments(normalizedLines).map((ln) => ({
                 kind: "path",
-                lineId: ln.id!,
+                lineId: ln.id,
               })),
             settings: data.settings || { ...DEFAULT_SETTINGS },
             color: colors[i],
@@ -1171,29 +1249,11 @@
     let currentElem: string | null = null;
     let isDown = false;
     let dragOffset = { x: 0, y: 0 }; // Store offset to prevent snapping to center
-    const getPathPointLockedState = (
-      lineIdx: number,
-      pointIdx: number,
-    ): boolean => {
-      const line = lines[lineIdx];
-      if (!line) return false;
-      if (pointIdx === 0) {
-        return !!line.endPoint?.locked;
-      }
-      return !!line.controlPoints[pointIdx - 1]?.locked;
-    };
-
     const isLockedPathElem = (id: string | null): boolean => {
-      if (!id || !id.startsWith("point")) return false;
-      const parts = id.split("-");
-      const lineIdx = Number(parts[1]) - 1;
-      const pointIdx = Number(parts[2]);
-      if (Number.isNaN(lineIdx)) return false;
-      if (lineIdx < 0) return false; // startPoint currently not lockable
-      if (Number.isNaN(pointIdx)) return !!lines[lineIdx]?.locked;
-      return (
-        !!lines[lineIdx]?.locked || getPathPointLockedState(lineIdx, pointIdx)
-      );
+      const ref = pointRegistry.resolve(id);
+      // A path's start point is not lockable through this guard.
+      if (!ref || ref.lineId === null) return false;
+      return ref.locked;
     };
 
     const getPreferredPointElemId = (
@@ -1201,15 +1261,18 @@
       clientY: number,
     ): string | null => {
       const elements = Array.from(document.elementsFromPoint(clientX, clientY));
-      const pointIds = elements
+      const hits = elements
         .map((element) => (element as HTMLElement).id || "")
-        .filter((id) => /^point-\d+-\d+$/.test(id));
+        .filter((id) => pointRegistry.resolve(id)?.container === "main");
 
-      if (pointIds.length === 0) return null;
+      if (hits.length === 0) return null;
 
-      const selectedPrefix = `point-${selectedLineIndex + 1}-`;
-      const preferred = pointIds.find((id) => id.startsWith(selectedPrefix));
-      return preferred || pointIds[0];
+      // Prefer a point on the segment already selected, so overlapping points
+      // do not steal the drag.
+      const preferred = hits.find(
+        (id) => pointRegistry.resolve(id)?.lineId === selectedLineId,
+      );
+      return preferred || hits[0];
     };
 
     two.renderer.domElement.addEventListener("mousemove", (evt: MouseEvent) => {
@@ -1239,14 +1302,13 @@
       }
 
       if (isDown && currentElem) {
-        const parts = currentElem.split("-");
-        const isPathPoint = parts[0] === "point";
-        const isShapePoint = parts[0] === "shape";
+        const hit = pointRegistry.resolve(currentElem);
+        const isPathPoint = hit?.container === "main";
+        const isShapePoint = hit?.container === "shapes";
 
         // Skip dragging locked paths
         if (isPathPoint) {
-          const hitLine = Number(parts[1]) - 1;
-          if (hitLine >= 0 && lines[hitLine]?.locked) return;
+          if (hit && hit.lineId !== null && hit.locked) return;
         }
 
         // Use simple bounding rect math to match D3 scales which are bound to clientWidth/Height
@@ -1261,7 +1323,7 @@
           gridSnapOptions(),
         );
 
-        const ref = resolvePointRef(currentElem, pointRefContext());
+        const ref = pointRegistry.resolve(currentElem);
         if (!ref || ref.locked) return;
 
         ref.point.x = inchX;
@@ -1284,21 +1346,22 @@
           });
           // Debounce the auto-save so it fires after the drag settles instead of
           // writing the file on every mousemove.
-          debouncedSaveAdditionalPath(Number(currentElem.split("-")[2]));
+          debouncedSaveAdditionalPath(Number(ref.scope));
         } else {
           scheduleDragCommit(() => {
             lines = [...lines];
           });
         }
       } else {
+        const hovered = preferredPointElemId || elem?.id || null;
+        const hoveredRef = pointRegistry.resolve(hovered);
         if (
-          ((preferredPointElemId || elem?.id)?.startsWith("point") &&
-            !isLockedPathElem(preferredPointElemId || elem?.id || null)) ||
-          elem?.id.startsWith("line-") ||
-          elem?.id.startsWith("second-point") ||
-          elem?.id.startsWith("additional-path-") ||
+          (hoveredRef?.container === "main" && !isLockedPathElem(hovered)) ||
+          pointRegistry.segmentAt(elem?.id) !== null ||
+          hoveredRef?.container === "second" ||
+          hoveredRef?.container === "additional" ||
           (settings?.experimentalFeatures?.obstacles &&
-            elem?.id.startsWith("obstacle"))
+            hoveredRef?.container === "shapes")
         ) {
           two.renderer.domElement.style.cursor = "pointer";
           currentElem = preferredPointElemId || elem?.id || null;
@@ -1348,24 +1411,25 @@
           (two.renderer.domElement.getBoundingClientRect().top +
             selectedPointY);
         if (Math.hypot(dx, dy) <= selectedPointRadius) {
-          currentElem = `point-${selectedLineIndex + 1}-${selectedPointIndex}`;
+          currentElem = pointRegistry.elementIdFor(
+            pointKey("main", "point", selectedLineId, selectedPointIndex),
+          );
         }
       }
 
-      if (currentElem?.startsWith("line-")) {
-        const match = currentElem.match(/^line-(\d+)/);
-        if (match) {
-          selectLinePoint(Number(match[1]) - 1, 0);
+      // Clicking a main-path stroke selects that segment.
+      const hitSegment = pointRegistry.segmentAt(currentElem);
+      if (hitSegment) {
+        if (hitSegment.container === "main") {
+          selectLinePoint(hitSegment.lineId, 0);
         }
         isDown = false;
         return;
       }
 
-      if (currentElem?.startsWith("point-")) {
-        const match = currentElem.match(/^point-(\d+)-(\d+)/);
-        if (match) {
-          selectLinePoint(Number(match[1]) - 1, Number(match[2]));
-        }
+      const hitPoint = pointRegistry.resolve(currentElem);
+      if (hitPoint?.container === "main" && hitPoint.lineId !== null) {
+        selectLinePoint(hitPoint.lineId, hitPoint.pointIndex);
       }
 
       isDown = true;
@@ -1375,7 +1439,7 @@
         const mouseX = x.invert(evt.clientX - rect.left);
         const mouseY = y.invert(evt.clientY - rect.top);
 
-        const ref = resolvePointRef(currentElem, pointRefContext());
+        const ref = pointRegistry.resolve(currentElem);
 
         dragOffset = {
           x: (ref?.point.x ?? 0) - mouseX,
@@ -1408,12 +1472,12 @@
 
       // Ignore dblclicks on existing points/lines
       const elem = document.elementFromPoint(evt.clientX, evt.clientY);
+      const hitRef = pointRegistry.resolve(elem?.id);
       if (
-        elem?.id &&
-        (elem.id.startsWith("point") ||
-          (settings?.experimentalFeatures?.obstacles &&
-            elem.id.startsWith("obstacle")) ||
-          elem.id.startsWith("line"))
+        (hitRef && hitRef.container !== "shapes") ||
+        (settings?.experimentalFeatures?.obstacles &&
+          hitRef?.container === "shapes") ||
+        pointRegistry.segmentAt(elem?.id) !== null
       ) {
         return;
       }
@@ -1430,10 +1494,10 @@
       const inchY = clampFieldCoordinate(snapped.y);
 
       // Create a new line with endPoint at the clicked position
-      const newLine = createLine(inchX, inchY);
+      const newLine = createSegment(inchX, inchY);
 
       lines = [...lines, newLine];
-      sequence = [...sequence, { kind: "path", lineId: newLine.id! }];
+      sequence = [...sequence, { kind: "path", lineId: newLine.id }];
       selectedLineIndex = lines.length - 1;
       recordChange();
       two.update();
@@ -1493,25 +1557,19 @@
 
     // Parse and load the uploaded file, then cache it into the browser store.
     loadTrajectoryFromFile(evt, async (data) => {
-      // Ensure startPoint has all required fields
-      startPoint = data.startPoint || {
-        x: 72,
-        y: 72,
-        heading: "tangential",
-        reverse: false,
-      };
+      startPoint = normalizeStartPose(data.startPoint ?? { x: 72, y: 72 });
 
       // Normalize lines with all required fields
-      const normalizedLines = normalizeLines(data.lines || []);
+      const normalizedLines = normalizePaths(data.lines || []);
       lines = normalizedLines;
 
       // Derive sequence from data or create default
       sequence = (
         data.sequence && data.sequence.length
           ? data.sequence
-          : normalizedLines.map((ln) => ({
+          : atomicSegments(normalizedLines).map((ln) => ({
               kind: "path",
-              lineId: ln.id!,
+              lineId: ln.id,
             }))
       ) as SequenceItem[];
       // Load shapes with defaults
@@ -1560,7 +1618,7 @@
 
     try {
       const payload = buildOptimizationPayload(
-        lineIndex,
+        lineId,
         startPoint,
         lines,
         shapes,
@@ -1569,13 +1627,13 @@
       const result = await runOptimization(payload);
       const newLines = applyOptimizedWaypoints(
         lines,
-        lineIndex,
+        lineId,
         result,
         targetControlPointIndex,
       );
 
       if (newLines) {
-        lines = normalizeLines(newLines);
+        lines = normalizePaths(newLines);
         recordChange();
       }
     } catch (err) {
@@ -1600,20 +1658,27 @@
   }
 
   function addNewLine() {
-    const newLine = createLine(_.random(36, 108), _.random(36, 108), {
+    const newLine = createSegment(_.random(36, 108), _.random(36, 108), {
       reverse: true,
     });
-    const newLineId = newLine.id!;
+    const newLineId = newLine.id;
     lines = [...lines, newLine];
     sequence = [...sequence, { kind: "path", lineId: newLineId }];
-    selectedLineIndex = lines.length - 1;
+    selectedPathIds = [newLineId];
     selectedPointIndex = 0;
     recordChange();
   }
 
+  /** The drivable curve edits apply to: the selection, else the last one. */
+  function targetSegment() {
+    const leaves = atomicSegments(lines);
+    return findSegmentById(lines, selectedLineId) || leaves[leaves.length - 1];
+  }
+
   function addControlPoint() {
     if (lines.length > 0) {
-      const targetLine = lines[selectedLineIndex] || lines[lines.length - 1];
+      const targetLine = targetSegment();
+      if (!targetLine) return;
       targetLine.controlPoints.push({
         x: _.random(36, 108),
         y: _.random(36, 108),
@@ -1627,8 +1692,8 @@
 
   function removeControlPoint() {
     if (lines.length > 0) {
-      const targetLine = lines[selectedLineIndex] || lines[lines.length - 1];
-      if (targetLine.controlPoints.length > 0) {
+      const targetLine = targetSegment();
+      if (targetLine && targetLine.controlPoints.length > 0) {
         targetLine.controlPoints.pop();
         lines = [...lines];
         selectedPointIndex = Math.min(
@@ -1642,7 +1707,7 @@
   }
 
   function createPathBetweenSelectedPoints() {
-    const selected = lines[selectedLineIndex];
+    const selected = findSegmentById(lines, selectedLineId);
     if (!selected?.id || sequence.length === 0) return;
 
     const selectedSeqIndex = sequence.findIndex(
@@ -1661,8 +1726,9 @@
 
     const lastLine =
       lastPathSeqIndex >= 0
-        ? lines.find(
-            (line) => line.id === (sequence[lastPathSeqIndex] as any).lineId,
+        ? findSegmentById(
+            lines,
+            (sequence[lastPathSeqIndex] as SequencePathItem).lineId,
           )
         : null;
 
@@ -1677,8 +1743,8 @@
     };
     const midpointX = (Number(startPoint.x) + Number(endPoint.x)) / 2;
     const midpointY = (Number(startPoint.y) + Number(endPoint.y)) / 2;
-    const newLine = createLine(midpointX, midpointY);
-    const newLineId = newLine.id!;
+    const newLine = createSegment(midpointX, midpointY);
+    const newLineId = newLine.id;
 
     const nextLines = [...lines];
     nextLines.splice(selectedLineIndex + 1, 0, newLine);
@@ -1691,19 +1757,17 @@
     });
     sequence = nextSequence;
 
-    selectedLineIndex = selectedLineIndex + 1;
+    selectedPathIds = [newLineId];
     selectedPointIndex = 0;
     recordChange();
   }
 
-  function selectLinePoint(lineIndex: number, pointIndex = 0) {
-    if (lineIndex < 0 || lineIndex >= lines.length) return;
+  function selectLinePoint(lineId: string | null, pointIndex = 0) {
+    const line = findSegmentById(lines, lineId);
+    if (!line) return;
 
-    selectedLineIndex = lineIndex;
-    const maxPointIndex = Math.max(
-      0,
-      lines[lineIndex]?.controlPoints.length ?? 0,
-    );
+    selectedPathIds = [line.id];
+    const maxPointIndex = Math.max(0, line.controlPoints.length);
     selectedPointIndex = Math.max(0, Math.min(pointIndex, maxPointIndex));
   }
 
@@ -1886,11 +1950,20 @@
   });
   let initialAssetsReady = $derived(fieldMapLoaded && robotImageLoaded);
   run(() => {
-    if (lines.length > 0 && selectedLineIndex >= lines.length) {
-      selectedLineIndex = lines.length - 1;
+    // Drop selected paths that no longer exist, falling back to the last one.
+    const present = selectedPathIds.filter((id) => findPathById(lines, id));
+    if (present.length !== selectedPathIds.length) {
+      selectedPathIds =
+        present.length > 0
+          ? present
+          : lines.length > 0
+            ? [lines[lines.length - 1].id]
+            : [];
     }
   });
-  let selectedLine = $derived(lines[selectedLineIndex] || null);
+  let selectedLine = $derived(
+    selectedPath?.kind === "atomic" ? selectedPath : null,
+  );
   let selectedPoint = $derived.by(() => {
     const line = selectedLine;
     if (!line || selectedPointIndex < 0) return null;
@@ -1990,15 +2063,33 @@
       return getAnimationDuration(maxTime / 1000);
     })(),
   );
-  let pathPreviewItems = $derived(
-    lines.slice(0, 14).map((line, idx) => ({
-      index: idx + 1,
-      lineIndex: idx,
-      name: line.name || `Path ${idx + 1}`,
-      x: formatPathPoint(line.endPoint.x),
-      y: formatPathPoint(line.endPoint.y),
-    })),
-  );
+  let pathPreviewItems = $derived.by(() => {
+    let segmentNumber = 0;
+    let groupNumber = 0;
+
+    const build = (nodes: Path[]): PathListItem[] =>
+      nodes.map((node) => {
+        if (node.kind === "compound") {
+          groupNumber += 1;
+          return {
+            id: node.id,
+            name: node.name || `Group ${groupNumber}`,
+            kind: "compound" as const,
+            children: build(node.segments),
+          };
+        }
+        segmentNumber += 1;
+        return {
+          id: node.id,
+          name: node.name || `Path ${segmentNumber}`,
+          kind: "atomic" as const,
+          x: formatPathPoint(node.endPoint.x),
+          y: formatPathPoint(node.endPoint.y),
+        };
+      });
+
+    return build(lines);
+  });
   // Load additional paths when activePaths changes
   $effect.pre(() => {
     loadAdditionalPaths($activePaths);
@@ -2024,63 +2115,79 @@
   let isMultiPathMode = $derived($activePaths.length > 0);
   let scales = $derived({ x, y });
   let pointSelection = $derived({
-    lineIndex: selectedLineIndex,
+    lineId: selectedLineId,
     pointIndex: selectedPointIndex,
   });
-  let points = $derived([
-    // Only show main path points when NOT in multi-path mode
-    ...(isMultiPathMode
-      ? []
-      : [
-          ...buildPathPointMarkers(startPoint, lines, scales, {
-            idPrefix: "point",
-            selection: pointSelection,
-          }),
-          ...buildSelectedPointRing(lines, pointSelection, scales),
-        ]),
-    // Draggable obstacle vertices
-    ...(settings?.experimentalFeatures?.obstacles
-      ? buildObstacleVertexMarkers(shapes, scales)
-      : []),
-    // Second path points (dual path mode) - not in multi-path mode
-    ...(!isMultiPathMode &&
-    $dualPathMode &&
-    secondStartPoint &&
-    secondLines.length > 0
-      ? buildPathPointMarkers(secondStartPoint, secondLines, scales, {
-          idPrefix: "second-point",
-        })
-      : []),
-    // All control points for additional paths (full editing support)
-    ...(isMultiPathMode
-      ? additionalPaths.flatMap((pathData, pathIdx) =>
-          !pathData.startPoint || !pathData.lines.length
-            ? []
-            : buildPathPointMarkers(
-                pathData.startPoint,
-                pathData.lines,
-                scales,
-                {
-                  idPrefix: `additional-path-${pathIdx}-point`,
-                  color: pathData.color,
-                  radiusScale: 0.9,
-                  textSize: 1.4,
-                  opacity: 0.8,
-                },
-              ),
-        )
-      : []),
-  ]);
-  // Hide main path when in multi-path mode (isolated visualization)
-  let path = $derived(
-    isMultiPathMode
+  // Points and path strokes are built together so they share one registry:
+  // the builders record every element they draw, and hit-testing becomes a
+  // lookup instead of a parse of the element id.
+  let scene = $derived.by(() => {
+    const registry = new PointRegistry();
+    // Hide main path when in multi-path mode (isolated visualization)
+    const pathElements = isMultiPathMode
       ? []
       : buildPathElements(
           { startPoint, lines, idPrefix: "line" },
           scales,
           settings,
-        ),
-  );
+          registry,
+        );
+    const elements = [
+      // Only show main path points when NOT in multi-path mode
+      ...(isMultiPathMode
+        ? []
+        : [
+            ...buildPathPointMarkers(startPoint, lines, scales, {
+              idPrefix: "point",
+              selection: pointSelection,
+              registry,
+              container: "main",
+            }),
+            ...buildSelectedPointRing(lines, pointSelection, scales),
+          ]),
+      // Draggable obstacle vertices
+      ...(settings?.experimentalFeatures?.obstacles
+        ? buildObstacleVertexMarkers(shapes, scales, registry)
+        : []),
+      // Second path points (dual path mode) - not in multi-path mode
+      ...(!isMultiPathMode &&
+      $dualPathMode &&
+      secondStartPoint &&
+      secondLines.length > 0
+        ? buildPathPointMarkers(secondStartPoint, secondLines, scales, {
+            idPrefix: "second-point",
+            registry,
+            container: "second",
+          })
+        : []),
+      // All control points for additional paths (full editing support)
+      ...(isMultiPathMode
+        ? additionalPaths.flatMap((pathData, pathIdx) =>
+            !pathData.startPoint || !pathData.lines.length
+              ? []
+              : buildPathPointMarkers(
+                  pathData.startPoint,
+                  pathData.lines,
+                  scales,
+                  {
+                    idPrefix: `additional-path-${pathIdx}-point`,
+                    color: pathData.color,
+                    radiusScale: 0.9,
+                    textSize: 1.4,
+                    opacity: 0.8,
+                    registry,
+                    container: "additional",
+                    scope: String(pathIdx),
+                  },
+                ),
+          )
+        : []),
+    ];
+    return { registry, pathElements, pointElements: elements };
+  });
+  let pointRegistry = $derived(scene.registry);
+  let points = $derived(scene.pointElements);
+  let path = $derived(scene.pathElements);
   // Second path rendering (for dual path mode); not shown in multi-path mode
   let secondPath = $derived(
     isMultiPathMode ||
@@ -2096,6 +2203,8 @@
           },
           scales,
           settings,
+          pointRegistry,
+          "second",
         ),
   );
   // Render all additional paths; only slight opacity variation between them
@@ -2114,10 +2223,12 @@
             },
             scales,
             settings,
+            pointRegistry,
+            "additional",
           ),
     ),
   );
-  let penGhostPath: (Path | PathLine)[] = $derived.by(() => {
+  let penGhostPath: (TwoPath | PathLine)[] = $derived.by(() => {
     if (
       !penToolEnabled ||
       !penIsDrawing ||
@@ -2334,11 +2445,7 @@
       // Fallback for initialization or empty state
       robotXY = { x: x(startPoint.x), y: y(startPoint.y) };
       robotT = null;
-      // Calculate initial heading based on start point settings
-      if (startPoint.heading === "linear") robotHeading = -startPoint.startDeg;
-      else if (startPoint.heading === "constant")
-        robotHeading = -startPoint.degrees;
-      else robotHeading = 0;
+      robotHeading = -startPoint.headingDeg;
     }
   });
   // Second robot state calculation (for dual path mode)
@@ -2547,11 +2654,20 @@
         hidden={leftPanelHidden}
         fileName={basename($currentFilePath) || "untitled_path.pp"}
         version="v1.2.1"
-        lineCount={lines.length}
+        lineCount={atomicSegments(lines).length}
         {pathPreviewItems}
-        {selectedLineIndex}
+        {selectedPathIds}
+        {primarySelectedId}
+        {groupingBlockedReason}
+        canUngroup={selectedPath?.kind === "compound"}
         onToggleVisibility={toggleLeftPanelVisibility}
-        onSelectLine={(lineIndex) => selectLinePoint(lineIndex, 0)}
+        onSelectPath={(id, modifiers) => {
+          selectPathFromList(id, modifiers);
+          // Selecting a segment also moves the point editor to its endpoint.
+          if (findSegmentById(lines, id)) selectedPointIndex = 0;
+        }}
+        onGroup={groupSelectedPaths}
+        onUngroup={ungroupSelectedPath}
       />
 
       <PanelDivider
@@ -2705,7 +2821,10 @@
           bind:startPoint
           bind:lines
           bind:sequence
-          bind:selectedLineIndex
+          {selectedLineId}
+          selectedPathId={primarySelectedId}
+          onSelectPath={(id) => (selectedPathIds = id ? [id] : [])}
+          onUngroup={ungroupSelectedPath}
           bind:selectedPointIndex
           {settings}
           bind:percent

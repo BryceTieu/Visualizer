@@ -2,31 +2,47 @@
   import { run } from "svelte/legacy";
 
   import type {
-    Point,
-    Line,
+    AtomicPath,
+    CompoundPath,
+    Path,
     BasePoint,
     Settings,
     Shape,
     SequenceItem,
+    StartPose,
   } from "../types";
   import type * as d3 from "d3";
   import ObstaclesSection from "./components/ObstaclesSection.svelte";
   import RobotPositionDisplay from "./components/RobotPositionDisplay.svelte";
   import StartingPointSection from "./components/StartingPointSection.svelte";
   import PlaybackControls from "./components/PlaybackControls.svelte";
-  import { calculatePathTime, normalizeLines } from "../utils";
+  import { calculatePathTime, normalizePaths } from "../utils";
   import SelectedPathInspector from "./components/SelectedPathInspector.svelte";
+  import SelectedGroupInspector from "./components/SelectedGroupInspector.svelte";
   import { curveThroughPoints } from "../utils/math";
+  import {
+    atomicSegments,
+    findPathById,
+    findSegmentById,
+    replaceSegment,
+    segmentStartById,
+    updatePath,
+  } from "../utils/pathTraversal";
 
   interface Props {
     percent: number;
     playing: boolean;
     play: () => any;
     pause: () => any;
-    startPoint: Point;
-    lines: Line[];
+    startPoint: StartPose;
+    lines: Path[];
     sequence: SequenceItem[];
-    selectedLineIndex?: number;
+    selectedLineId?: string | null;
+    /** The primary selection, which may be a group. */
+    selectedPathId?: string | null;
+    /** Selection is owned by the app, so changes are reported rather than bound. */
+    onSelectPath: (id: string | null) => void;
+    onUngroup: () => void;
     selectedPointIndex?: number;
     robotXY: BasePoint;
     robotHeading: number;
@@ -47,7 +63,10 @@
     startPoint = $bindable(),
     lines = $bindable(),
     sequence = $bindable(),
-    selectedLineIndex = $bindable(0),
+    selectedLineId = null,
+    selectedPathId = null,
+    onSelectPath,
+    onUngroup,
     selectedPointIndex = $bindable(0),
     robotXY,
     robotHeading,
@@ -63,13 +82,23 @@
   let curveTension = $state(1.0);
   let obstaclesOpen = $state(true);
 
-  let selectedLine: Line | null = $derived(
-    lines[selectedLineIndex] || lines[0] || null,
+  // The inspector follows whatever is selected: a group shows group controls,
+  // anything else falls back to the first drivable curve.
+  let selectedPath: Path | null = $derived(
+    findPathById(lines, selectedPathId) ?? atomicSegments(lines)[0] ?? null,
   );
-  let selectedLinePathIndex = $derived.by(() => {
-    const line = selectedLine;
-    return line ? lines.findIndex((candidate) => candidate.id === line.id) : -1;
-  });
+  let selectedGroup: CompoundPath | null = $derived(
+    selectedPath?.kind === "compound" ? selectedPath : null,
+  );
+  let selectedLine: AtomicPath | null = $derived(
+    selectedPath?.kind === "atomic" ? selectedPath : null,
+  );
+  let selectedLineIndex = $derived(
+    selectedLine
+      ? lines.findIndex((candidate) => candidate.id === selectedLine!.id)
+      : -1,
+  );
+  let selectedLinePathIndex = $derived(selectedLineIndex);
   let selectedPoint: BasePoint | null = $derived.by(() => {
     const line = selectedLine;
     if (!line) return null;
@@ -125,13 +154,12 @@
         return _markers;
 
       timePrediction.timeline.forEach((ev) => {
-        if ((ev as any).type === "travel") {
-          const end = (ev as any).endTime as number;
-          const pct = (end / timePrediction.totalTime) * 100;
-          const lineIndex = (ev as any).lineIndex as number;
-          const line = lines[lineIndex];
+        if (ev.type === "travel") {
+          const pct = (ev.endTime / timePrediction.totalTime) * 100;
+          const index = lines.findIndex((line) => line.id === ev.lineId);
+          const line = lines[index];
           const color = line?.color || "#ffffff";
-          const name = line?.name || `Path ${lineIndex + 1}`;
+          const name = line?.name || `Path ${index + 1}`;
           _markers.push({ percent: pct, color, name });
         }
       });
@@ -162,10 +190,8 @@
     if (seqIndex === -1) return;
 
     // Get previous point (startPoint for first line, or previous line's endPoint)
-    const prevPoint =
-      selectedLineIndex > 0
-        ? lines[selectedLineIndex - 1].endPoint
-        : startPoint;
+    const prevPoint = segmentStartById(startPoint, lines, selectedLine.id);
+    if (!prevPoint) return;
     const startPt = selectedLine.endPoint;
 
     // Find next line in sequence
@@ -177,7 +203,7 @@
       }
     }
 
-    const nextLine = nextLineId ? lines.find((l) => l.id === nextLineId) : null;
+    const nextLine = findSegmentById(lines, nextLineId);
     const endPt = nextLine?.endPoint || startPt;
 
     // Build poses: prevPoint -> startPt -> endPt
@@ -191,21 +217,17 @@
       return;
     }
 
-    const nextLines = [...lines];
     const seg = segments[0];
-    const existing = nextLines[selectedLineIndex];
-    if (existing) {
-      nextLines[selectedLineIndex] = {
-        ...existing,
-        controlPoints: [
-          { x: seg.cp1.x, y: seg.cp1.y },
-          { x: seg.cp2.x, y: seg.cp2.y },
-        ],
-        endPoint: { ...existing.endPoint, x: seg.end.x, y: seg.end.y },
-      };
-    }
+    const nextLines = replaceSegment(lines, selectedLine.id, (existing) => ({
+      ...existing,
+      controlPoints: [
+        { x: seg.cp1.x, y: seg.cp1.y },
+        { x: seg.cp2.x, y: seg.cp2.y },
+      ],
+      endPoint: { ...existing.endPoint, x: seg.end.x, y: seg.end.y },
+    }));
 
-    lines = normalizeLines(nextLines);
+    lines = normalizePaths(nextLines);
     recordChange();
     alert(`Curved path with tension ${tension}`);
   }
@@ -227,11 +249,10 @@
     if (!selectedLine) return;
     if (lines.length <= 1) return;
 
-    removeLine(selectedLineIndex);
-    selectedLineIndex = Math.max(
-      0,
-      Math.min(selectedLineIndex, lines.length - 1),
-    );
+    // Select whatever now occupies the deleted segment's slot, or the last one.
+    const removedIndex = selectedLineIndex;
+    removeLine(removedIndex);
+    onSelectPath(lines[Math.min(removedIndex, lines.length - 1)]?.id ?? null);
     selectedPointIndex = 0;
     recordChange();
   }
@@ -285,27 +306,49 @@
       </div>
     </div>
 
-    <SelectedPathInspector
-      {selectedLine}
-      {selectedLinePathIndex}
-      {selectedPoint}
-      bind:selectedPointIndex
-      {selectedPointLabel}
-      lineCount={lines.length}
-      {settings}
-      bind:curveTension
-      onNameInput={(name) => {
-        if (selectedLine) selectedLine.name = name;
-        lines = [...lines];
-      }}
-      onLinesChanged={() => (lines = [...lines])}
-      onRecordChange={() => recordChange?.()}
-      onCurveFromSelected={curveFromSelected}
-      onDeleteSelectedLine={deleteSelectedLine}
-      onDeleteControlPoint={deleteSelectedControlPoint}
-      onToggleLock={toggleSelectedPointLock}
-      onCommitPointChange={commitSelectedPointChange}
-    />
+    {#if selectedGroup}
+      <SelectedGroupInspector
+        {selectedGroup}
+        segmentCount={atomicSegments(selectedGroup.segments).length}
+        onNameInput={(name) => {
+          lines = updatePath(lines, selectedGroup.id, (path) => ({
+            ...path,
+            name,
+          }));
+        }}
+        onHeadingOverrideChange={(heading) => {
+          lines = updatePath(lines, selectedGroup.id, (path) =>
+            path.kind === "compound" ? { ...path, heading } : path,
+          );
+          recordChange?.();
+        }}
+        onLinesChanged={() => (lines = [...lines])}
+        onRecordChange={() => recordChange?.()}
+        {onUngroup}
+      />
+    {:else}
+      <SelectedPathInspector
+        {selectedLine}
+        {selectedLinePathIndex}
+        {selectedPoint}
+        bind:selectedPointIndex
+        {selectedPointLabel}
+        lineCount={lines.length}
+        {settings}
+        bind:curveTension
+        onNameInput={(name) => {
+          if (selectedLine) selectedLine.name = name;
+          lines = [...lines];
+        }}
+        onLinesChanged={() => (lines = [...lines])}
+        onRecordChange={() => recordChange?.()}
+        onCurveFromSelected={curveFromSelected}
+        onDeleteSelectedLine={deleteSelectedLine}
+        onDeleteControlPoint={deleteSelectedControlPoint}
+        onToggleLock={toggleSelectedPointLock}
+        onCommitPointChange={commitSelectedPointChange}
+      />
+    {/if}
   </div>
 
   <PlaybackControls
