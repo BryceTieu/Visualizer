@@ -28,7 +28,14 @@
     onToggleLock,
   }: Props = $props();
 
-  let disabled = $derived(selectedLine.locked || Boolean(selectedPoint.locked));
+  // Read the lock off the line so it tracks edits made through `lines`.
+  let livePoint = $derived(
+    selectedPointIndex === 0
+      ? selectedLine.endPoint
+      : (selectedLine.controlPoints[selectedPointIndex - 1] ?? selectedPoint),
+  );
+  let isPointLocked = $derived(Boolean(livePoint?.locked));
+  let disabled = $derived(selectedLine.locked || isPointLocked);
   let coordinateStep = $derived($snapToGrid && $showGrid ? $gridSize : 0.1);
 
   const FIELD_CLASS =
@@ -112,13 +119,8 @@
   {/if}
 
   <div
-    class="mt-2 flex items-center justify-between gap-2 text-[11px] text-gray-300"
+    class="mt-2 flex items-center justify-end gap-2 text-[11px] text-gray-300"
   >
-    <div>
-      Locked: <span class="font-medium text-gray-100">
-        {selectedPoint.locked ? "Yes" : "No"}
-      </span>
-    </div>
     <div class="flex items-center gap-2">
       <button
         class={ACTION_CLASS}
@@ -137,7 +139,7 @@
         onclick={onToggleLock}
         disabled={selectedLine.locked}
       >
-        {selectedPoint.locked ? "Unlock Point" : "Lock Point"}
+        {isPointLocked ? "Unlock Point" : "Lock Point"}
       </button>
     </div>
   </div>

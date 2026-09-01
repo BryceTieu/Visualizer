@@ -393,6 +393,11 @@ body {
   overflow: hidden;
 }
 
+/* The left rail hugs the window edge: no padding on its outer side. */
+.side-rail-left {
+  padding-left: 0;
+}
+
 .side-rail--collapsed {
   padding: 0;
   border-width: 0;
@@ -418,6 +423,11 @@ body {
   color: var(--ui-text);
   padding: 0;
   cursor: ew-resize;
+}
+
+/* When its panel is hidden the grip is a restore button, not a resize handle. */
+.panel-divider-grip--restore {
+  cursor: pointer;
 }
 
 .panel-divider-grip:hover {
@@ -656,6 +666,19 @@ body {
   margin-left: 4px;
 }
 
+/* Drag-and-drop reordering in the Path List. */
+.path-row--dragging {
+  opacity: 0.45;
+}
+
+.path-row--drop-before {
+  box-shadow: inset 0 2px 0 0 #8d68bd;
+}
+
+.path-row--drop-after {
+  box-shadow: inset 0 -2px 0 0 #8d68bd;
+}
+
 .chain-swatch {
   width: 14px;
   height: 14px;
@@ -781,6 +804,19 @@ body {
   border-color: #8d68bd;
   background: #222222;
   box-shadow: inset 0 0 0 1px rgba(141, 104, 189, 0.24);
+}
+
+/* Drag-and-drop reordering in the Path List. */
+.path-row--dragging {
+  opacity: 0.45;
+}
+
+.path-row--drop-before {
+  box-shadow: inset 0 2px 0 0 #8d68bd;
+}
+
+.path-row--drop-after {
+  box-shadow: inset 0 -2px 0 0 #8d68bd;
 }
 
 .chain-swatch {

@@ -13,15 +13,20 @@
   let collapsedGlyph = $derived(side === "left" ? "›" : "‹");
 </script>
 
+<!-- The divider stays put when its panel is hidden: it is the handle that
+     brings the panel back, alongside the navbar toggle. -->
 <div class="panel-divider panel-divider--{side}">
   <button
     class="panel-divider-grip"
+    class:panel-divider-grip--restore={hidden}
     type="button"
-    aria-label="Resize {label} panel"
+    aria-label={hidden ? `Show ${label} panel` : `Resize ${label} panel`}
     title={hidden
       ? `Click to restore the ${label} panel`
       : `Drag to resize the ${label} panel`}
-    onmousedown={(event) => onResizeStart(side, event)}
+    onmousedown={(event) => {
+      if (!hidden) onResizeStart(side, event);
+    }}
     onclick={() => {
       if (hidden) onRestore();
     }}
