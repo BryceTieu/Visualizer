@@ -25,7 +25,7 @@
     normalizeStartPose,
     deriveSequence,
   } from "../utils/normalize";
-  import { serializeProject } from "../utils/project";
+  import { newerVersionWarning, serializeProject } from "../utils/project";
   import { downloadJson } from "../utils/download";
   import { stripPpExtension } from "../utils/filename";
   import { FIELD_SIZE } from "../config";
@@ -241,6 +241,9 @@
       if (!data.startPoint || !data.lines) {
         throw new Error("Invalid file format: missing required fields");
       }
+
+      const versionWarning = newerVersionWarning(data.version);
+      if (versionWarning) showToast(versionWarning, "warning");
 
       const normalizedLines = normalizePaths(data.lines || []);
       return {
