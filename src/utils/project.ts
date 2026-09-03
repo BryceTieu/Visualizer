@@ -1,7 +1,7 @@
 import type { Path, SequenceItem, Settings, Shape, StartPose } from "../types";
 import type { FieldPoint } from "./fieldPoints";
 
-export const PROJECT_VERSION = "1.4.0";
+export const PROJECT_VERSION = "1.5.0";
 
 /**
  * A warning when the document came from a newer build, else null. Fields added
