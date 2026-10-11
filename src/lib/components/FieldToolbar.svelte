@@ -6,6 +6,7 @@
   interface Props {
     playing?: boolean;
     penToolEnabled?: boolean;
+    penToolAvailable?: boolean;
     coordinateToolEnabled?: boolean;
     onAddPath: () => void;
     onTogglePenTool: () => void;
@@ -19,6 +20,7 @@
   let {
     playing = false,
     penToolEnabled = false,
+    penToolAvailable = false,
     coordinateToolEnabled = false,
     onAddPath,
     onTogglePenTool,
@@ -56,17 +58,19 @@
       <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18m9-9H3M12 7.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Z" />
     </svg>
   </button>
-  <!-- The pen tool sits at the end of the tool list, shown as an icon. -->
-  <button
-    class="toolbar-btn toolbar-btn--icon"
-    class:toolbar-btn--blue={penToolEnabled}
-    aria-pressed={penToolEnabled}
-    title={penToolEnabled ? "Pen Tool (on)" : "Pen Tool"}
-    aria-label={penToolEnabled ? "Disable pen tool" : "Enable pen tool"}
-    onclick={onTogglePenTool}
-  >
-    <PenIcon className="size-5" strokeWidth={2} />
-  </button>
+  {#if penToolAvailable}
+    <!-- The pen tool is opt-in from Advanced Settings. -->
+    <button
+      class="toolbar-btn toolbar-btn--icon"
+      class:toolbar-btn--blue={penToolEnabled}
+      aria-pressed={penToolEnabled}
+      title={penToolEnabled ? "Pen Tool (on)" : "Pen Tool"}
+      aria-label={penToolEnabled ? "Disable pen tool" : "Enable pen tool"}
+      onclick={onTogglePenTool}
+    >
+      <PenIcon className="size-5" strokeWidth={2} />
+    </button>
+  {/if}
   <div style="flex: 1;"></div>
   <button
     class="toolbar-btn toolbar-btn--icon"

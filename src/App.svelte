@@ -432,6 +432,7 @@
   }
 
   function togglePenTool() {
+    if (!settings.enablePenTool) return;
     penToolEnabled = !penToolEnabled;
     if (penToolEnabled) coordinateToolEnabled = false;
     if (!penToolEnabled) {
@@ -450,6 +451,14 @@
       coordinateHover = null;
     }
   }
+
+  $effect(() => {
+    if (!settings.enablePenTool && penToolEnabled) {
+      penToolEnabled = false;
+      penStroke = [];
+      penIsDrawing = false;
+    }
+  });
 
   function beginPanelResize(side: "left" | "right", event: MouseEvent) {
     event.preventDefault();
@@ -553,9 +562,15 @@
   function getMouseFieldPoint(evt: MouseEvent): BasePoint | null {
     if (!two?.renderer?.domElement) return null;
     const rect = two.renderer.domElement.getBoundingClientRect();
+    const scaleX = effectiveSize / Math.max(rect.width, 1);
+    const scaleY = effectiveSize / Math.max(rect.height, 1);
     return {
-      x: clampFieldCoordinate(x.invert(evt.clientX - rect.left)),
-      y: clampFieldCoordinate(y.invert(evt.clientY - rect.top)),
+      x: clampFieldCoordinate(
+        x.invert((evt.clientX - rect.left) * scaleX),
+      ),
+      y: clampFieldCoordinate(
+        y.invert((evt.clientY - rect.top) * scaleY),
+      ),
     };
   }
 
@@ -2969,6 +2984,7 @@
         <FieldToolbar
           {playing}
           {penToolEnabled}
+          penToolAvailable={settings.enablePenTool}
           {coordinateToolEnabled}
           onAddPath={addNewLine}
           onTogglePenTool={togglePenTool}

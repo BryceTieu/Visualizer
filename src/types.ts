@@ -143,6 +143,7 @@ export interface Settings {
   leftPanelMinWidth?: number; // Minimum width of the left sidebar in pixels
   rightPanelMinWidth?: number; // Minimum width of the right sidebar in pixels
   penToolMaxPaths?: number; // Maximum number of paths a single pen stroke may create
+  enablePenTool?: boolean; // Allow the pen tool to be used from the field toolbar
   curveThroughMaxPoints?: number; // Maximum interior through points per curve
   experimentalFeatures?: {
     optimize?: boolean;

@@ -375,6 +375,19 @@
         <div
           class="p-3 bg-white dark:bg-neutral-800 rounded-lg border border-neutral-200 dark:border-neutral-700"
         >
+          <label class="flex items-center gap-2 cursor-pointer mb-3">
+            <input
+              type="checkbox"
+              bind:checked={settings.enablePenTool}
+              class="console-checkbox w-4 h-4 text-blue-500 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            />
+            <span class="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              Enable Pen Tool
+            </span>
+          </label>
+          <div class="text-xs text-neutral-500 dark:text-neutral-400 mb-3">
+            Adds the freehand pen tool to the field toolbar.
+          </div>
           <NumberField
             id="pen-tool-max-paths"
             label="Pen Tool Maximum Paths"
