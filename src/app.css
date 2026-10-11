@@ -496,10 +496,13 @@ img[alt="Robot"] {
 body {
   background: radial-gradient(circle at 20% -15%, #1a1a1a 0%, var(--ui-bg) 46%);
   color: var(--ui-text);
+  zoom: 0.9;
 }
 
 .ui-shell {
   background: transparent;
+  width: calc(100vw / 0.9);
+  height: calc(100vh / 0.9);
 }
 
 .desktop-grid {

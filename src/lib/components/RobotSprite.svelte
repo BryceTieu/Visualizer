@@ -14,6 +14,8 @@
     arrowId?: string;
     showTValue?: boolean;
     tValue?: number | null;
+    position?: BasePoint;
+    showPosition?: boolean;
     onImageSettled?: () => void;
   }
 
@@ -30,6 +32,8 @@
     arrowId = "arrowhead-main",
     showTValue = false,
     tValue = null,
+    position = undefined,
+    showPosition = false,
     onImageSettled = () => {},
   }: Props = $props();
 
@@ -63,6 +67,15 @@ pointer-events: none; opacity: ${opacity};`}
     style={`left: ${xy.x}px; top: ${xy.y - heightPx / 2 - 14}px; transform: translate(-50%, -100%);`}
   >
     t {tValue.toFixed(3)}
+  </div>
+{/if}
+
+{#if showPosition && position}
+  <div
+    class="pointer-events-none absolute z-22 rounded border border-white/20 bg-black/75 px-2.5 py-1.5 font-mono text-[12px] font-semibold leading-none text-white shadow-lg"
+    style={`left: ${xy.x}px; top: ${xy.y - heightPx / 2 - (showTValue && tValue !== null ? 46 : 14)}px; transform: translate(-50%, -100%);`}
+  >
+    X {position.x.toFixed(2)} &middot; Y {position.y.toFixed(2)}
   </div>
 {/if}
 

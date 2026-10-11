@@ -48,6 +48,7 @@ export const DEFAULT_SETTINGS: Settings = {
   onionNextPointOnly: false,
   showHeadingArrow: false,
   showCurrentTValue: false,
+  showRobotPosition: false,
   leftPanelWidth: 370,
   rightPanelWidth: 620,
   headingArrowLength: 50,

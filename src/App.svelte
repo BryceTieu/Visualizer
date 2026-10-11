@@ -3030,6 +3030,8 @@
                 arrowId="arrowhead-main"
                 showTValue={settings.showCurrentTValue}
                 tValue={robotT}
+                showPosition={settings.showRobotPosition}
+                position={{ x: x.invert(robotXY.x), y: y.invert(robotXY.y) }}
                 onImageSettled={() => (robotImageLoaded = true)}
               />
             {/if}
@@ -3046,6 +3048,11 @@
                 arrowZIndex={19}
                 opacity={0.8}
                 arrowId="arrowhead-second"
+                showPosition={settings.showRobotPosition}
+                position={{
+                  x: x.invert(secondRobotXY.x),
+                  y: y.invert(secondRobotXY.y),
+                }}
                 onImageSettled={() => (robotImageLoaded = true)}
               />
             {/if}
@@ -3063,6 +3070,11 @@
                   arrowZIndex={20 - idx}
                   opacity={1.0 - idx * 0.15}
                   arrowId="arrowhead-{idx}"
+                  showPosition={settings.showRobotPosition}
+                  position={{
+                    x: x.invert(robotState.xy.x),
+                    y: y.invert(robotState.xy.y),
+                  }}
                   onImageSettled={() => (robotImageLoaded = true)}
                 />
               {/each}

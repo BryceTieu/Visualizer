@@ -133,6 +133,7 @@ export interface Settings {
   onionNextPointOnly?: boolean; // When true, onion layers show only for the next point (UI-only for now)
   showHeadingArrow?: boolean; // Show arrow indicating robot heading direction
   showCurrentTValue?: boolean; // Show the current path t value near the robot
+  showRobotPosition?: boolean; // Show the robot's current field coordinates
   leftPanelWidth?: number; // Width of the left sidebar in pixels
   rightPanelWidth?: number; // Width of the right sidebar in pixels
   headingArrowLength?: number; // Length of the heading arrow in pixels
